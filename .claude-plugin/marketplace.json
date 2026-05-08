@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "rvaim-marketplace",
+  "version": "1.0.0",
+  "description": "rvaim 的个人 Claude Code 插件市场，用于沉淀个人开发规则、代码迁移规范、审查习惯和自动化工作流。",
+  "owner": {
+    "name": "rvaim"
+  },
+  "plugins": [
+    {
+      "name": "arkts-harmony",
+      "description": "鸿蒙 ArkTS / TypeScript 迁移规则、适配案例、高性能编程建议和自动后置检查。",
+      "version": "1.0.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/rvaim/arkts-harmony"
+      }
+    },
+    {
+      "name": "plugin-creator",
+      "description": "创建、审查和维护 Codex / Claude Code 双平台插件的中文开发辅助插件。",
+      "version": "1.0.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/rvaim/plugin-creator"
+      }
+    }
+  ]
+}

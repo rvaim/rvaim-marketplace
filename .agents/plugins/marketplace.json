@@ -1,0 +1,31 @@
+{
+  "name": "rvaim-marketplace",
+  "interface": {
+    "displayName": "rvaim 插件市场"
+  },
+  "plugins": [
+    {
+      "name": "arkts-harmony",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/rvaim/arkts-harmony"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Development"
+    },
+    {
+      "name": "plugin-creator",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/rvaim/plugin-creator"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      }
+    }
+  ]
+}
