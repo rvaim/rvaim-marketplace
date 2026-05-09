@@ -19,11 +19,32 @@
     {
       "name": "plugin-creator",
       "description": "创建、审查和维护 Codex / Claude Code 双平台插件的中文开发辅助插件。",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "author": {
+        "name": "rvaim"
+      },
+      "homepage": "https://github.com/rvaim/plugin-creator",
+      "repository": "https://github.com/rvaim/plugin-creator",
+      "keywords": [
+        "codex",
+        "claude-code",
+        "plugin-authoring",
+        "marketplace",
+        "hooks"
+      ],
+      "category": "Development",
+      "tags": [
+        "codex",
+        "claude-code",
+        "dual-platform",
+        "skills",
+        "hooks"
+      ],
       "source": {
         "source": "url",
         "url": "https://github.com/rvaim/plugin-creator"
-      }
+      },
+      "strict": true
     }
   ]
 }
