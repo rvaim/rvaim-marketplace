@@ -10,11 +10,35 @@
     {
       "name": "arkts-harmony",
       "description": "鸿蒙 ArkTS / TypeScript 迁移规则、适配案例、高性能编程建议和自动后置检查。",
-      "version": "1.0.0",
+      "version": "1.0.1",
+      "author": {
+        "name": "rvaim"
+      },
+      "homepage": "https://github.com/rvaim/arkts-harmony",
+      "repository": "https://github.com/rvaim/arkts-harmony",
+      "keywords": [
+        "arkts",
+        "harmonyos",
+        "openharmony",
+        "typescript",
+        "migration",
+        "deveco",
+        "arkui",
+        "code-review"
+      ],
+      "category": "Development",
+      "tags": [
+        "arkts",
+        "harmonyos",
+        "typescript",
+        "migration",
+        "code-review"
+      ],
       "source": {
         "source": "url",
         "url": "https://github.com/rvaim/arkts-harmony"
-      }
+      },
+      "strict": true
     },
     {
       "name": "plugin-creator",
