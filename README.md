@@ -41,6 +41,7 @@ rvaim-marketplace/
 
 ```text
 /arkts-harmony:arkts-ts-rules
+/arkts-harmony:harmonyos-docs
 /plugin-creator:create-dual-plugin
 /plugin-creator:review-plugin
 /plugin-creator:create-hooks
@@ -95,6 +96,7 @@ Codex marketplace 文件位于：
 
 ```text
 $arkts-ts-rules
+$harmonyos-docs
 $create-dual-plugin
 $review-plugin
 $create-hooks
