@@ -1,74 +1,51 @@
 # 从TypeScript到ArkTS的适配规则
-
 ArkTS规范约束了TypeScript中影响开发正确性或增加运行时开销的特性。本文罗列ArkTS中限制的TS特性，并提供重构建议。ArkTS保留了TS大部分语法特性，未在本文约束的TS特性完全支持。按本文约束重构后，代码仍为合法有效的TS代码。
-
 **示例** — 包含`var`的原始TS代码：
-
 ``` TypeScript
 function addTen(x: number): number {
   var ten = 10;
   return x + ten;
 }
 ```
-
 重构后：
-
 ``` TypeScript
 function addTen(x: number): number {
   let ten = 10;
   return x + ten;
 }
 ```
-
 **级别**：约束分为两个级别：
 - **错误**：必须遵从，否则程序编译失败
 - **警告**：推荐遵从，将来违反可能导致编译失败
-
 **不支持的特性**主要包括：
 - 与降低运行时性能的动态类型相关的特性
 - 需要编译器额外支持导致项目构建时间增加的特性
-
 ## 概述
-
 完整列表和示例见[约束说明](#约束说明)。更多案例见[适配指导案例](arkts-more-cases.md)。
-
 ### 强制使用静态类型
-
 静态类型是ArkTS重要特性。所有类型在编译时已知，有利于理解数据结构和提前验证代码正确性，减少运行时类型检查，提升性能。ArkTS禁止使用`any`类型。
-
 ```typescript
 // 不支持：
 let res: any = some_api_function('hello', 'world');
 // 支持：
 class CallResult {
-  public succeeded(): boolean {
-    return false;
-  }
-  public errorMessage(): string {
-    return '123';
-  }
+  public succeeded(): boolean { return false; }
+  public errorMessage(): string { return '123'; }
 }
-function some_api_function(param1: string, param2: string): CallResult {
-  return new CallResult();
-}
+function some_api_function(param1: string, param2: string): CallResult { return new CallResult(); }
 
 let res: CallResult = some_api_function('hello', 'world');
 if (!res.succeeded()) {
   console.info('Call failed: ' + res.errorMessage());   
 }  
 ```
-
 `any`类型仅约1%的TS代码库使用，重构量很小且有助于整体性能提升。
-
 ### 禁止在运行时变更对象布局
-
 ArkTS禁止以下行为：
 - 向对象中添加新的属性或方法
 - 从对象中删除已有的属性或方法
 - 将任意类型的值赋值给对象属性
-
 ArkTS强制进行部分严格类型检查，禁止使用`any`类型和`@ts-ignore`。
-
 ```typescript
 class Point {
   public x: number = 0
@@ -111,25 +88,17 @@ let p5 = new Point(5.0, 5.0);
 let p6 = new Point(6.0, 6.0);
 console.info('Distance between p5 and p6: ' + distance(p5, p6));
 ```
-
 修改对象布局影响代码可读性和运行时性能。需要在其他位置修改对象布局容易引起困惑和错误，且需要额外运行时支持。
-
 ### 限制运算符的语义
-
 ArkTS限制部分运算符的语义，以获得更好性能并鼓励开发清晰代码。
-
 ```typescript
 // 一元运算符`+`只能作用于数值类型：
 let t = +42;   // 合法运算
 let s = +'42'; // 编译时错误
 ```
-
 使用额外语义重载语言运算符会增加语言规范复杂度。不到1%的代码库使用此特性，重构量很小。
-
 ### 不支持 structural typing
-
 两个不相关的类`T`和`U`拥有相同`public`API：
-
 ``` TypeScript
 class T {
   public name: string = ''
@@ -147,15 +116,11 @@ class U {
   }
 }
 ```
-
 类型为`T`的值能否赋给类型为`U`的变量？
-
 ``` TypeScript
 let u: U = new T(); // 是否允许？
 ```
-
 类型为`T`的值能否传递给接受类型为`U`的参数的函数？
-
 ``` TypeScript
 function greeter(u: U) {
   console.info('To ' + u.name);
@@ -165,30 +130,20 @@ function greeter(u: U) {
 let t: T = new T();
 greeter(t); // 是否允许？
 ```
-
 TypeScript支持structural typing，ArkTS不支持。原因：支持structural typing需要大量规范、编译器和运行时实现，且使用静态类型时运行时需要额外性能开销。
-
 ## 约束说明
-
 ### 对象的属性名必须是合法的标识符
-
 **规则：**`arkts-identifiers-as-prop-names`
-
 **级别：错误** | **错误码：10605001**
-
 对象的属性名不能为数字或字符串。例外：支持字符串字面量和枚举中的字符串值。通过属性名访问类属性，通过数值索引访问数组元素。
-
 **TypeScript**
-
 ``` TypeScript
 var x = { 'name': 'x', 2: '3' };
 
 console.info(x['name']); // x
 console.info(x[2]); // 3
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class X {
   public name: string = '';
@@ -217,71 +172,45 @@ let obj: Record<string, number> = {
   ['value']: 3   // 字符串字面量
 };
 ```
-
 ### 不支持`Symbol()`API
-
 **规则：**`arkts-no-symbol`
-
 **级别：错误** | **错误码：10605002**
-
 对象布局在编译时确定，运行时不可更改。只支持`Symbol.iterator`。
-
 ### 不支持以`#`开头的私有字段
-
 **规则：**`arkts-no-private-identifiers`
-
 **级别：错误** | **错误码：10605003**
-
 改用`private`关键字。
-
 **TypeScript**
-
 ``` TypeScript
 class C {
   #foo: number = 42
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   private foo: number = 42;
 }
 ```
-
 ### 类型、命名空间的命名必须唯一
-
 **规则：**`arkts-unique-names`
-
 **级别：错误** | **错误码：10605004**
-
 类型（类、接口、枚举）和命名空间名称必须唯一，不能与其他名称重复。
-
 **TypeScript**
-
 ``` TypeScript
 let X: string
 type X = number[] // 类型的别名与变量同名
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let X: string;
 type T = number[]; // 为避免名称冲突，此处不允许使用X
 ```
-
 ### 使用`let`而非`var`
-
 **规则：**`arkts-no-var`
-
 **级别：错误** | **错误码：10605005**
-
 `let`可在块级作用域声明变量，帮助避免错误。
-
 **TypeScript**
-
 ```typescript
 function f(shouldInitialize: boolean) {
   if (shouldInitialize) {
@@ -302,9 +231,7 @@ let upperLet = 0;
 scopedVar = 5; // 可见
 scopedLet = 5; // 编译时错误
 ```
-
 **ArkTS**
-
 ```typescript
 function f(shouldInitialize: boolean): string {
   let x: string = 'a';
@@ -326,17 +253,11 @@ let scopedVar = 0;
 scopedVar = 5;
 scopedLet = 5; // 编译时错误
 ```
-
 ### 使用具体的类型而非`any`或`unknown`
-
 **规则：**`arkts-no-any-unknown`
-
 **级别：错误** | **错误码：10605008**
-
 显式指定具体类型。
-
 **TypeScript**
-
 ``` TypeScript
 let value1: any
 value1 = true;
@@ -346,24 +267,17 @@ let value2: unknown
 value2 = true;
 value2 = 42;
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let valueB: boolean = true; // 或者 let valueB = true
 let valueN: number = 42; // 或者 let valueN = 42
 let valueO1: Object = true;
 let valueO2: Object = 42;
 ```
-
 ### 使用`class`而非具有call signature的类型
-
 **规则：**`arkts-no-call-signatures`
-
 **级别：错误** | **错误码：10605014**
-
 **TypeScript**
-
 ``` TypeScript
 type DescribableFunction = {
   description: string
@@ -374,18 +288,12 @@ function doSomething(fn: DescribableFunction): void {
   console.info(fn.description + ' returned ' + fn(''));
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class DescribableFunction {
   public description: string;
-  public invoke(someArg: string): string {
-    return someArg;
-  }
-  constructor() {
-    this.description = 'desc';
-  }
+  public invoke(someArg: string): string { return someArg; }
+  constructor() { this.description = 'desc'; }
 }
 
 function doSomething(fn: DescribableFunction): void {
@@ -394,15 +302,10 @@ function doSomething(fn: DescribableFunction): void {
 
 doSomething(new DescribableFunction());
 ```
-
 ### 使用`class`而非具有构造签名的类型
-
 **规则：**`arkts-no-ctor-signatures-type`
-
 **级别：错误** | **错误码：10605015**
-
 **TypeScript**
-
 ``` TypeScript
 class SomeObject { }
 
@@ -410,36 +313,22 @@ type SomeConstructor = {
   new(s: string): SomeObject
 }
 
-function fn(ctor: SomeConstructor) {
-  return new ctor('hello');
-}
+function fn(ctor: SomeConstructor) { return new ctor('hello'); }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class SomeObject {
   public f: string;
-  constructor (s: string) {
-    this.f = s;
-  }
+  constructor (s: string) { this.f = s; }
 }
 
-function fn(s: string): SomeObject {
-  return new SomeObject(s);
-}
+function fn(s: string): SomeObject { return new SomeObject(s); }
 ```
-
 ### 仅支持一个静态块
-
 **规则：**`arkts-no-multiple-static-blocks`
-
 **级别：错误** | **错误码：10605016**
-
 如存在多个静态块，合并为一个。
-
 **TypeScript**
-
 ``` TypeScript
 class C {
   static s: string
@@ -452,9 +341,7 @@ class C {
   }
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   public static s: string;
@@ -465,33 +352,23 @@ class C {
   }
 }
 ```
-
 ### 不支持index signature
-
 **规则：**`arkts-no-indexed-signatures`
-
 **级别：错误** | **错误码：10605017**
-
 改用数组。
-
 **TypeScript**
-
 ``` TypeScript
 // 带index signature的接口：
 interface StringArray {
   [index: number]: string
 }
 
-function getStringArray(): StringArray {
-  return ['a', 'b', 'c'];
-}
+function getStringArray(): StringArray { return ['a', 'b', 'c']; }
 
 const myArray: StringArray = getStringArray();
 const secondItem = myArray[1];
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class X {
   public f: string[] = [];
@@ -500,17 +377,11 @@ class X {
 let myArray: X = new X();
 const secondItem = myArray.f[1];
 ```
-
 ### 使用继承而非intersection type
-
 **规则：**`arkts-no-intersection-types`
-
 **级别：错误** | **错误码：10605019**
-
 使用继承作为替代方案。
-
 **TypeScript**
-
 ``` TypeScript
 interface Identity {
   id: number
@@ -524,9 +395,7 @@ interface Contact {
 
 type Employee = Identity & Contact
 ```
-
 **ArkTS**
-
 ``` TypeScript
 interface Identity {
   id: number;
@@ -540,17 +409,11 @@ interface Contact {
 
 interface Employee extends Identity,  Contact {}
 ```
-
 ### 不支持`this`类型
-
 **规则：**`arkts-no-typing-with-this`
-
 **级别：错误** | **错误码：10605021**
-
 改用显式具体类型。
-
 **TypeScript**
-
 ``` TypeScript
 interface ListItem {
   getHead(): this
@@ -564,9 +427,7 @@ class C {
   }
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 interface testListItem {
   getHead(): testListItem;
@@ -580,24 +441,16 @@ class C {
   }
 }
 ```
-
 ### 不支持条件类型
-
 **规则：**`arkts-no-conditional-types`
-
 **级别：错误** | **错误码：10605022**
-
 建议引入带显式约束的新类型，或使用`Object`。不支持`infer`关键字。
-
 **TypeScript**
-
 ``` TypeScript
 type X<T> = T extends number ? T : never;
 type Y<T> = T extends Array<infer Item> ? Item : never;
 ```
-
 **ArkTS**
-
 ``` TypeScript
 // 在类型别名中提供显式约束
 type X1<T extends number> = T;
@@ -608,17 +461,11 @@ type X2<T> = Object;
 // Item必须作为泛型参数使用，并能正确实例化
 type YI<Item, T extends Array<Item>> = Item;
 ```
-
 ### 不支持在`constructor`中声明字段
-
 **规则：**`arkts-no-ctor-prop-decls`
-
 **级别：错误** | **错误码：10605025**
-
 所有字段必须在`class`作用域内显式声明。
-
 **TypeScript**
-
 ``` TypeScript
 class Person {
   constructor(
@@ -631,14 +478,10 @@ class Person {
     this.lastName = lastName;
   }
 
-  getFullName(): string {
-    return this.firstName + ' ' + this.lastName;
-  }
+  getFullName(): string { return this.firstName + ' ' + this.lastName; }
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class Person {
   protected ssn: string;
@@ -651,60 +494,37 @@ class Person {
     this.lastName = lastName;
   }
 
-  getFullName(): string {
-    return this.firstName + ' ' + this.lastName;
-  }
+  getFullName(): string { return this.firstName + ' ' + this.lastName; }
 }
 ```
-
 ### 接口中不支持构造签名
-
 **规则：**`arkts-no-ctor-signatures-iface`
-
 **级别：错误** | **错误码：10605027**
-
 使用普通函数或方法替代。
-
 **TypeScript**
-
 ``` TypeScript
 interface I {
   new(s: string): I;
 }
 
-function fn(i: I) {
-  return new i('hello');
-}
+function fn(i: I) { return new i('hello'); }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 interface I {
   create(s: string): I;
 }
 
-function fn(i: I) {
-  return i.create('hello');
-}
+function fn(i: I) { return i.create('hello'); }
 ```
-
 ### 不支持索引访问类型
-
 **规则：**`arkts-no-aliases-by-index`
-
 **级别：错误** | **错误码：10605028**
-
 ### 不支持通过索引访问字段
-
 **规则：**`arkts-no-props-by-index`
-
 **级别：错误** | **错误码：10605029**
-
 不支持动态声明和访问字段。只能访问已声明或继承的字段。使用点操作符（`obj.field`），不支持索引访问（`obj['field']`）。支持通过索引访问`TypedArray`（如`Int32Array`）。
-
 **TypeScript**
-
 ``` TypeScript
 class Point {
   x: string = '';
@@ -726,9 +546,7 @@ let person: Person = {
   phoneNumber: '18*********',
 }
 ```
-
 **ArkTS**
-
 ```typescript
 class Point {
   x: string = ''
@@ -759,17 +577,11 @@ console.info(person.unknownProperty); // 编译时错误
 let arr = new Int32Array(1);
 arr[0];
 ```
-
 ### 不支持structural typing
-
 **规则：**`arkts-no-structural-typing`
-
 **级别：错误** | **错误码：10605030**
-
 使用继承、接口或类型别名替代。
-
 **TypeScript**
-
 ``` TypeScript
 interface I1 {
   f(): string
@@ -806,9 +618,7 @@ function foo(x: X) {
 foo(new X());
 foo(new Y());
 ```
-
 **ArkTS**
-
 ```typescript
 interface I1 {
   f(): string
@@ -871,63 +681,40 @@ function foo(c: Z): void {
 foo(new X());
 foo(new Y());
 ```
-
 ### 需要显式标注泛型函数类型实参
-
 **规则：**`arkts-no-inferred-generic-params`
-
 **级别：错误** | **错误码：10605034**
-
 如果可从参数中推断出具体类型，ArkTS允许省略泛型类型实参。否则编译错误。禁止仅基于返回类型推断泛型参数。
-
 **TypeScript**
-
 ```typescript
-function choose<T>(x: T, y: T): T {
-  return Math.random() < 0.5 ? x: y;
-}
+function choose<T>(x: T, y: T): T { return Math.random() < 0.5 ? x: y; }
 
 let x = choose(10, 20);   // 推断choose<number>(...)
 let y = choose('10', 20); // 编译时错误
 
-function greet<T>(): T {
-  return 'Hello' as T;
-}
+function greet<T>(): T { return 'Hello' as T; }
 let z = greet() // T的类型被推断为"unknown"
 ```
-
 **ArkTS**
-
 ```typescript
-function choose<T>(x: T, y: T): T {
-  return Math.random() < 0.5 ? x: y;
-}
+function choose<T>(x: T, y: T): T { return Math.random() < 0.5 ? x: y; }
 
 let x = choose(10, 20);   // 推断choose<number>(...)
 let y = choose('10', 20); // 编译时错误
 
-function greet<T>(): T {
-  return 'Hello' as T;
-}
+function greet<T>(): T { return 'Hello' as T; }
 let z = greet<string>();
 ```
-
 ### 需要显式标注对象字面量的类型
-
 **规则：**`arkts-no-untyped-obj-literals`
-
 **级别：错误** | **错误码：10605038**
-
 需显式标注对象字面量类型，否则编译时错误。部分场景编译器可推断类型。以下上下文不支持字面量初始化类和接口：
 * 初始化具有`any`、`Object`或`object`类型的对象
 * 初始化带有方法的类或接口
 * 初始化包含自定义含参数构造函数的类
 * 初始化带`readonly`字段的类
-
 **例子1**
-
 **TypeScript**
-
 ``` TypeScript
 let o1 = { n: 42, s: 'foo' };
 let o2: Object = { n: 42, s: 'foo' };
@@ -935,9 +722,7 @@ let o3: object = { n: 42, s: 'foo' };
 
 let oo: Object[] = [{ n: 1, s: '1' }, { n: 2, s: '2' }];
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C1 {
   public n: number = 0;
@@ -950,37 +735,25 @@ let o3: C1 = {n: 42, s: 'foo'};
 
 let oo: C1[] = [{n: 1, s: '1'}, {n: 2, s: '2'}];
 ```
-
 **例子2** — 含构造函数的类
-
 **TypeScript**
-
 ``` TypeScript
 class C2 {
   s: string;
-  constructor(s: string) {
-    this.s = 's =' + s;
-  }
+  constructor(s: string) { this.s = 's =' + s; }
 }
 let o4: C2 = { s: 'foo' };
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C2 {
   public s: string;
-  constructor(s: string) {
-    this.s = 's =' + s;
-  }
+  constructor(s: string) { this.s = 's =' + s; }
 }
 let o4 = new C2('foo');
 ```
-
 **例子3** — 带`readonly`字段
-
 **TypeScript**
-
 ``` TypeScript
 class C3 {
   readonly n: number = 0;
@@ -988,9 +761,7 @@ class C3 {
 }
 let o5: C3 = { n: 42, s: 'foo' };
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C3 {
   public n: number = 0;
@@ -998,28 +769,20 @@ class C3 {
 }
 let o5: C3 = {n: 42, s: 'foo'};
 ```
-
 **例子4** — 抽象类
-
 **TypeScript**
-
 ``` TypeScript
 abstract class A { }
 let o6: A = {};
 ```
-
 **ArkTS**
-
 ``` TypeScript
 abstract class A {}
 class C extends A {}
 let o6: C = {}; // 或 let o6: C = new C()
 ```
-
 **例子5** — 带方法的类
-
 **TypeScript**
-
 ``` TypeScript
 class C4 {
   n: number = 0;
@@ -1030,9 +793,7 @@ class C4 {
 }
 let o7: C4 = { n: 42, s: 'foo', f: () => { } };
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C4 {
   public n: number = 0;
@@ -1045,20 +806,15 @@ let o7 = new C4();
 o7.n = 42;
 o7.s = 'foo';
 ```
-
 **例子6** — 上下文推断
-
 **TypeScript**
-
 ``` TypeScript
 class Point {
   x: number = 0;
   y: number = 0;
 }
 
-function getPoint(o: Point): Point {
-  return o;
-}
+function getPoint(o: Point): Point { return o; }
 
 // TS支持structural typing，可以推断p的类型为Point
 let p = { x: 5, y: 10 };
@@ -1067,9 +823,7 @@ getPoint(p);
 // 可通过上下文推断出对象字面量的类型为Point
 getPoint({ x: 5, y: 10 });
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class Point {
   public x: number = 0;
@@ -1079,9 +833,7 @@ class Point {
   // 由于没有为Point定义构造函数，编译器将自动添加一个默认构造函数
 }
 
-function getPoint(o: Point): Point {
-  return o;
-}
+function getPoint(o: Point): Point { return o; }
 
 // 字面量初始化需要显式定义类型
 let p: Point = {x: 5, y: 10};
@@ -1090,17 +842,11 @@ getPoint(p);
 // getPoint接受Point类型，字面量初始化生成一个Point的新实例
 getPoint({x: 5, y: 10});
 ```
-
 ### 对象字面量不能用于类型声明
-
 **规则：**`arkts-no-obj-literals-as-types`
-
 **级别：错误** | **错误码：10605040**
-
 使用类或接口声明类型。
-
 **TypeScript**
-
 ``` TypeScript
 let o: { x: number, y: number } = {
   x: 2,
@@ -1109,9 +855,7 @@ let o: { x: number, y: number } = {
 
 type S = Set<{ x: number, y: number }>
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class O {
   public x: number = 0;
@@ -1122,23 +866,15 @@ let o: O = {x: 2, y: 3};
 
 type S = Set<O>;
 ```
-
 ### 数组字面量必须仅包含可推断类型的元素
-
 **规则：**`arkts-no-noninferrable-arr-literals`
-
 **级别：错误** | **错误码：10605043**
-
 数组字面量类型推断为所有元素的联合类型。若有元素类型无法推导，编译时错误。
-
 **TypeScript**
-
 ``` TypeScript
 let a = [{ n: 1, s: '1' }, { n: 2, s: '2' }];
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   public n: number = 0
@@ -1148,41 +884,27 @@ class C {
 let a1 = [{n: 1, s: '1'} as C, {n: 2, s: '2'} as C]; // a1的类型为"C[]"
 let a2: C[] = [{n: 1, s: '1'}, {n: 2, s: '2'}];    // a2的类型为"C[]"
 ```
-
 ### 使用箭头函数而非函数表达式
-
 **规则：**`arkts-no-func-expressions`
-
 **级别：错误** | **错误码：10605046**
-
 使用箭头函数（`=>`）。
-
 **TypeScript**
-
 ``` TypeScript
 let f = function (s: string) {
   console.info(s);
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let f = (s: string) => {
   console.info(s);
 }
 ```
-
 ### 不支持使用类表达式
-
 **规则：**`arkts-no-class-literals`
-
 **级别：错误** | **错误码：10605050**
-
 必须显式声明类。
-
 **TypeScript**
-
 ``` TypeScript
 const Rectangle = class {
   constructor(height: number, width: number) {
@@ -1196,9 +918,7 @@ const Rectangle = class {
 
 const rectangle = new Rectangle(0.0, 0.0);
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class TestRectangle {
   constructor(testHeight: number, testWidth: number) {
@@ -1212,17 +932,11 @@ class TestRectangle {
 
 const rectangle = new TestRectangle(0.0, 0.0);
 ```
-
 ### 类不允许`implements`
-
 **规则：**`arkts-implements-only-iface`
-
 **级别：错误** | **错误码：10605051**
-
 只有接口可以被`implements`，类不允许。
-
 **TypeScript**
-
 ``` TypeScript
 class C {
   foo() { }
@@ -1232,9 +946,7 @@ class C1 implements C {
   foo() { }
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 interface C {
   foo(): void
@@ -1244,17 +956,11 @@ class C1 implements C {
   foo() {}
 }
 ```
-
 ### 不支持修改对象的方法
-
 **规则：**`arkts-no-method-reassignment`
-
 **级别：错误** | **错误码：10605052**
-
 对象布局固定，类的所有实例共享同一个方法。可用封装函数或继承机制替代。
-
 **TypeScript**
-
 ``` TypeScript
 class C {
   foo() {
@@ -1273,9 +979,7 @@ c2.foo = bar;
 c1.foo(); // foo
 c2.foo(); // bar
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   foo() {
@@ -1302,25 +1006,17 @@ c2.foo(); // foo
 let c3 = new Derived();
 c3.foo(); // Extra foo
 ```
-
 ### 类型转换仅支持`as T`语法
-
 **规则：**`arkts-as-casts`
-
 **级别：错误** | **错误码：10605053**
-
 `as`是类型转换的唯一语法，不支持`<type>`语法。将原始类型转换为引用类型时请使用`new`表达式。
-
 **TypeScript**
-
 ``` TypeScript
 class testShape { }
 class testCircle extends testShape { x: number = 5 }
 class testSquare extends testShape { y: string = 'a' }
 
-function createShape(): testShape {
-    return new testCircle();
-}
+function createShape(): testShape { return new testCircle(); }
 
 let c1 = <testCircle>createShape();
 
@@ -1336,17 +1032,13 @@ let e1 = (5.0 as Number) instanceof Number; // false
 // 创建Number对象，获得预期结果：
 let e2 = (new Number(5.0)) instanceof Number; // true
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class TestShape {}     
 class TestCircle extends TestShape { public x: number = 5 }     
 
 
-function createShape(): TestShape {     
-  return new TestCircle();     
-}     
+function createShape(): TestShape { return new TestCircle(); }
 
 
 let c1 = createShape() as TestCircle;
@@ -1354,23 +1046,14 @@ let c1 = createShape() as TestCircle;
 // 创建Number对象，获得预期结果：
 let e1 = (new Number(5.0)) instanceof Number; // true
 ```
-
 ### 不支持JSX表达式
-
 **规则：**`arkts-no-jsx`
-
 **级别：错误** | **错误码：10605054**
-
 ### 一元运算符`+`、`-`和`~`仅适用于数值类型
-
 **规则：**`arkts-no-polymorphic-unops`
-
 **级别：错误** | **错误码：10605055**
-
 仅允许操作数值类型，禁止隐式字符串转换到数值，必须使用显式类型转换。
-
 **TypeScript**
-
 ``` TypeScript
 let a = +5;    // 5（number类型）
 let b = +'5';    // 5（number类型）
@@ -1380,20 +1063,14 @@ let e = ~5;    // -6（number类型）
 let f = ~'5';    // -6（number类型）
 let g = +'string'; // NaN（number类型）
 
-function returnTen(): string {
-    return '-10';
-}
+function returnTen(): string { return '-10'; }
 
-function returnString(): string {
-    return 'string';
-}
+function returnString(): string { return 'string'; }
 
 let x = +returnTen();  // -10（number类型）
 let y = +returnString(); // NaN
 ```
-
 **ArkTS**
-
 ```typescript
 let a = +5;    // 5（number类型）
 let b = +'5';    // 编译时错误
@@ -1403,28 +1080,18 @@ let e = ~5;    // -6（number类型）
 let f = ~'5';    // 编译时错误
 let g = +'string'; // 编译时错误
 
-function returnTen(): string {
-  return '-10';
-}
+function returnTen(): string { return '-10'; }
 
-function returnString(): string {
-  return 'string';
-}
+function returnString(): string { return 'string'; }
 
 let x = +returnTen();  // 编译时错误
 let y = +returnString(); // 编译时错误
 ```
-
 ### 不支持`delete`运算符
-
 **规则：**`arkts-no-delete`
-
 **级别：错误** | **错误码：10605059**
-
 对象布局编译时确定，运行时不可更改。
-
 **TypeScript**
-
 ``` TypeScript
 class Point {
   x?: number = 0.0;
@@ -1434,9 +1101,7 @@ class Point {
 let p = new Point();
 delete p.y;
 ```
-
 **ArkTS**
-
 ``` TypeScript
 // 可以声明一个可空类型并使用null作为缺省值
 class Point {
@@ -1447,17 +1112,11 @@ class Point {
 let p = new Point();
 p.y = null;
 ```
-
 ### 仅允许在表达式中使用`typeof`运算符
-
 **规则：**`arkts-no-type-query`
-
 **级别：错误** | **错误码：10605060**
-
 仅支持在表达式中使用`typeof`，不允许使用`typeof`作为类型。
-
 **TypeScript**
-
 ``` TypeScript
 let n1 = 42;
 let s1 = 'foo';
@@ -1466,9 +1125,7 @@ console.info(typeof s1); // 'string'
 let n2: typeof n1;
 let s2: typeof s1;
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let n1 = 42;
 let s1 = 'foo';
@@ -1477,40 +1134,26 @@ console.info(typeof s1); // 'string'
 let n2: number;
 let s2: string;
 ```
-
 ### 部分支持`instanceof`运算符
-
 **规则：**`arkts-instanceof-ref-types`
-
 **级别：错误** | **错误码：10605065**
-
 `instanceof`的左操作数类型必须为引用类型（对象、数组或函数），且必须是对象实例。
-
 **TypeScript**
-
 ``` TypeScript
 let num: number = 42;
 let result = num instanceof Number;
 console.info('result = ', result); // result = false
 ```
-
 **ArkTS**
-
 ```typescript
 let num: number = 42;
 let result = num instanceof Number; // 编译报错
 ```
-
 ### 不支持`in`运算符
-
 **规则：**`arkts-no-in`
-
 **级别：错误** | **错误码：10605066**
-
 对象布局编译时已知且运行时无法修改。需要检查类成员是否存在时使用`instanceof`。
-
 **TypeScript**
-
 ``` TypeScript
 class Person {
   name: string = '';
@@ -1519,9 +1162,7 @@ let p = new Person();
 
 let b = 'name' in p; // true
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class Person {
   public name: string = '';
@@ -1530,17 +1171,11 @@ let p = new Person();
 
 let b = p instanceof Person; // true，且属性name一定存在
 ```
-
 ### 不支持解构赋值
-
 **规则：**`arkts-no-destruct-assignment`
-
 **级别：错误** | **错误码：10605069**
-
 使用临时变量等替代方法。
-
 **TypeScript**
-
 ``` TypeScript
 let [one, two] = [1, 2]; // 此处需要分号
 [one, two] = [two, one];
@@ -1548,9 +1183,7 @@ let [one, two] = [1, 2]; // 此处需要分号
 let head, tail;
 [head, ...tail] = [1, 2, 3, 4];
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let arr: number[] = [1, 2];
 let one = arr[0];
@@ -1567,19 +1200,12 @@ for (let i = 1; i < data.length; ++i) {
   tail.push(data[i]);
 }
 ```
-
 ### 逗号运算符`,`仅用在`for`循环语句中
-
 **规则：**`arkts-no-comma-outside-loops`
-
 **级别：错误** | **错误码：10605071**
-
 逗号运算符仅适用于`for`循环语句，用于明确执行顺序。
-
 > **注意：** 这与声明变量和函数参数传递时使用的逗号分隔符不同。
-
 **TypeScript**
-
 ``` TypeScript
 for (let i = 0, j = 0; i < 10; ++i, j += 2) {
   // ...
@@ -1588,9 +1214,7 @@ for (let i = 0, j = 0; i < 10; ++i, j += 2) {
 let x = 0;
 x = (++x, x++); // 1
 ```
-
 **ArkTS**
-
 ``` TypeScript
 for (let i = 0, j = 0; i < 10; ++i, j += 2) {
   // ...
@@ -1601,58 +1225,40 @@ let x = 0;
 ++x;
 x = x++;
 ```
-
 ### 不支持解构变量声明
-
 **规则：**`arkts-no-destruct-decls`
-
 **级别：错误** | **错误码：10605074**
-
 这是一个依赖于结构兼容性的动态特性。
-
 **TypeScript**
-
 ``` TypeScript
 class Point {
   x: number = 0.0;
   y: number = 0.0;
 }
 
-function returnZeroPoint(): Point {
-  return new Point();
-}
+function returnZeroPoint(): Point { return new Point(); }
 
 let { x, y } = returnZeroPoint();
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class Point {
   public x: number = 0.0;
   public y: number = 0.0;
 }
 
-function returnZeroPoint(): Point {
-  return new Point();
-}
+function returnZeroPoint(): Point { return new Point(); }
 
 // 创建一个局部变量来处理每个字段
 let zp = returnZeroPoint();
 let x = zp.x;
 let y = zp.y;
 ```
-
 ### 不支持在catch语句标注类型
-
 **规则：**`arkts-no-types-in-catch`
-
 **级别：错误** | **错误码：10605079**
-
 TS的catch只能标注`any`或`unknown`类型，ArkTS不支持这些类型，应省略类型标注。
-
 **TypeScript**
-
 ``` TypeScript
 try {
   // ...
@@ -1660,9 +1266,7 @@ try {
   // 处理异常
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 try {
   // ...
@@ -1670,51 +1274,35 @@ try {
   // 处理异常
 }
 ```
-
 ### 不支持`for .. in`
-
 **规则：**`arkts-no-for-in`
-
 **级别：错误** | **错误码：10605080**
-
 对象布局编译时确定且运行时不可修改。
-
 **TypeScript**
-
 ``` TypeScript
 let a: string[] = ['1.0', '2.0', '3.0'];
 for (let i in a) {
   console.info(a[i]);
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let a: string[] = ['1.0', '2.0', '3.0'];
 for (let i = 0; i < a.length; ++i) {
   console.info(a[i]);
 }
 ```
-
 ### 不支持映射类型
-
 **规则：**`arkts-no-mapped-types`
-
 **级别：错误** | **错误码：10605083**
-
 使用其他语法表示相同语义。
-
 **TypeScript**
-
 ``` TypeScript
 type OptionsFlags<Type> = {
   [Property in keyof Type]: boolean
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   public n: number = 0;
@@ -1726,118 +1314,77 @@ class CFlags {
   public s: boolean = false;
 }
 ```
-
 ### 不支持`with`语句
-
 **规则：**`arkts-no-with`
-
 **级别：错误** | **错误码：10605084**
-
 **TypeScript**
-
 ```typescript
 with (Math) { // 编译时错误, 但是仍能生成JavaScript代码
   let r: number = 42;
   let area: number = PI * r * r;
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 let r: number = 42;
 let area: number = Math.PI * r * r;
 ```
-
 ### 限制`throw`语句中表达式的类型
-
 **规则：**`arkts-limited-throw`
-
 **级别：错误** | **错误码：10605087**
-
 只支持抛出`Error`类或其派生类的实例。禁止抛出其他类型（如`number`或`string`）。
-
 **TypeScript**
-
 ``` TypeScript
 throw 4;
 throw '';
 throw new Error();
 ```
-
 **ArkTS**
-
 ``` TypeScript
 throw new Error();
 ```
-
 ### 限制省略函数返回类型标注
-
 **规则：**`arkts-no-implicit-return-types`
-
 **级别：错误** | **错误码：10605090**
-
 当`return`表达式是对某函数/方法的调用且该函数/方法的返回类型未被显著标注时，会出现编译错误。此时请标注函数返回类型。
-
 **TypeScript**
-
 ``` TypeScript
 // 只有在开启noImplicitAny选项时会产生编译时错误
 function f(x: number) {
-  if (x <= 0) {
-    return x;
-  }
+  if (x <= 0) { return x; }
   return g(x);
 }
 
 // 只有在开启noImplicitAny选项时会产生编译时错误
-function g(x: number) {
-  return f(x - 1);
-}
+function g(x: number) { return f(x - 1); }
 
-function doOperation(x: number, y: number) {
-  return x + y;
-}
+function doOperation(x: number, y: number) { return x + y; }
 
 f(10);
 doOperation(2, 3);
 ```
-
 **ArkTS**
-
 ``` TypeScript
 // 需标注返回类型：
 function f(x: number): number {
-  if (x <= 0) {
-    return x;
-  }
+  if (x <= 0) { return x; }
   return g(x);
 }
 
 // 可以省略返回类型，返回类型可以从f的类型标注推导得到
-function g(x: number): number {
-  return f(x - 1);
-}
+function g(x: number): number { return f(x - 1); }
 
 // 可以省略返回类型
-function doOperation(x: number, y: number) {
-  return x + y;
-}
+function doOperation(x: number, y: number) { return x + y; }
 
 f(10);
 doOperation(2, 3);
 ```
-
 ### 不支持参数解构的函数声明
-
 **规则：**`arkts-no-destruct-params`
-
 **级别：错误** | **错误码：10605091**
-
 实参必须直接传递给函数，且必须指定到形参。
-
 **TypeScript**
-
 ``` TypeScript
 function drawText({ text = '', location: [x, y] = [0, 0], bold = false }) {
   text;
@@ -1848,9 +1395,7 @@ function drawText({ text = '', location: [x, y] = [0, 0], bold = false }) {
 
 drawText({ text: 'Hello, world!', location: [100, 50], bold: true });
 ```
-
 **ArkTS**
-
 ``` TypeScript
 function drawText(text: String, location: number[], bold: boolean) {
   let x = location[0];
@@ -1865,17 +1410,11 @@ function main() {
   drawText('Hello, world!', [100, 50], true);
 }
 ```
-
 ### 不支持在函数内声明函数
-
 **规则：**`arkts-no-nested-funcs`
-
 **级别：错误** | **错误码：10605092**
-
 改用lambda函数。
-
 **TypeScript**
-
 ``` TypeScript
 function addNum(a: number, b: number): void {
 
@@ -1890,9 +1429,7 @@ function addNum(a: number, b: number): void {
   logToConsole('result is ' + result);
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 function addNum(a: number, b: number): void {
   // 使用lambda函数代替声明函数
@@ -1905,21 +1442,13 @@ function addNum(a: number, b: number): void {
   logToConsole('result is ' + result);
 }
 ```
-
 ### 不支持在函数和类的静态方法中使用`this`
-
 **规则：**`arkts-no-standalone-this`
-
 **级别：错误** | **错误码：10605093**
-
 `this`只能在类的实例方法中使用。
-
 **TypeScript**
-
 ``` TypeScript
-function foo(i: string) {
-  this.count = i; // 只有在开启noImplicitThis选项时会产生编译时错误
-}
+function foo(i: string) { this.count = i; // 只有在开启noImplicitThis选项时会产生编译时错误 }
 
 class A {
   count: string = 'a';
@@ -1931,15 +1460,11 @@ console.info(a.count); // 打印a
 a.m('b');
 console.info(a.count); // 打印b
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class A {
   public count: string = 'a'
-  m(i: string): void {
-    this.count = i;
-  }
+  m(i: string): void { this.count = i; }
 }
 
 function main(): void {
@@ -1949,17 +1474,11 @@ function main(): void {
   console.info(a.count);  // 打印b
 }
 ```
-
 ### 不支持生成器函数
-
 **规则：**`arkts-no-generators`
-
 **级别：错误** | **错误码：10605094**
-
 可使用`async`或`await`机制处理并行任务。
-
 **TypeScript**
-
 ``` TypeScript
 function* counter(start: number, end: number) {
   for (let i = start; i <= end; i++) {
@@ -1971,9 +1490,7 @@ for (let num of counter(1, 5)) {
   console.info(num.toString());
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 async function complexNumberProcessing(num: number): Promise<number> {
   // ...
@@ -1988,17 +1505,11 @@ async function foo() {
 
 foo();
 ```
-
 ### 使用`instanceof`和`as`进行类型保护
-
 **规则：**`arkts-no-is`
-
 **级别：错误** | **错误码：10605096**
-
 不支持`is`关键字，必须使用`instanceof`运算符替代。使用`instanceof`前需先用`as`将对象转换为所需类型。
-
 **TypeScript**
-
 ```typescript
 class Foo {
   foo: string = ''
@@ -2010,9 +1521,7 @@ class Bar {
   common: string = ''
 }
 
-function isFoo(arg: any): arg is Foo {
-  return arg.foo !== undefined;
-}
+function isFoo(arg: any): arg is Foo { return arg.foo !== undefined; }
 
 function doStuff(arg: Foo | Bar) {
   if (isFoo(arg)) {
@@ -2027,9 +1536,7 @@ function doStuff(arg: Foo | Bar) {
 doStuff({ foo: '123', common: '123' });
 doStuff({ bar: '123', common: '123' });
 ```
-
 **ArkTS**
-
 ```typescript
 class Foo {
   foo: string = ''
@@ -2041,9 +1548,7 @@ class Bar {
   common: string = ''
 }
 
-function isFoo(arg: Object): boolean {
-  return arg instanceof Foo;
-}
+function isFoo(arg: Object): boolean { return arg instanceof Foo; }
 
 function doStuff(arg: Object): void {
   if (isFoo(arg)) {
@@ -2062,19 +1567,13 @@ function main(): void {
   doStuff(new Bar());
 }
 ```
-
 ### 部分支持展开运算符
-
 **规则：**`arkts-no-spread`
-
 **级别：错误** | **错误码：10605099**
-
 仅支持展开数组、`Array`的子类和`TypedArray`（如`Int32Array`）。使用场景：
 1. 传递给剩余参数时
 2. 复制数组到数组字面量
-
 **TypeScript**
-
 ``` TypeScript
 function foo(x: number, y: number, z: number) {
   // ...
@@ -2083,9 +1582,7 @@ function foo(x: number, y: number, z: number) {
 let args: [number, number, number] = [0, 1, 2];
 foo(...args);
 ```
-
 **ArkTS**
-
 ``` TypeScript
 function logNumbers(x: number, y: number, z: number) {
   // ...
@@ -2094,16 +1591,12 @@ function logNumbers(x: number, y: number, z: number) {
 let numbers: number[] = [1, 2, 3];
 logNumbers(numbers[0], numbers[1], numbers[2]);
 ```
-
 **TypeScript** — 对象展开
-
 ``` TypeScript
 let point2d = { x: 1, y: 2 };
 let point3d = { ...point2d, z: 3 };
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class Point2D {
   public x: number = 0;
@@ -2130,17 +1623,11 @@ let arr2 = new Uint16Array([4, 5, 6]);
 let arr3 = new DerivedFromArray([7, 8, 9]);
 let arr4 = [...arr1, 10, ...arr2, 11, ...arr3];
 ```
-
 ### 接口不能继承具有相同方法的两个接口
-
 **规则：**`arkts-no-extend-same-prop`
-
 **级别：错误** | **错误码：106050102**
-
 ArkTS中接口不能包含两个无法区分的方法（参数列表相同但返回类型不同），因此不能继承具有相同方法的两个接口。
-
 **TypeScript**
-
 ``` TypeScript
 interface Mover {
   getStatus(): { speed: number }
@@ -2160,20 +1647,14 @@ class C implements MoverShaker {
   private speed: number = 0
   private frequency: number = 0
 
-  getStatus() {
-    return { speed: this.speed, frequency: this.frequency };
-  }
+  getStatus() { return { speed: this.speed, frequency: this.frequency }; }
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class MoveStatus {
   public speed: number;
-  constructor() {
-    this.speed = 0;
-  }
+  constructor() { this.speed = 0; }
 }
 interface Mover {
   getMoveStatus(): MoveStatus
@@ -2181,9 +1662,7 @@ interface Mover {
 
 class ShakeStatus {
   public frequency: number;
-  constructor() {
-    this.frequency = 0;
-  }
+  constructor() { this.frequency = 0; }
 }
 interface Shaker {
   getShakeStatus(): ShakeStatus
@@ -2207,13 +1686,9 @@ class C implements Mover, Shaker {
     this.shakeStatus = new ShakeStatus();
   }
 
-  public getMoveStatus(): MoveStatus {
-    return this.moveStatus;
-  }
+  public getMoveStatus(): MoveStatus { return this.moveStatus; }
 
-  public getShakeStatus(): ShakeStatus {
-    return this.shakeStatus;
-  }
+  public getShakeStatus(): ShakeStatus { return this.shakeStatus; }
 
   public getStatus(): MoveAndShakeStatus {
     return {
@@ -2223,17 +1698,11 @@ class C implements Mover, Shaker {
   }
 }
 ```
-
 ### 不支持声明合并
-
 **规则：**`arkts-no-decl-merging`
-
 **级别：错误** | **错误码：10605103**
-
 不支持类和接口的声明合并。
-
 **TypeScript**
-
 ``` TypeScript
 interface Document {
   createElement(tagName: any): number;
@@ -2249,9 +1718,7 @@ interface Document {
   createElement(tagName: string, value: number): string;
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 interface Document {
   createElement(tagName: number): number;
@@ -2261,17 +1728,11 @@ interface Document {
   createElement(tagName: Object): object;
 }
 ```
-
 ### 接口不能继承类
-
 **规则：**`arkts-extends-only-class`
-
 **级别：错误** | **错误码：10605104**
-
 接口只能继承其他接口。
-
 **TypeScript**
-
 ``` TypeScript
 class Control {
   state: number = 0;
@@ -2281,9 +1742,7 @@ interface SelectableControl extends Control {
   select(): void
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 interface Control {
   state: number
@@ -2293,17 +1752,11 @@ interface SelectableControl extends Control {
   select(): void
 }
 ```
-
 ### 不支持构造函数类型
-
 **规则：**`arkts-no-ctor-signatures-funcs`
-
 **级别：错误** | **错误码：10605106**
-
 改用lambda函数。
-
 **TypeScript**
-
 ``` TypeScript
 class Person {
   constructor(
@@ -2313,15 +1766,11 @@ class Person {
 }
 type PersonCtor = new (name: string, age: number) => Person;
 
-function createPerson(Ctor: PersonCtor, name: string, age: number): Person {
-  return new Ctor(name, age);
-}
+function createPerson(Ctor: PersonCtor, name: string, age: number): Person { return new Ctor(name, age); }
 
 const person = createPerson(Person, 'John', 30);
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class Person {
   constructor(
@@ -2331,27 +1780,17 @@ class Person {
 }
 type PersonCtor = (n: string, a: number) => Person
 
-function createPerson(ctor: PersonCtor, n: string, a: number): Person {
-  return ctor(n, a);
-}
+function createPerson(ctor: PersonCtor, n: string, a: number): Person { return ctor(n, a); }
 
-let impersonate: PersonCtor = (n: string, a: number): Person => {
-  return new Person(n, a);
-}
+let impersonate: PersonCtor = (n: string, a: number): Person => { return new Person(n, a); }
 
 const person = createPerson(impersonate, 'John', 30);
 ```
-
 ### 只能使用类型相同的编译时表达式初始化枚举成员
-
 **规则：**`arkts-no-enum-mixed-types`
-
 **级别：错误** | **错误码：10605111**
-
 不支持运行时计算表达式初始化枚举成员。所有显式初始化的成员必须具有相同类型。
-
 **TypeScript**
-
 ``` TypeScript
 enum E1 {
   A = 0xa,
@@ -2368,9 +1807,7 @@ enum E2 {
   D = '0xd'
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 enum E1 {
   A = 0xa,
@@ -2387,15 +1824,10 @@ enum E2 {
   D = '0xd'
 }
 ```
-
 ### 不支持`enum`声明合并
-
 **规则：**`arkts-no-enum-merging`
-
 **级别：错误** | **错误码：10605113**
-
 **TypeScript**
-
 ``` TypeScript
 enum ColorSet {
   RED,
@@ -2409,9 +1841,7 @@ enum ColorSet {
   BLUE
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 enum ColorSet {
   RED,
@@ -2421,17 +1851,11 @@ enum ColorSet {
   BLUE
 }
 ```
-
 ### 命名空间不能被用作对象
-
 **规则：**`arkts-no-ns-as-obj`
-
 **级别：错误** | **错误码：10605114**
-
 可以使用类或模块。
-
 **TypeScript**
-
 ``` TypeScript
 namespace MyNamespace {
   export let x: number;
@@ -2440,9 +1864,7 @@ namespace MyNamespace {
 let m = MyNamespace;
 m.x = 2;
 ```
-
 **ArkTS**
-
 ``` TypeScript
 namespace MyNamespace {
   export let x: number;
@@ -2450,26 +1872,18 @@ namespace MyNamespace {
 
 MyNamespace.x = 2;
 ```
-
 ### 不支持命名空间中的非声明语句
-
 **规则：**`arkts-no-ns-statements`
-
 **级别：错误** | **错误码：10605116**
-
 命名空间仅用于定义标识符可见范围，编译时有效。非声明语句写在函数中。
-
 **TypeScript**
-
 ``` TypeScript
 namespace A {
   export let x: number;
   x = 1;
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 namespace A {
   export let x: number
@@ -2482,37 +1896,23 @@ namespace A {
 // 调用初始化函数来执行
 A.init();
 ```
-
 ### 不支持`require`和`import`赋值表达式
-
 **规则：**`arkts-no-require`
-
 **级别：错误** | **错误码：10605121**
-
 改用`import`。
-
 **TypeScript**
-
 ```typescript
 import m = require('mod')
 ```
-
 **ArkTS**
-
 ``` TypeScript
 import * as m from './ExportMod'
 ```
-
 ### 不支持`export = ...`语法
-
 **规则：**`arkts-no-export-assignment`
-
 **级别：错误** | **错误码：10605126**
-
 改用常规的`export`或`import`。
-
 **TypeScript**
-
 ```typescript
 // module1
 export = Point
@@ -2527,9 +1927,7 @@ import Pt = require('module1')
 
 let p = Pt.Point.origin;
 ```
-
 **ArkTS** — ExportMod.ets
-
 ``` TypeScript
 // ExportMod.ets
 export class Point {
@@ -2537,49 +1935,33 @@ export class Point {
   public static origin = new Point(0, 0)
 }
 ```
-
 **ArkTS** — module2
-
 ``` TypeScript
 // module2
 import * as Pt from './ExportMod'
 
 let p = Pt.Point.origin;
 ```
-
 ### 不支持ambient module声明
-
 **规则：**`arkts-no-ambient-decls`
-
 **级别：错误** | **错误码：10605128**
-
 ArkTS有自身与JS交互的机制。
-
 **TypeScript**
-
 ```typescript
 declare module 'someModule' {
   export function normalize(s: string): string;
 }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 // 从原始模块中导入需要的内容
 import { normalize } from './ExportMod'
 ```
-
 ### 不支持在模块名中使用通配符
-
 **规则：**`arkts-no-module-wildcards`
-
 **级别：错误** | **错误码：10605129**
-
 导入是编译时而非运行时行为。
-
 **TypeScript**
-
 ```typescript
 // 声明
 declare module '*!text' {
@@ -2590,34 +1972,24 @@ declare module '*!text' {
 // 使用代码
 import fileContent from 'some.txt!text'
 ```
-
 **ArkTS** — 声明
-
 ``` TypeScript
 // 声明
 export declare namespace N {
   function foo(x: number): number
 }
 ```
-
 **ArkTS** — 使用代码
-
 ``` TypeScript
 // 使用代码
 import * as m from './ExportMod'
 console.info('N.foo called: ' + m.N.foo(42));
 ```
-
 ### 不支持通用模块定义(UMD)
-
 **规则：**`arkts-no-umd`
-
 **级别：错误** | **错误码：10605130**
-
 ArkTS中没有"脚本"概念，导入是编译时特性。改用`export`和`import`语法。
-
 **TypeScript**
-
 ```typescript
 // math-lib.d.ts
 export const isPrime(x: number): boolean
@@ -2626,9 +1998,7 @@ export as namespace mathLib
 // 脚本中
 mathLib.isPrime(2)
 ```
-
 **ArkTS**
-
 ```typescript
 // math-lib.d.ts
 namespace mathLib {
@@ -2639,25 +2009,15 @@ namespace mathLib {
 import { mathLib } from 'math-lib'
 mathLib.isPrime(2)
 ```
-
 ### 不支持`new.target`
-
 **规则：**`arkts-no-new-target`
-
 **级别：错误** | **错误码：10605132**
-
 ArkTS无原型概念。
-
 ### 不支持确定赋值断言
-
 **规则：**`arkts-no-definite-assignment`
-
 **级别：警告** | **错误码：10605134**
-
 不支持`let v!: T`。改为声明时赋值。
-
 **TypeScript**
-
 ```typescript
 let x!: number // 提示：在使用前将x初始化
 
@@ -2669,33 +2029,21 @@ function initialize() {
 
 console.info('x = ' + x);
 ```
-
 **ArkTS**
-
 ``` TypeScript
-function initialize(): number {
-  return 10;
-}
+function initialize(): number { return 10; }
 
 let x: number = initialize();
 
 console.info('x = ' + x);
 ```
-
 ### 不支持在原型上赋值
-
 **规则：**`arkts-no-prototype-assignment`
-
 **级别：错误** | **错误码：10605136**
-
 ArkTS无原型概念。
-
 **TypeScript**
-
 ``` TypeScript
-let C = function (p) {
-  this.p = p; // 只有在开启noImplicitThis选项时会产生编译时错误
-}
+let C = function (p) { this.p = p; // 只有在开启noImplicitThis选项时会产生编译时错误 }
 
 C.prototype = {
   m() {
@@ -2703,35 +2051,23 @@ C.prototype = {
   }
 }
 
-C.prototype.q = function (r: string) {
-  return this.p == r;
-}
+C.prototype.q = function (r: string) { return this.p == r; }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   public p: string = '';
   m() {
     console.info(this.p);
   }
-  q(r: string) {
-    return this.p === r;
-  }
+  q(r: string) { return this.p === r; }
 }
 ```
-
 ### 不支持`globalThis`
-
 **规则：**`arkts-no-globalthis`
-
 **级别：警告** | **错误码：10605137**
-
 ArkTS不支持动态更改对象布局，因此不支持全局作用域和`globalThis`。
-
 **TypeScript**
-
 ``` TypeScript
 // 全局文件中
 var abc = 100;
@@ -2739,69 +2075,41 @@ var abc = 100;
 // 从上面引用'abc'
 let x = globalThis.abc;
 ```
-
 **ArkTS** — ExportMod.ets
-
 ``` TypeScript
 // ExportMod.ets
 export let abc: number = 100;
 ```
-
 **ArkTS** — NoGlobalThis.ets
-
 ``` TypeScript
 // NoGlobalThis.ets
 import * as M from './ExportMod'
 
 let x = M.abc;
 ```
-
 ### 不支持一些utility类型
-
 **规则：**`arkts-no-utility-types`
-
 **级别：错误** | **错误码：10605138**
-
 仅支持`Partial`、`Required`、`Readonly`和`Record`。不支持TypeScript中其他Utility Types。
-
 对于`Partial<T>`，泛型参数T必须为类或接口类型。
-
 对于`Record`类型的对象，通过索引访问到的值的类型是包含`undefined`的联合类型。
-
 ### 不支持对函数声明属性
-
 **规则：**`arkts-no-func-props`
-
 **级别：错误** | **错误码：10605139**
-
 ArkTS不支持动态改变函数对象布局。
-
 ### 不支持`Function.apply`和`Function.call`
-
 **规则：**`arkts-no-func-apply-call`
-
 **级别：错误** | **错误码：10605152**
-
 这些函数用于显式设置被调用函数的`this`参数。ArkTS中函数体内禁止使用`this`。
-
 ### 不支持`Function.bind`
-
 **规则：**`arkts-no-func-bind`
-
 **级别：警告** | **错误码：10605140**
-
 ArkTS中`this`仅限于传统OOP风格，函数体中禁用`this`。
-
 ### 不支持`as const`断言
-
 **规则：**`arkts-no-as-const`
-
 **级别：错误** | **错误码：10605142**
-
 不支持字面量类型。
-
 **TypeScript**
-
 ``` TypeScript
 // 'hello'类型
 let x = 'hello' as const;
@@ -2812,9 +2120,7 @@ let y = [10, 20] as const;
 // '{ readonly text: 'hello' }'类型
 let z = { text: 'hello' } as const;
 ```
-
 **ArkTS**
-
 ``` TypeScript
 // 'string'类型
 let x: string = 'hello';
@@ -2831,52 +2137,31 @@ let z: Label = {
   public text: 'hello',
 }
 ```
-
 ### 不支持导入断言
-
 **规则：**`arkts-no-import-assertions`
-
 **级别：错误** | **错误码：10605143**
-
 导入是编译时特性，运行时检查导入API无意义。
-
 **TypeScript**
-
 ``` TypeScript
 import { obj } from './Something.json' assert { type: 'json' }
 ```
-
 **ArkTS**
-
 ``` TypeScript
 // 编译时将检查导入T的正确性
 import { Something } from './ExportMod'
 ```
-
 ### 限制使用标准库
-
 **规则：**`arkts-limited-stdlib`
-
 **级别：错误** | **错误码：10605144**
-
 ArkTS不允许使用TypeScript或JavaScript标准库中的以下接口（大部分与动态特性有关）：
-
 全局对象的属性和方法：`eval`
-
 `Object`：`__proto__`、`__defineGetter__`、`__defineSetter__`、`__lookupGetter__`、`__lookupSetter__`、`assign`、`create`、`defineProperties`、`defineProperty`、`freeze`、`fromEntries`、`getOwnPropertyDescriptor`、`getOwnPropertyDescriptors`、`getOwnPropertySymbols`、`getPrototypeOf`、`hasOwnProperty`、`is`、`isExtensible`、`isFrozen`、`isPrototypeOf`、`isSealed`、`preventExtensions`、`propertyIsEnumerable`、`seal`、`setPrototypeOf`
-
 `Reflect`：`apply`、`construct`、`defineProperty`、`deleteProperty`、`getOwnPropertyDescriptor`、`getPrototypeOf`、`isExtensible`、`preventExtensions`、`setPrototypeOf`
-
 `Proxy`：`handler.apply()`、`handler.construct()`、`handler.defineProperty()`、`handler.deleteProperty()`、`handler.get()`、`handler.getOwnPropertyDescriptor()`、`handler.getPrototypeOf()`、`handler.has()`、`handler.isExtensible()`、`handler.ownKeys()`、`handler.preventExtensions()`、`handler.set()`、`handler.setPrototypeOf()`
-
 ### 强制进行严格类型检查
-
 **级别：错误** | **错误码：10605999**
-
 编译阶段进行TypeScript严格模式的类型检查：`noImplicitReturns`、`strictFunctionTypes`、`strictNullChecks`、`strictPropertyInitialization`。
-
 **TypeScript**
-
 ``` TypeScript
 // 只有在开启noImplicitReturns选项时会产生编译时错误
 function foo(s: string): string {
@@ -2890,9 +2175,7 @@ function foo(s: string): string {
 
 let n: number = null; // 只有在开启strictNullChecks选项时会产生编译时错误
 ```
-
 **ArkTS**
-
 ``` TypeScript
 function foo(s: string): string {
   console.info(s);
@@ -2902,11 +2185,8 @@ function foo(s: string): string {
 let n1: number | null = null;
 let n2: number = 0;
 ```
-
 无法在声明时或构造函数中初始化实例属性时，可使用确定赋值断言符`!`，但这会增加错误风险和运行时开销，应尽量避免使用，将产生`warning: arkts-no-definite-assignment`。
-
 **TypeScript**
-
 ``` TypeScript
 class C {
   name: string  // 只有在开启strictPropertyInitialization选项时会产生编译时错误
@@ -2915,33 +2195,23 @@ class C {
 
 let c = new C();
 ```
-
 **ArkTS**
-
 ``` TypeScript
 class C {
   name: string = ''
   age!: number      // warning: arkts-no-definite-assignment
 
-  initAge(age: number) {
-    this.age = age;
-  }
+  initAge(age: number) { this.age = age; }
 }
 
 let c = new C();
 c.initAge(10);
 ```
-
 ### 不允许通过注释关闭类型检查
-
 **规则：**`arkts-strict-typing-required`
-
 **级别：错误** | **错误码：10605146**
-
 类型检查非可选项。不支持`@ts-ignore`和`@ts-nocheck`。
-
 **TypeScript**
-
 ``` TypeScript
 // @ts-nocheck
 // ...
@@ -2953,70 +2223,47 @@ let s1: string = null; // 没有报错
 // @ts-ignore
 let s2: string = null; // 没有报错
 ```
-
 **ArkTS**
-
 ```typescript
 let s1: string | null = null; // 没有报错，合适的类型
 let s2: string = null; // 编译时报错
 ```
-
 ### 允许.ets文件`import`.ets/.ts/.js文件源码, 不允许.ts/.js文件`import`.ets文件源码
-
 **规则：**`arkts-no-ts-deps`
-
 **级别：错误** | **错误码：10605147**
-
 **TypeScript** — ExportMod.ts
-
 ``` TypeScript
 // ExportMod.ts
 export class C {
   // ...
 }
 ```
-
 **TypeScript** — NoTsDeps.ts
-
 ``` TypeScript
 // NoTsDeps.ts
 import { C } from './ExportMod'
 ```
-
 **ArkTS** — ExportMod.ets
-
 ``` TypeScript
 // ExportMod.ets
 export class C {
   // ...
 }
 ```
-
 **ArkTS** — lib2.ets
-
 ``` TypeScript
 // lib2.ets
 import { C } from './ExportMod'
 ```
-
 ### `class`不能被用作对象
-
 **规则：**`arkts-no-classes-as-obj`
-
 **级别：警告** | **错误码：10605149**
-
 `class`声明的是新类型，不是值。不支持将`class`用作对象（如赋值给对象）。
-
 ### 不支持在`import`语句前使用其他语句
-
 **规则：**`arkts-no-misplaced-imports`
-
 **级别：错误** | **错误码：10605150**
-
 除动态`import`外，所有`import`语句应置于其他语句之前。
-
 **TypeScript**
-
 ``` TypeScript
 class C {
   s: string = ''
@@ -3025,9 +2272,7 @@ class C {
 
 import foo from './ExportMod'
 ```
-
 **ArkTS**
-
 ```typescript
 import foo from 'module1'
 
@@ -3038,19 +2283,12 @@ class C {
 
 import('module2').then(() => {}).catch(() => {})  // 动态import
 ```
-
 ### 限制使用`ESObject`类型
-
 **规则：**`arkts-limited-esobj`
-
 **级别：警告** | **错误码：10605151**
-
 限制目的：防止动态对象（来自.ts/.js文件）在静态代码（.ets文件）中的滥用。
-
 API版本18以前，唯一允许使用`ESObject`的场景是局部变量声明。`ESObject`只能被跨语言调用的对象赋值，禁止使用.ets文件中定义的静态类型值初始化。只能用于跨语言调用的函数或赋值给另一个`ESObject`类型变量。
-
 API版本18起，`ESObject`不再支持赋值对象字面量类型。支持在动态导入场景中作为类型标注，以及用于属性访问（点操作符和[]访问）、调用表达式和new表达式。
-
 ```typescript
 // lib.d.ts
 declare function foo(): any;
