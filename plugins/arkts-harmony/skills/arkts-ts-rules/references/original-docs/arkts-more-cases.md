@@ -1,21 +1,12 @@
 # 适配指导案例
 
-<!--Kit: ArkTS-->
-<!--Subsystem: ArkCompiler-->
-<!--Owner: @oatuwwutao-->
-<!--Designer: @oatuwwutao; @cy917474985-->
-<!--Tester: @kirl75; @zsw_zhushiwei-->
-<!--Adviser: @zhang_yixin13-->
-
-本文通过具体应用场景中的案例，提供在ArkTS语法规则下将TS代码适配成ArkTS代码的建议。各章以ArkTS语法规则的英文名称命名，每个案例展示适配前的TS代码和适配后的ArkTS代码。
+本文通过具体应用场景案例，提供在ArkTS语法规则下将TS代码适配成ArkTS代码的建议。各章以ArkTS语法规则英文名称命名，每个案例展示适配前TS代码和适配后ArkTS代码。
 
 ## arkts-identifiers-as-prop-names
 
-当属性名是有效的标识符（即不包含特殊字符、空格等，并且不以数字开头），可以直接使用而无需引号。
+属性名是有效标识符时（不含特殊字符、空格，不以数字开头），可直接使用无需引号。
 
 **应用代码**
-
-<!-- @[ts_identifiers_as_prop_names](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->     
 
 ``` TypeScript
 interface W {
@@ -33,8 +24,6 @@ let wantInfo: W = {
 
 **建议改法**
 
-<!-- @[identifiers_as_prop_names](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->     
-
 ``` TypeScript
 interface W {
   bundleName: string
@@ -51,9 +40,7 @@ let wantInfo: W = {
 
 ## arkts-no-any-unknown
 
-### 按照业务逻辑，将代码中的`any, unknown`改为具体的类型
-
-<!-- @[ts_no_any_unknown](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->      
+### 将`any, unknown`改为具体类型
 
 ``` TypeScript
 function printObj(obj: any) {
@@ -64,8 +51,6 @@ printObj('abc'); // abc
 ```
 
 **建议改法**
-
-<!-- @[no_any_unknown](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->       
 
 ``` TypeScript
 function printObj(obj: string) {
@@ -79,8 +64,6 @@ function printObj(obj: string) {
 ### 标注JSON.parse返回值类型
 
 **应用代码**
-
-<!-- @[ts_json_parser](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->     
 
 ``` TypeScript
 class A {
@@ -98,8 +81,6 @@ class A {
 ```
 
 **建议改法**
-
-<!-- @[json_parser](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->     
 
 ``` TypeScript
 class A {
@@ -120,8 +101,6 @@ class A {
 
 **应用代码**
 
-<!-- @[ts_record_type](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->     
-
 ``` TypeScript
 function printProperties(obj: any) {
   console.info(obj.name);
@@ -130,8 +109,6 @@ function printProperties(obj: any) {
 ```
 
 **建议改法**
-
-<!-- @[record_type](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->     
 
 ``` TypeScript
 function printProperties(obj: Record<string, Object>) {
@@ -143,11 +120,9 @@ function printProperties(obj: Record<string, Object>) {
 
 ## arkts-no-call-signature
 
-使用函数类型进行替代。
+使用函数类型替代。
 
 **应用代码**
-
-<!-- @[ts_no_call_signature](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->      
 
 ``` TypeScript
 interface I {
@@ -165,8 +140,6 @@ foo((value: string) => {
 
 **建议改法**
 
-<!-- @[no_call_signature](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
-
 ``` TypeScript
 type I = (value: string) => void
 
@@ -182,11 +155,9 @@ function foo(fn: I) {
 
 ## arkts-no-ctor-signatures-type
 
-使用工厂函数（() => Instance）替代构造函数签名。
+使用工厂函数`() => Instance`替代构造函数签名。
 
 **应用代码**
-
-<!-- @[ts_no_ctor_signatures_type](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 class Controller {
@@ -216,8 +187,6 @@ console.info(t.createController()!.value);
 ```
 
 **建议改法**
-
-<!-- @[no_ctor_signatures_type](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
 
 ``` TypeScript
 class Controller {
@@ -249,11 +218,9 @@ class TestMenu {
 
 ## arkts-no-indexed-signatures
 
-使用Record类型进行替代。
+使用Record类型替代。
 
 **应用代码**
-
-<!-- @[ts_no_indexed_signatures](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 function foo1(data: { [key: string]: string }) {
@@ -264,8 +231,6 @@ function foo1(data: { [key: string]: string }) {
 ```
 
 **建议改法**
-
-<!-- @[no_indexed_signatures](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
 
 ``` TypeScript
 function foo1(data: Record<string, string>) {
@@ -281,8 +246,6 @@ function foo1(data: Record<string, string>) {
 
 **应用代码**
 
-<!-- @[ts_no_typing_with_this](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
-
 ``` TypeScript
 class C {
   getInstance(): this {
@@ -292,8 +255,6 @@ class C {
 ```
 
 **建议改法**
-
-<!-- @[no_typing_with_this](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
 
 ``` TypeScript
 class C {
@@ -305,11 +266,9 @@ class C {
 
 ## arkts-no-ctor-prop-decls
 
-显式声明类属性，并在构造函数中手动赋值。
+显式声明类属性，在构造函数中手动赋值。
 
 **应用代码**
-
-<!-- @[ts_no_ctor_prop_decls](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 class Person {
@@ -322,8 +281,6 @@ class Person {
 ```
 
 **建议改法**
-
-<!-- @[no_ctor_prop_decls](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
 
 ``` TypeScript
 class Person {
@@ -343,8 +300,6 @@ class Person {
 使用type定义工厂函数或普通函数类型。
 
 **应用代码**
-
-<!-- @[ts_no_ctor_signatures_iface](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 class Controller {
@@ -374,8 +329,6 @@ console.info(t.createController()!.value);
 ```
 
 **建议改法**
-
-<!-- @[no_ctor_signatures_iface](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
 
 ``` TypeScript
 class Controller {
@@ -407,11 +360,9 @@ console.info(t.createController()!.value);
 
 ## arkts-no-props-by-index
 
-可以将对象转换为Record类型，以便访问其属性。
+将对象转换为Record类型以访问其属性。
 
 **应用代码**
-
-<!-- @[ts_no_props_by_index](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 function foo2(params: Object) {
@@ -422,8 +373,6 @@ function foo2(params: Object) {
 
 **建议改法**
 
-<!-- @[no_props_by_index](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
-
 ``` TypeScript
 function foo2(params: Record<string, string | number>) {
   let funNum: number = params['funNum'] as number;
@@ -433,11 +382,9 @@ function foo2(params: Record<string, string | number>) {
 
 ## arkts-no-inferred-generic-params
 
-所有泛型调用都应显式标注泛型参数类型，如 Map\<string, T\>、.map\<T\>()。
+所有泛型调用应显式标注泛型参数类型，如 Map\<string, T\>、.map\<T\>()。
 
 **应用代码**
-
-<!-- @[ts_no_inferred_generic_params](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 class A {
@@ -453,8 +400,6 @@ let originMenusMap:Map<string, C> = new Map(arr.map(item => [item.str, (item ins
 
 **建议改法**
 
-<!-- @[no_inferred_generic_params](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
-
 ``` TypeScript
 class A {
   public str: string = ''
@@ -468,17 +413,13 @@ let originMenusMap: Map<string, C | null> = new Map<string, C | null>
 (arr.map<[string, C | null]>(item => [item.str, (item instanceof C) ? item: null]));
 ```
 
-**原因**
-
-`(item instanceof C) ? item: null` 需要声明类型为`C | null`，由于编译器无法推导出`map`的泛型类型参数，需要显式标注。
+`(item instanceof C) ? item: null`需要声明类型为`C | null`，编译器无法推导`map`的泛型类型参数，需显式标注。
 
 ## arkts-no-regexp-literals
 
-使用new RegExp(pattern, flags) 构造函数替代RegExp字面量。
+使用`new RegExp(pattern, flags)`构造函数替代RegExp字面量。
 
 **应用代码**
-
-<!-- @[ts_no_regexp_literals](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 let regex: RegExp = /\s*/g;
@@ -486,23 +427,17 @@ let regex: RegExp = /\s*/g;
 
 **建议改法**
 
-<!-- @[no_regexp_literals](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->    
-
 ``` TypeScript
 let regexp: RegExp = new RegExp('\\s*','g');
 ```
-
-**原因**
 
 如果正则表达式中使用了标志符，需要将其作为`new RegExp()`的参数。
 
 ## arkts-no-untyped-obj-literals
 
-### 从SDK中导入类型，标注object literal类型
+### 从SDK导入类型，标注object literal类型
 
 **应用代码**
-
-<!-- @[ts_no_obj_literals_as_types](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 const area = { // 没有写明类型 不方便维护
@@ -515,8 +450,6 @@ const area = { // 没有写明类型 不方便维护
 
 **建议改法**
 
-<!-- @[specifying_object_literal_type_for_type_imports](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->    
-
 ``` TypeScript
 import { image } from '@kit.ImageKit';
 // ...
@@ -528,11 +461,9 @@ const area: image.PositionArea = { // 写明具体类型
 }
 ```
 
-### 用class为object literal标注类型，要求class的构造函数无参数
+### 用class标注类型，要求构造函数无参数
 
 **应用代码**
-
-<!-- @[ts_no_structural_typing_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 class Test {
@@ -546,9 +477,7 @@ class Test {
 let t: Test = { value: 2 };
 ```
 
-**建议改法1**
-
-<!-- @[remove_the_constructor](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->    
+**建议改法1** — 去除构造函数
 
 ``` TypeScript
 // 去除构造函数
@@ -559,9 +488,7 @@ class Test {
 let t: Test = { value: 2 };
 ```
 
-**建议改法2**
-
-<!-- @[use_new](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->    
+**建议改法2** — 使用new
 
 ``` TypeScript
 // 使用new
@@ -576,9 +503,7 @@ class Test {
 let t: Test = new Test(2);
 ```
 
-**原因**
-
-<!-- @[ts_no_structural_typing_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
+ArkTS禁止通过object literal绕过构造函数行为：
 
 ``` TypeScript
 class C {
@@ -596,13 +521,9 @@ let s: C = new C(-2);   // 抛出异常
 let t: C = { value: -2 }; // ArkTS不支持
 ```
 
-如果允许使用`C`来标注object literal的类型，变量`t`会导致行为的二义性。ArkTS禁止通过object literal绕过这一行为。
-
-### 用class/interface为object literal标注类型，要求使用identifier作为object literal的key
+### 用class/interface标注类型，要求使用identifier作为object literal的key
 
 **应用代码**
-
-<!-- @[ts_no_nonInferrable_arr_literals](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->    
 
 ``` TypeScript
 class Test {
@@ -624,8 +545,6 @@ let arr: Test[] = [
 
 **建议改法**
 
-<!-- @[using_an_identifier_as_the_object](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
-
 ``` TypeScript
 class Test {
   public value: number = 0
@@ -643,11 +562,9 @@ let arr: Test[] = [
 ]
 ```
 
-### 使用Record类型为object literal标注类型，要求使用字符串作为object literal的key
+### 使用Record类型标注，要求使用字符串作为key
 
 **应用代码**
-
-<!-- @[ts_record_type_usage](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 let obj: Record<string, number | string> = {
@@ -657,8 +574,6 @@ let obj: Record<string, number | string> = {
 ```
 
 **建议改法**
-
-<!-- @[using_a_string_as_the_object](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
 
 ``` TypeScript
 let obj: Record<string, number | string> = {
@@ -671,8 +586,6 @@ let obj: Record<string, number | string> = {
 
 **应用代码**
 
-<!-- @[ts_index_signature_usage](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 function foo3(obj: { [key: string]: string}): string {
   if (obj != undefined && obj != null) {
@@ -684,8 +597,6 @@ function foo3(obj: { [key: string]: string}): string {
 
 **建议改法**
 
-<!-- @[include_index_signature](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
-
 ``` TypeScript
 function foo(obj: Record<string, string>): string {
   if (obj != undefined && obj != null) {
@@ -695,11 +606,9 @@ function foo(obj: Record<string, string>): string {
 }
 ```
 
-### 函数实参使用了object literal
+### 函数实参使用object literal
 
 **应用代码**
-
-<!-- @[ts_anonymous_function](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 (fn) => {
@@ -708,8 +617,6 @@ function foo(obj: Record<string, string>): string {
 ```
 
 **建议改法**
-
-<!-- @[include_object_literals](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
 
 ``` TypeScript
 class T {
@@ -722,11 +629,9 @@ class T {
 }
 ```
 
-### class/interface 中包含方法
+### class/interface中包含方法
 
 **应用代码**
-
-<!-- @[ts_interface_method_signature](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 interface T {
@@ -736,9 +641,7 @@ interface T {
 let t:T = { foo: (value) => { return value } };
 ```
 
-**建议改法1**
-
-<!-- @[include_method](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
+**建议改法1** — 使用函数类型的属性
 
 ``` TypeScript
 interface T {
@@ -748,9 +651,7 @@ interface T {
 let t:T = { foo: (value) => { return value } };
 ```
 
-**建议改法2**
-
-<!-- @[include_method_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
+**建议改法2** — 使用class
 
 ``` TypeScript
 class T {
@@ -762,15 +663,11 @@ class T {
 let t:T = new T();
 ```
 
-**原因**
-
-class/interface中声明的方法应被所有实例共享。ArkTS不支持通过object literal改写实例方法。ArkTS支持函数类型的属性。
+class/interface中声明的方法应被所有实例共享，ArkTS不支持通过object literal改写实例方法。ArkTS支持函数类型的属性。
 
 ### export default对象
 
 **应用代码**
-
-<!-- @[ts_export_default](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 export default {
@@ -784,8 +681,6 @@ export default {
 ```
 
 **建议改法**
-
-<!-- @[export_default_object](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
 
 ``` TypeScript
 class Test {
@@ -802,9 +697,7 @@ export default new Test()
 
 ### 通过导入namespace获取类型
 
-**应用代码**
-
-<!-- @[ts_namespace_dts](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/test.d.ts) -->  
+**应用代码** — test.d.ets
 
 ``` TypeScript
 // test.d.ets
@@ -820,7 +713,7 @@ declare namespace test {
 export default test;
 ```
 
-<!-- @[ts_namespace_app](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/app.ets) -->  
+**应用代码** — app.ets
 
 ``` TypeScript
 // app.ets
@@ -830,9 +723,7 @@ let option = { id: '', type: 0 };
 test.foo('', option);
 ```
 
-**建议改法**
-
-<!-- @[no_spread_dts](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/test1.d.ets) -->  
+**建议改法** — test.d.ets
 
 ``` TypeScript
 // test.d.ets
@@ -849,7 +740,7 @@ declare namespace Test {
 export default Test;
 ```
 
-<!-- @[ts_namespace_app](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/app.ets) -->  
+**建议改法** — app.ets
 
 ``` TypeScript
 // app.ets
@@ -859,17 +750,11 @@ let option = { id: '', type: 0 };
 test.foo('', option);
 ```
 
-**原因**
-
-对象字面量缺少类型，根据`test.foo`分析可以得知，`option`的类型来源于声明文件，那么只需要将类型导入即可。
-
-在`test.d.ets`中，`I`定义在namespace中。在ets文件中，先导入namespace，再通过名称获取相应的类型。
+对象字面量缺少类型，根据`test.foo`分析得知`option`的类型来源于声明文件，将类型导入即可。在ets文件中先导入namespace，再通过名称获取相应类型。
 
 ### object literal传参给Object类型
 
 **应用代码**
-
-<!-- @[ts_rest_params](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 function emit(event: string, ...args: Object[]): void {}
@@ -881,8 +766,6 @@ emit('', {
 ```
 
 **建议改法**
-
-<!-- @[passing_parameters](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/ArkTsNoUntypedObjLiterals.ets) -->  
 
 ``` TypeScript
 function emit(event: string, ...args: Object[]): void {}
@@ -901,15 +784,11 @@ emit('', emitArg);
 
 **应用代码**
 
-<!-- @[ts_type_alias](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 type Person = { name: string, age: number }
 ```
 
 **建议改法**
-
-<!-- @[no_obj_literals_as_types](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 interface Person {
@@ -920,11 +799,9 @@ interface Person {
 
 ## arkts-no-noninferrable-arr-literals
 
-显式声明数组元素的类型（使用interface或class），并为数组变量添加类型注解。
+显式声明数组元素类型（使用interface或class），并为数组变量添加类型注解。
 
 **应用代码**
-
-<!-- @[ts_array_literal_inference](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 let permissionList = [
@@ -935,10 +812,6 @@ let permissionList = [
 ```
 
 **建议改法**
-
-为对象字面量声明类型。
-
-<!-- @[no_nonInferrable_arr_literals](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class PermissionItem {
@@ -955,11 +828,9 @@ let permissionList: PermissionItem[] = [
 
 ## arkts-no-method-reassignment
 
-使用函数类型的类字段（class field）代替原型方法。
+使用函数类型的类字段代替原型方法。
 
 **应用代码**
-
-<!-- @[ts_no_method_reassignment](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class C {
@@ -977,8 +848,6 @@ c1.add = sub;
 ```
 
 **建议改法**
-
-<!-- @[no_method_reassignment](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class C3 {
@@ -998,11 +867,9 @@ c1.add = sub;
 
 ## arkts-no-polymorphic-unops
 
-使用 Number.parseInt()、new Number() 等显式转换函数。
+使用`Number.parseInt()`、`new Number()`等显式转换函数。
 
 **应用代码**
-
-<!-- @[ts_no_polymorphic](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 let a = +'5'; // 使用操作符隐式转换
@@ -1012,8 +879,6 @@ let d = +'string';
 ```
 
 **建议改法**
-
-<!-- @[no_polymorphic](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 let a = Number.parseInt('5'); // 使用Number.parseInt显示转换
@@ -1026,9 +891,7 @@ let d = new Number('123');
 
 使用类、接口或类型别名替代typeof，避免依赖变量做类型推导。
 
-**应用代码**
-
-<!-- @[ts_module_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/module1.ts) -->  
+**应用代码** — module1.ts
 
 ``` TypeScript
 // module1.ts
@@ -1039,7 +902,7 @@ class C {
 export let c = new C()
 ```
 
-<!-- @[ts_module_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/module2.ts) -->  
+**应用代码** — module2.ts
 
 ``` TypeScript
 // module2.ts
@@ -1047,9 +910,7 @@ import { c } from './module1'
 let t: typeof c = { value: 123 };
 ```
 
-**建议改法**
-
-<!-- @[no_type_query_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/module1.ets) -->  
+**建议改法** — module1.ets
 
 ``` TypeScript
 // 文件名：module1.ets
@@ -1060,7 +921,7 @@ class C {
 export { C }
 ```
 
-<!-- @[no_type_query_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/module2.ets) -->  
+**建议改法** — module2.ets
 
 ``` TypeScript
 // 文件名：module2.ets
@@ -1070,11 +931,9 @@ let t: C = { value: 123 };
 
 ## arkts-no-in
 
-### 使用Object.keys判断属性是否存在
+使用`Object.keys`判断属性是否存在。
 
 **应用代码**
-
-<!-- @[ts_object_keys](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 function test(str: string, obj: Record<string, Object>) {
@@ -1083,8 +942,6 @@ function test(str: string, obj: Record<string, Object>) {
 ```
 
 **建议改法**
-
-<!-- @[object_keys](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 function test(str: string, obj: Record<string, Object>) {
@@ -1103,8 +960,6 @@ function test(str: string, obj: Record<string, Object>) {
 
 **应用代码**
 
-<!-- @[ts_no_destruct_assignment](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 let map = new Map<string, string>([['a', 'a'], ['b', 'b']]);
 for (let [key, value] of map) {
@@ -1113,11 +968,7 @@ for (let [key, value] of map) {
 }
 ```
 
-**建议改法**
-
-使用数组。
-
-<!-- @[no_destruct_assignment](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
+**建议改法** — 使用数组
 
 ``` TypeScript
 let map = new Map<string, string>([['a', 'a'], ['b', 'b']]);
@@ -1133,7 +984,7 @@ for (let arr of map) {
 
 ## arkts-no-types-in-catch
 
-使用无类型 catch (error)，然后通过类型断言处理。
+使用无类型`catch (error)`，然后通过类型断言处理。
 
 **应用代码**
 
@@ -1149,8 +1000,6 @@ try {
 
 **建议改法**
 
-<!-- @[no_types_in_catch](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
-
 ``` TypeScript
 import { BusinessError } from '@kit.BasicServicesKit'
 // ...
@@ -1164,11 +1013,9 @@ try {
 
 ## arkts-no-for-in
 
-使用 Object.entries(obj) + for of 替代 for in。
+使用`Object.entries(obj) + for of`替代`for in`。
 
 **应用代码**
-
-<!-- @[ts_no_for_in](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 interface Person {
@@ -1186,8 +1033,6 @@ for (let t in p) {
 
 **建议改法**
 
-<!-- @[no_for_in](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
-
 ``` TypeScript
 let p: Record<string, string> = {
   'name': 'tom',
@@ -1202,11 +1047,9 @@ for (let ele of Object.entries(p)) {
 
 ## arkts-no-mapped-types
 
-使用 Record\<K, T\> 替代映射类型。
+使用`Record<K, T>`替代映射类型。
 
 **应用代码**
-
-<!-- @[ts_no_mapped_types](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class C {
@@ -1220,8 +1063,6 @@ type OptionsFlags = {
 ```
 
 **建议改法**
-
-<!-- @[no_mapped_types](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class C {
@@ -1239,8 +1080,6 @@ type OptionsFlags = Record<keyof C, string>
 
 **应用代码**
 
-<!-- @[ts_limited_throw](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 import { BusinessError } from '@kit.BasicServicesKit'
 
@@ -1251,8 +1090,6 @@ function ThrowError(error: BusinessError) {
 
 **建议改法**
 
-<!-- @[limited_throw](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
-
 ``` TypeScript
 import { BusinessError } from '@kit.BasicServicesKit'
 
@@ -1261,17 +1098,13 @@ function throwError(error: BusinessError) {
 }
 ```
 
-**原因**
-
-`throw`语句中值的类型必须为`Error`或者其继承类，如果继承类是一个泛型，会有编译期报错。建议使用`as`将类型转换为`Error`。
+`throw`语句中值的类型必须为`Error`或其继承类，如继承类是泛型会有编译期报错。建议使用`as`将类型转换为`Error`。
 
 ## arkts-no-standalone-this
 
 ### 函数内使用this
 
 **应用代码**
-
-<!-- @[ts_no_standalone_this](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 function foo4() {
@@ -1282,11 +1115,7 @@ let obj = { value: 'abc' };
 foo.apply(obj);
 ```
 
-**建议改法1**
-
-使用类的方法实现,如果该方法被多个类使用,可以考虑采用继承的机制。
-
-<!-- @[no_standalone_this_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
+**建议改法1** — 使用类的方法实现，如需被多个类使用可考虑继承
 
 ``` TypeScript
 class Test {
@@ -1305,11 +1134,7 @@ let obj: Test = new Test('abc');
 obj.foo();
 ```
 
-**建议改法2**
-
-将this作为参数传入。
-
-<!-- @[no_standalone_this_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
+**建议改法2** — 将this作为参数传入
 
 ``` TypeScript
 function foo3(obj: Test) {
@@ -1324,11 +1149,7 @@ let obj1: Test = { value: 'abc' };
 foo3(obj1);
 ```
 
-**建议改法3**
-
-将属性作为参数传入。
-
-<!-- @[no_standalone_this_three](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
+**建议改法3** — 将属性作为参数传入
 
 ``` TypeScript
 function foo5(value: string) {
@@ -1347,8 +1168,6 @@ foo5(obj2.value);
 
 **应用代码**
 
-<!-- @[ts_class_static_function_this](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 class Test {
   static value: number = 123
@@ -1359,8 +1178,6 @@ class Test {
 ```
 
 **建议改法**
-
-<!-- @[class_static_function_this](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class Test {
@@ -1373,9 +1190,9 @@ class Test {
 
 ## arkts-no-spread
 
-使用Object.assign()、手动赋值或数组方法替代扩展运算符。
+使用`Object.assign()`、手动赋值或数组方法替代扩展运算符。
 
-**应用代码**
+**应用代码** — test.d.ets
 
 ```typescript
 // test.d.ets
@@ -1399,9 +1216,7 @@ let t: test.I = {
 }
 ```
 
-**建议改法**
-
-<!-- @[obtaining_the_type_dts](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/test.d.ets) -->  
+**建议改法** — test.d.ets
 
 ``` TypeScript
 // test.d.ets
@@ -1418,7 +1233,7 @@ declare namespace Test {
 export default Test;
 ```
 
-<!-- @[no_spread_ets](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/app.ets) -->  
+**建议改法** — app.ets
 
 ``` TypeScript
 // app.ets
@@ -1428,17 +1243,13 @@ let t: test.I = test.foo();
 t.type = 0;
 ```
 
-**原因**
-
-ArkTS中，对象布局在编译期是确定的。如果需要将一个对象的所有属性展开赋值给另一个对象可以通过逐个属性赋值语句完成。在本例中，需要展开的对象和赋值的目标对象类型恰好相同，可以通过改变该对象属性的方式重构代码。
+ArkTS中对象布局在编译期确定。如需将一个对象的所有属性展开赋值给另一个对象，可通过逐个属性赋值完成。本例中展开对象和赋值目标对象类型相同，可通过改变该对象属性的方式重构。
 
 ## arkts-no-ctor-signatures-funcs
 
-在class内声明属性，而不是在构造函数上。
+在class内声明属性，而非在构造函数上。
 
 **应用代码**
-
-<!-- @[ts_no_ctor_signatures_funcs](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class Controller {
@@ -1466,8 +1277,6 @@ console.info(t.createController()!.value)
 
 **建议改法**
 
-<!-- @[no_ctor_signatures_funcs](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
-
 ``` TypeScript
 class Controller {
   public value: string = ''
@@ -1494,18 +1303,14 @@ console.info(t.createController()!.value);
 
 ## arkts-no-globalthis
 
-ArkTS不支持`globalThis`。一方面无法为`globalThis`添加静态类型，只能通过查找方式访问其属性，导致额外性能开销。另一方面，无法为`globalThis`的属性标记类型，无法保证操作的安全性和高性能。
+ArkTS不支持`globalThis`。无法为`globalThis`添加静态类型，只能通过查找方式访问其属性，导致额外性能开销。
 
 > **说明：**
 >
 > 1. 建议按照业务逻辑根据`import/export`语法实现数据在不同模块的传递。
-> 
-> 2. 必要情况下，可以通过构造的**单例对象**来实现全局对象的功能。（不能在har中定义单例对象，har在打包时会在不同的hap中打包两份，无法实现单例。）
-
+> 2. 必要情况下，可通过构造的单例对象实现全局对象功能。（不能在har中定义单例对象，har在打包时会在不同的hap中打包两份，无法实现单例。）
 
 **构造单例对象**
-
-<!-- @[construct_a_singleton_object](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/GlobalContext.ets) -->  
 
 ``` TypeScript
 // 构造单例对象
@@ -1531,9 +1336,7 @@ export class GlobalContext {
 }
 ```
 
-**应用代码**
-
-<!-- @[ts_file_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/file1.ts) -->  
+**应用代码** — file1.ts
 
 ``` TypeScript
 // file1.ts
@@ -1546,7 +1349,7 @@ export class Test {
 }
 ```
 
-<!-- @[ts_file_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/file2.ts) -->  
+**应用代码** — file2.ts
 
 ``` TypeScript
 // file2.ts
@@ -1554,9 +1357,7 @@ export class Test {
 globalThis.value;
 ```
 
-**建议改法**
-
-<!-- @[no_global_this_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/file1.ets) -->  
+**建议改法** — file1.ets
 
 ``` TypeScript
 // file1.ets
@@ -1571,7 +1372,7 @@ export class Test {
 }
 ```
 
-<!-- @[no_global_this_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/file2.ets) -->  
+**建议改法** — file2.ets
 
 ``` TypeScript
 // file2.ets
@@ -1587,16 +1388,12 @@ GlobalContext.getContext().getObject('value');
 
 **应用代码**
 
-<!-- @[ts_no_func_apply_bind_call](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 let arr: number[] = [1, 2, 3, 4];
 let str = String.fromCharCode.apply(null, Array.from(arr));
 ```
 
 **建议改法**
-
-<!-- @[no_func_apply_bind_call](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 let arr: number[] = [1, 2, 3, 4];
@@ -1606,8 +1403,6 @@ let str = String.fromCharCode(...Array.from(arr));
 ### bind定义方法
 
 **应用代码**
-
-<!-- @[ts_bind_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class A {
@@ -1630,8 +1425,6 @@ class Test {
 
 **建议改法1**
 
-<!-- @[bind_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
-
 ``` TypeScript
 class A {
   public value: string = ''
@@ -1652,8 +1445,6 @@ class Test {
 ```
 
 **建议改法2**
-
-<!-- @[bind_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class A {
@@ -1677,8 +1468,6 @@ class Test {
 
 **应用代码**
 
-<!-- @[ts_use_apply](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 class A {
   value: string;
@@ -1699,8 +1488,6 @@ a1.foo.apply(a2);
 ```
 
 **建议改法**
-
-<!-- @[use_apply](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class A {
@@ -1732,8 +1519,6 @@ a1.fooApply(a2);
 
 **应用代码**
 
-<!-- @[ts_use_limited_stdlib](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 let entries = new Map([
   ['foo', 123],
@@ -1744,8 +1529,6 @@ let obj = Object.fromEntries(entries);
 ```
 
 **建议改法**
-
-<!-- @[use_limited_stdlib](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 let entries = new Map([
@@ -1761,13 +1544,11 @@ entries.forEach((value, key) => {
 })
 ```
 
-## 严格模式检查(StrictModeError)
+## 严格模式检查 (StrictModeError)
 
 ### strictPropertyInitialization
 
 **应用代码**
-
-<!-- @[ts_strict_typing_required](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 interface I {
@@ -1786,8 +1567,6 @@ class Test {
 ```
 
 **建议改法**
-
-<!-- @[strictProperty_initialization](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
 
 ``` TypeScript
 {
@@ -1816,8 +1595,6 @@ class Test {
 
 **应用代码**
 
-<!-- @[ts_null_undefined_check_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 class A {
   bar() {}
@@ -1836,8 +1613,6 @@ a.bar();
 ```
 
 **建议改法**
-
-<!-- @[null_is_not_assignable_to_type](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
 
 ``` TypeScript
 class A {
@@ -1859,11 +1634,11 @@ a?.bar();
 
 ### 严格属性初始化检查
 
-在class中，如果一个属性没有初始化，且没有在构造函数中被赋值，ArkTS将报错。
+class中属性未初始化且未在构造函数中赋值，ArkTS将报错。
 
 **建议改法**
 
-1.一般情况下，**建议按照业务逻辑**在声明时初始化属性，或者在构造函数中为属性赋值。如：
+1. 在声明时初始化属性，或在构造函数中赋值：
 
 ```typescript
 // code with error
@@ -1889,16 +1664,14 @@ class Test {
 }
 ```
 
-2.对于对象类型（包括函数类型）`A`，如果不确定如何初始化，建议按照以下方式之一进行初始化：
+2. 对象类型（包括函数类型）`A`不确定如何初始化时：
 
 ​ 方式(i)  `prop: A | null = null`
-
 ​ 方式(ii) `prop?: A`
+​ 方式(iii) `prop: A | undefined = undefined`
 
-​ 方式三(iii) `prop： A | undefined = undefined`
-
-- 从性能角度看，`null`类型仅用于编译期的类型检查，不会影响虚拟机性能。而`undefined | A`被视为联合类型，运行时可能产生额外开销。
-- 从代码可读性、简洁性的角度来说，`prop?:A`是`prop： A | undefined = undefined`的语法糖，**推荐使用可选属性的写法**。
+- 性能角度：`null`类型仅用于编译期类型检查，不影响虚拟机性能；`undefined | A`视为联合类型，运行时可能产生额外开销。
+- 可读性角度：`prop?:A`是`prop: A | undefined = undefined`的语法糖，推荐使用可选属性写法。
 
 ### 严格函数类型检查
 
@@ -1912,17 +1685,13 @@ foo((value: string) => {}, ''); // error
 
 **建议改法**
 
-<!-- @[strict_function_type_check](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
-
 ``` TypeScript
 function foo1(fn: (value?: string) => void, value: string): void {}
 
 foo1((value?: string) => {}, '');
 ```
 
-**原因**
-
-例如，在以下的例子中，如果编译期不开启严格函数类型的检查，那么该段代码可以编译通过，但是在运行时会产生非预期的行为。具体来看，在`foo`的函数体中，一个`undefined`被传入`fn`（这是可以的，因为`fn`可以接受`undefined`），但是在代码第6行`foo`的调用点，传入的`(value: string) => { console.info(value.toUpperCase()) }`的函数实现中，始终将参数`value`当做string类型，允许其调用`toUpperCase`方法。如果不开启严格函数类型的检查，那么这段代码在运行时，会出现在`undefined`上无法找到属性的错误。
+不开启严格函数类型检查时，以下代码可编译通过但运行时会产生非预期行为：
 
 ```typescript
 function foo(fn: (value?: string) => void, value: string): void {
@@ -1933,13 +1702,11 @@ function foo(fn: (value?: string) => void, value: string): void {
 foo((value: string) => { console.info(value.toUpperCase()) }, ''); // Cannot read properties of undefined (reading 'toUpperCase')
 ```
 
-为了避免运行时的非预期行为，开启严格类型检查时，这段代码将无法编译通过，需要提醒开发者修改代码，确保程序安全。
+开启严格类型检查后，此代码无法编译通过。
 
 ### 严格空值检查
 
 **应用代码**
-
-<!-- @[ts_null_undefined_check_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class Test {
@@ -1954,17 +1721,9 @@ let t = new Test();
 t.printValue();
 ```
 
-**应用代码运行时错误原因**
+由于`value`为`undefined`且`printValue`方法内未进行空值检查，运行时报错。
 
-编译期不开启严格空值检查，应用代码可以通过编译，但是在运行时会报错。
-
-因为`t`的属性`value`为`undefined`，在调用`printValue`方法时，由于在该方法内未对`this.value`的值进行空值检查，直接按照`string`类型访问其属性，导致了运行时的错误。
-
-**建议改法**
-
-在编写代码时，建议减少可空类型的使用。如果对变量、属性标记了可空类型，那么在使用它们之前，需要进行空值的判断，根据是否为空值处理不同的逻辑。
-
-<!-- @[strict_null_check](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
+**建议改法** — 使用可空类型前需进行空值判断
 
 ``` TypeScript
 class Test {
@@ -1985,19 +1744,13 @@ t.printValue();
 
 **应用代码**
 
-<!-- @[ts_null_undefined_check_three](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 class Test {
   handleClick: (action: string, externInfo?: string) => void | null = null;
 }
 ```
 
-**建议改法**
-
-在这种写法下，函数返回类型被解析为 `void | undefined`，需要添加括号用来区分union类型。
-
-<!-- @[function_return_type_mismatch](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
+函数返回类型被解析为`void | undefined`，需添加括号区分union类型：
 
 ``` TypeScript
 class Test {
@@ -2005,11 +1758,9 @@ class Test {
 }
 ```
 
-### Type '*** | null' is not assignable to type '\*\*\*'
+### Type '*** | null' is not assignable to type '***'
 
 **应用代码**
-
-<!-- @[ts_null_undefined_check_four](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class A {
@@ -2029,11 +1780,7 @@ function foo6(v: number): A | null {
 let a1: A = foo6(1);
 ```
 
-**建议改法1**
-
-修改变量`a`的类型：`let a: A | null = foo()`。
-
-<!-- @[null_is_not_assignable_to_type1](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
+**建议改法1** — 修改变量类型：`let a: A | null = foo()`
 
 ``` TypeScript
 class A1 {
@@ -2059,11 +1806,7 @@ if (a != null) {
 }
 ```
 
-**建议改法2**
-
-如果确定此处调用`foo`一定返回非空值，可以使用非空断言`!`。
-
-<!-- @[null_is_not_assignable_to_type2](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
+**建议改法2** — 确定此处调用一定返回非空值时使用非空断言`!`
 
 ``` TypeScript
 class A2 {
@@ -2087,8 +1830,6 @@ let a: A2 = foo(123)!;
 
 **应用代码**
 
-<!-- @[ts_null_undefined_check_five](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 interface A {
   foo?: () => void
@@ -2098,9 +1839,7 @@ let a:A = { foo: () => {} };
 a.foo();
 ```
 
-**建议改法1**
-
-<!-- @[cannot_invoke_an_object_one](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
+**建议改法1** — 将foo设为必选属性
 
 ``` TypeScript
 interface A {
@@ -2110,9 +1849,7 @@ let a: A = { foo: () => {} };
 a.foo();
 ```
 
-**建议改法2**
-
-<!-- @[cannot_invoke_an_object_two](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
+**建议改法2** — 访问前进行空值检查
 
 ``` TypeScript
 interface A {
@@ -2125,15 +1862,9 @@ if (a.foo) {
 }
 ```
 
-**原因**
-
-在原先代码的定义中，`foo`是可选属性，可能为`undefined`，对`undefined`的调用会导致报错。建议根据业务逻辑判断是否需要将`foo`设为可选属性。如果确实需要，那么在访问该属性后需要进行空值检查。
-
 ### Variable '***' is used before being assigned
 
 **应用代码**
-
-<!-- @[ts_null_undefined_check_six](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class Test {
@@ -2150,8 +1881,6 @@ a.value;
 ```
 
 **建议改法**
-
-<!-- @[is_used_before_being_assigned](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
 
 ``` TypeScript
 class Test {
@@ -2172,17 +1901,11 @@ if (a) {
 }
 ```
 
-**原因**
+对于原始类型，可按业务逻辑赋值（如0、''、false）。对于对象类型，类型改为与null的联合类型并赋值为null，使用时需非空检查。
 
-对于primitive types，可以根据业务逻辑赋值，例如0，''，false。
-
-对于对象类型，可以将其类型修改为与null的联合类型，并赋值为null。使用时需要进行非空检查。
-
-### Function lacks ending return statement and return type does not include 'undefined'.
+### Function lacks ending return statement and return type does not include 'undefined'
 
 **应用代码**
-
-<!-- @[ts_function_return_type](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 function foo7(a: number): number {
@@ -2192,13 +1915,9 @@ function foo7(a: number): number {
 }
 ```
 
-**建议改法1** 
-
-根据业务逻辑，在else分支中返回合适的数值。
+**建议改法1** — 根据业务逻辑在else分支中返回合适的数值。
 
 **建议改法2**
-
-<!-- @[function_lacks_ending](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/StrictModeCheck.ets) -->  
 
 ``` TypeScript
 function foo4(a: number): number | undefined {
@@ -2215,8 +1934,6 @@ function foo4(a: number): number | undefined {
 
 **应用代码**
 
-<!-- @[ts_ts_ignore](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 // @ts-ignore
 var a: any = 123;
@@ -2224,15 +1941,11 @@ var a: any = 123;
 
 **建议改法**
 
-<!-- @[strict_typing_required](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
-
 ``` TypeScript
 let a: number = 123;
 ```
 
-**原因**
-
-ArkTS不支持通过注释的方式绕过严格类型检查。首先将注释（`// @ts-nocheck`或者`// @ts-ignore`）删去，再根据报错信息修改其他代码。
+ArkTS不支持通过注释绕过严格类型检查。先删除`// @ts-nocheck`或`// @ts-ignore`注释，再根据报错信息修改代码。
 
 ## Importing ArkTS files to JS and TS files is not allowed
 
@@ -2242,20 +1955,18 @@ ArkTS不支持通过注释的方式绕过严格类型检查。首先将注释（
 
 **建议改法**
 
-方式1.将.ts文件的后缀修改为ets，并按ArkTS语法规则适配代码。
-
-方式2.将.ets文件中被.ts文件依赖的代码单独抽取到.ts文件中。
+方式1：将.ts文件后缀修改为ets，并按ArkTS语法规则适配代码。
+方式2：将.ets文件中被.ts文件依赖的代码单独抽取到.ts文件中。
 
 ## arkts-no-special-imports
 
-改为使用普通import { ... } from '...' 导入类型。
+改为使用普通`import { ... } from '...'`导入类型。
 
 **应用代码**
 
 ```typescript
 import type {A, B, C, D } from '***'
 ```
-
 
 **建议改法**
 
@@ -2268,8 +1979,6 @@ import {A, B, C, D } from '***'
 ### 使用class构造实例
 
 **应用代码**
-
-<!-- @[ts_no_classes_as_obj](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 class Controller {
@@ -2298,8 +2007,6 @@ console.info(t.createController()!.value);
 ```
 
 **建议改法**
-
-<!-- @[no_classes_as_obj](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class Controller {
@@ -2333,8 +2040,6 @@ console.info(t.createController()!.value);
 
 **应用代码**
 
-<!-- @[ts_static_attribute](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 class C1 {
   static value: string = 'abc'
@@ -2353,8 +2058,6 @@ console.info(getValue(C2));
 ```
 
 **建议改法**
-
-<!-- @[static_attribute](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class C1 {
@@ -2383,8 +2086,6 @@ console.info(getC2Value());
 
 **应用代码**
 
-<!-- @[ts_import_module](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 import 'module'
 ```
@@ -2401,8 +2102,6 @@ import('module')
 
 **应用代码**
 
-<!-- @[ts_no_func_props](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 function foo8(value: number): void {
   console.info(value.toString());
@@ -2418,8 +2117,6 @@ foo8.sub = (left: number, right: number) => {
 ```
 
 **建议改法**
-
-<!-- @[no_func_props](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 class Foo {
@@ -2442,9 +2139,7 @@ class Foo {
 
 使用具体类型（如number, string）或接口代替不明确的ESObject。
 
-**应用代码**
-
-<!-- @[ts_test_a](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/testa.ts) -->  
+**应用代码** — testa.ts
 
 ``` TypeScript
 // testa.ts
@@ -2453,7 +2148,7 @@ export function foo(): any {
 }
 ```
 
-<!-- @[ts_main](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/main.ets) -->  
+**应用代码** — main.ets
 
 ``` TypeScript
 // main.ets
@@ -2468,9 +2163,7 @@ function f() {
 }
 ```
 
-**建议改法**
-
-<!-- @[ts_limited_es_obj](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/testa.ts) -->  
+**建议改法** — testa.ts
 
 ``` TypeScript
 // testa.ts
@@ -2479,7 +2172,7 @@ export function foo(): any {
 }
 ```
 
-<!-- @[ts_main_fix](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/main1.ets) -->  
+**建议改法** — main.ets
 
 ``` TypeScript
 // main.ets
@@ -2501,8 +2194,6 @@ function f() {
 
 **TypeScript**
 
-<!-- @[ts_shallow_copy](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
-
 ``` TypeScript
 function shallowCopy(obj: object): object {
   let newObj = {};
@@ -2512,8 +2203,6 @@ function shallowCopy(obj: object): object {
 ```
 
 **ArkTS**
-
-<!-- @[shallow_copy](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 function shallowCopy(obj: object): object {
@@ -2528,8 +2217,6 @@ function shallowCopy(obj: object): object {
 ### 深拷贝
 
 **TypeScript**
-
-<!-- @[ts_deep_copy](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/tsPages/BasicAdaptation.ts) -->  
 
 ``` TypeScript
 function deepCopy(obj: object): object {
@@ -2546,8 +2233,6 @@ function deepCopy(obj: object): object {
 ```
 
 **ArkTS**
-
-<!-- @[deep_copy](https://gitcode.com/openharmony/applications_app_samples/blob/master/code/DocsSample/ArkTS/Start/LearningArkTs/MigrationFromTypeScriptToArkTS/AdaptationCases/entry/src/main/ets/pages/BasicAdaptation.ets) -->  
 
 ``` TypeScript
 function deepCopy(obj: object): object {
