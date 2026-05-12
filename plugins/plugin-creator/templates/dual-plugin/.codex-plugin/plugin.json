@@ -1,0 +1,32 @@
+{
+  "name": "{{PLUGIN_NAME}}",
+  "version": "1.0.0",
+  "description": "{{PLUGIN_DESCRIPTION}}",
+  "author": {
+    "name": "{{DEVELOPER_NAME}}"
+  },
+  "homepage": "{{PLUGIN_HOMEPAGE}}",
+  "repository": "{{PLUGIN_REPOSITORY}}",
+  "keywords": [
+    "{{PLUGIN_NAME}}",
+    "plugin",
+    "skill"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "{{PLUGIN_DISPLAY_NAME}}",
+    "shortDescription": "{{PLUGIN_DESCRIPTION}}",
+    "longDescription": "{{PLUGIN_LONG_DESCRIPTION}}",
+    "developerName": "{{DEVELOPER_NAME}}",
+    "category": "Development",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "{{PLUGIN_HOMEPAGE}}",
+    "brandColor": "{{PLUGIN_BRAND_COLOR}}",
+    "defaultPrompt": [
+      "使用 {{PLUGIN_DISPLAY_NAME}} 处理 {{SKILL_DESCRIPTION}}。"
+    ]
+  }
+}

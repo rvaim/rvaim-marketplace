@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/bin/arkts-ts-post-edit.mjs",
+            "timeout": 30,
+            "statusMessage": "正在检查 ArkTS / TypeScript 规则"
+          }
+        ]
+      }
+    ]
+  }
+}

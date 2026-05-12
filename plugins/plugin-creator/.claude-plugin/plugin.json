@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "plugin-creator",
+  "version": "1.0.1",
+  "description": "创建、审查和维护 Codex / Claude Code 双平台插件的中文开发辅助插件。",
+  "author": {
+    "name": "rvaim",
+    "url": "https://github.com/rvaim"
+  },
+  "homepage": "https://github.com/rvaim/plugin-creator",
+  "repository": "https://github.com/rvaim/plugin-creator",
+  "keywords": [
+    "codex",
+    "claude-code",
+    "dual-platform",
+    "plugin",
+    "plugin-authoring",
+    "skill",
+    "marketplace",
+    "hooks",
+    "manifest"
+  ],
+  "skills": "./skills/"
+}

@@ -37,8 +37,8 @@
         "documentation"
       ],
       "source": {
-        "source": "url",
-        "url": "https://github.com/rvaim/arkts-harmony"
+        "source": "relative",
+        "path": "./plugins/arkts-harmony"
       },
       "strict": true
     },
@@ -67,8 +67,8 @@
         "hooks"
       ],
       "source": {
-        "source": "url",
-        "url": "https://github.com/rvaim/plugin-creator"
+        "source": "relative",
+        "path": "./plugins/plugin-creator"
       },
       "strict": true
     }

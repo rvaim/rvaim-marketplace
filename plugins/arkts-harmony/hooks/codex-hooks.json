@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${PLUGIN_ROOT}/bin/arkts-ts-post-edit.mjs",
+            "timeout": 30,
+            "statusMessage": "正在检查 ArkTS / TypeScript 规则"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "arkts-harmony",
+  "version": "1.0.2",
+  "description": "鸿蒙 ArkTS / TypeScript 迁移规则、适配案例、高性能编程建议、HarmonyOS/OpenHarmony 开发文档查阅和自动后置检查。",
+  "author": {
+    "name": "rvaim",
+    "url": "https://github.com/rvaim"
+  },
+  "homepage": "https://github.com/rvaim/arkts-harmony",
+  "repository": "https://github.com/rvaim/arkts-harmony",
+  "keywords": [
+    "arkts",
+    "harmonyos",
+    "openharmony",
+    "typescript",
+    "migration",
+    "deveco",
+    "arkui",
+    "code-review",
+    "api-reference",
+    "documentation"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/claude-hooks.json"
+}

@@ -8,8 +8,8 @@
       "name": "arkts-harmony",
       "version": "1.0.2",
       "source": {
-        "source": "url",
-        "url": "https://github.com/rvaim/arkts-harmony"
+        "source": "relative",
+        "path": "./plugins/arkts-harmony"
       },
       "policy": {
         "installation": "AVAILABLE",
@@ -21,8 +21,8 @@
       "name": "plugin-creator",
       "version": "1.0.1",
       "source": {
-        "source": "url",
-        "url": "https://github.com/rvaim/plugin-creator"
+        "source": "relative",
+        "path": "./plugins/plugin-creator"
       },
       "policy": {
         "installation": "AVAILABLE",

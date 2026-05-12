@@ -1,13 +1,13 @@
 # rvaim-marketplace
 
-rvaim 的个人插件市场入口，同时维护 Claude Code 和 Codex 的 marketplace 元数据。这个仓库只负责插件市场清单；具体插件源码放在独立插件仓库中。
+rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace 元数据。插件源码直接放在本仓库 `plugins/` 目录下，以 relative source 方式引用。
 
 ## 当前插件
 
-| 插件 | 用途 | 源码 |
-|---|---|---|
-| `arkts-harmony` | ArkTS / TypeScript / HarmonyOS 迁移规则、代码审查规则和自动后置检查。 | `https://github.com/rvaim/arkts-harmony` |
-| `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 | `https://github.com/rvaim/plugin-creator` |
+| 插件 | 用途 |
+|---|---|
+| `arkts-harmony` | ArkTS / TypeScript / HarmonyOS 迁移规则、代码审查规则和自动后置检查。 |
+| `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 |
 
 ## 目录结构
 
@@ -18,6 +18,9 @@ rvaim-marketplace/
 ├── .agents/
 │   └── plugins/
 │       └── marketplace.json      # Codex marketplace
+├── plugins/                      # 插件源码
+│   ├── arkts-harmony/
+│   └── plugin-creator/
 └── README.md
 ```
 
@@ -27,6 +30,12 @@ rvaim-marketplace/
 
 ```text
 /plugin marketplace add rvaim/rvaim-marketplace
+```
+
+本地开发时可直接用本地路径：
+
+```text
+/plugin marketplace add ./rvaim-marketplace
 ```
 
 安装插件：
@@ -114,6 +123,6 @@ codex_hooks = true
 - Claude Code marketplace 写在 `.claude-plugin/marketplace.json`。
 - Codex marketplace 写在 `.agents/plugins/marketplace.json`。
 - 两份 marketplace 的插件列表应保持一致。
-- 插件源码使用 `source: url` 指向独立仓库，不在本仓库复制插件源码。
+- 插件源码放在 `plugins/` 目录下，使用 `source: relative`，`path` 指向 `./plugins/<name>`。
 - 新增插件时同时补充本 README 的插件表、Claude Code 安装命令和 Codex skill 入口。
 - Codex CLI marketplace 命令参考：`https://developers.openai.com/codex/cli/reference`。
