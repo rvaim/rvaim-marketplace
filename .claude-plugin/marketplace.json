@@ -54,9 +54,13 @@
       "keywords": [
         "codex",
         "claude-code",
+        "dual-platform",
+        "plugin",
         "plugin-authoring",
+        "skill",
         "marketplace",
-        "hooks"
+        "hooks",
+        "manifest"
       ],
       "category": "Development",
       "tags": [

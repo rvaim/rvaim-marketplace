@@ -8,27 +8,35 @@
       "name": "arkts-harmony",
       "version": "1.0.2",
       "source": {
-        "source": "relative",
+        "source": "local",
         "path": "./plugins/arkts-harmony"
       },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "category": "Development"
+      "category": "Development",
+      "interface": {
+        "displayName": "ArkTS / HarmonyOS 开发规则",
+        "shortDescription": "ArkTS、TypeScript、HarmonyOS 迁移规则、代码审查与开发文档查阅。"
+      }
     },
     {
       "name": "plugin-creator",
       "version": "1.0.1",
       "source": {
-        "source": "relative",
+        "source": "local",
         "path": "./plugins/plugin-creator"
       },
       "policy": {
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "category": "Development"
+      "category": "Development",
+      "interface": {
+        "displayName": "插件创建器",
+        "shortDescription": "创建和审查 Codex / Claude Code 双兼容插件。"
+      }
     }
   ]
 }
