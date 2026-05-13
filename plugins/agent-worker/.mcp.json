@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "agent-worker": {
+      "command": "node",
+      "args": [
+        "./bin/agent-worker-mcp-launcher.mjs"
+      ],
+      "cwd": ".",
+      "startup_timeout_sec": 60,
+      "tool_timeout_sec": 3600,
+      "env": {
+        "AGENT_WORKER_MCP_REPO": "https://github.com/rvaim/agent-worker-mcp.git",
+        "AGENT_WORKER_MCP_AUTO_UPDATE": "${user_config.auto_update_agent_worker_mcp}",
+        "ACPX_BIN": "${user_config.acpx_bin}",
+        "DEFAULT_WORKER_AGENT": "${user_config.default_worker_agent}",
+        "ALLOWED_WORKER_AGENTS": "${user_config.allowed_worker_agents}",
+        "ACPX_APPROVAL": "${user_config.acpx_approval}",
+        "WORKER_MAX_TIMEOUT_SECONDS": "${user_config.worker_max_timeout_seconds}"
+      }
+    }
+  }
+}

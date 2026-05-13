@@ -8,6 +8,7 @@ rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace
 |---|---|
 | `arkts-harmony` | ArkTS / TypeScript / HarmonyOS 迁移规则、代码审查规则和自动后置检查。 |
 | `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 |
+| `agent-worker` | 通过 agent-worker-mcp 把复杂任务委托给 worker agent，主 agent 负责规划、审查和打回修改。 |
 
 ## 目录结构
 
@@ -20,7 +21,8 @@ rvaim-marketplace/
 │       └── marketplace.json      # Codex marketplace
 ├── plugins/                      # 插件源码
 │   ├── arkts-harmony/
-│   └── plugin-creator/
+│   ├── plugin-creator/
+│   └── agent-worker/
 └── README.md
 ```
 
@@ -43,6 +45,7 @@ rvaim-marketplace/
 ```text
 /plugin install arkts-harmony@rvaim-marketplace
 /plugin install plugin-creator@rvaim-marketplace
+/plugin install agent-worker@rvaim-marketplace
 /reload-plugins
 ```
 
@@ -54,6 +57,7 @@ rvaim-marketplace/
 /plugin-creator:create-dual-plugin
 /plugin-creator:review-plugin
 /plugin-creator:create-hooks
+/agent-worker:agent-worker
 ```
 
 更新 marketplace 和插件：
@@ -62,6 +66,7 @@ rvaim-marketplace/
 /plugin marketplace update rvaim-marketplace
 /plugin update arkts-harmony@rvaim-marketplace
 /plugin update plugin-creator@rvaim-marketplace
+/plugin update agent-worker@rvaim-marketplace
 /reload-plugins
 ```
 
@@ -109,6 +114,7 @@ $harmonyos-docs
 $create-dual-plugin
 $review-plugin
 $create-hooks
+$agent-worker
 ```
 
 如需测试 Codex hooks，确认 Codex 配置已开启：

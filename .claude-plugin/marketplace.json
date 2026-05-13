@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "rvaim-marketplace",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "rvaim 的个人 Claude Code 插件市场，用于沉淀个人开发规则、代码迁移规范、审查习惯和自动化工作流。",
   "owner": {
     "name": "rvaim"
@@ -68,6 +68,40 @@
         "hooks"
       ],
       "source": "./plugins/plugin-creator",
+      "strict": true
+    },
+    {
+      "name": "agent-worker",
+      "description": "通过 agent-worker-mcp 把复杂任务委托给 Claude Code 等 worker agent，主 agent 只负责规划、审查和打回修改。",
+      "version": "0.1.0",
+      "author": {
+        "name": "rvaim"
+      },
+      "homepage": "https://github.com/rvaim/rvaim-marketplace",
+      "repository": "https://github.com/rvaim/rvaim-marketplace",
+      "keywords": [
+        "agent-worker",
+        "mcp",
+        "subagent",
+        "delegation",
+        "claude-code",
+        "acpx",
+        "reviewer",
+        "token-saving"
+      ],
+      "category": "Development",
+      "tags": [
+        "agent-worker",
+        "mcp",
+        "subagent",
+        "delegation",
+        "reviewer",
+        "token-saving"
+      ],
+      "source": {
+        "source": "relative",
+        "path": "./plugins/agent-worker"
+      },
       "strict": true
     }
   ]
