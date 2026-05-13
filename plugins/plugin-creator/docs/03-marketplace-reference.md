@@ -28,7 +28,7 @@
       },
       "source": "./plugins/plugin-creator",
       "category": "development",
-      "homepage": "https://github.com/rvaim/plugin-creator",
+      "homepage": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/plugin-creator/README.md",
       "repository": "https://github.com/rvaim/plugin-creator",
       "keywords": [
         "codex",

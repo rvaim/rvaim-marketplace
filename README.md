@@ -1,6 +1,6 @@
 # rvaim-marketplace
 
-rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace 元数据。插件源码直接放在本仓库 `plugins/` 目录下，以 relative source 方式引用。
+rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace 元数据。插件源码直接放在本仓库 `plugins/` 目录下，以平台支持的本地相对路径方式引用。
 
 ## 当前插件
 
@@ -123,6 +123,6 @@ codex_hooks = true
 - Claude Code marketplace 写在 `.claude-plugin/marketplace.json`。
 - Codex marketplace 写在 `.agents/plugins/marketplace.json`。
 - 两份 marketplace 的插件列表应保持一致。
-- 插件源码放在 `plugins/` 目录下，使用 `source: relative`，`path` 指向 `./plugins/<name>`。
+- 插件源码放在 `plugins/` 目录下；Claude Code 使用字符串 source（如 `"./plugins/<name>"`），Codex 使用 `{ "source": "local", "path": "./plugins/<name>" }`。
 - 新增插件时同时补充本 README 的插件表、Claude Code 安装命令和 Codex skill 入口。
 - Codex CLI marketplace 命令参考：`https://developers.openai.com/codex/cli/reference`。

@@ -14,7 +14,7 @@
       "author": {
         "name": "rvaim"
       },
-      "homepage": "https://github.com/rvaim/arkts-harmony",
+      "homepage": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/arkts-harmony/README.md",
       "repository": "https://github.com/rvaim/arkts-harmony",
       "keywords": [
         "arkts",
@@ -36,10 +36,7 @@
         "api-reference",
         "documentation"
       ],
-      "source": {
-        "source": "relative",
-        "path": "./plugins/arkts-harmony"
-      },
+      "source": "./plugins/arkts-harmony",
       "strict": true
     },
     {
@@ -49,7 +46,7 @@
       "author": {
         "name": "rvaim"
       },
-      "homepage": "https://github.com/rvaim/plugin-creator",
+      "homepage": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/plugin-creator/README.md",
       "repository": "https://github.com/rvaim/plugin-creator",
       "keywords": [
         "codex",
@@ -70,10 +67,7 @@
         "skills",
         "hooks"
       ],
-      "source": {
-        "source": "relative",
-        "path": "./plugins/plugin-creator"
-      },
+      "source": "./plugins/plugin-creator",
       "strict": true
     }
   ]

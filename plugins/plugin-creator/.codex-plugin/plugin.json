@@ -6,7 +6,7 @@
     "name": "rvaim",
     "url": "https://github.com/rvaim"
   },
-  "homepage": "https://github.com/rvaim/plugin-creator",
+  "homepage": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/plugin-creator/README.md",
   "repository": "https://github.com/rvaim/plugin-creator",
   "keywords": [
     "codex",
@@ -30,7 +30,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/rvaim/plugin-creator",
+    "websiteURL": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/plugin-creator/README.md",
     "brandColor": "#2563EB",
     "composerIcon": "./assets/icon.png",
     "logo": "./assets/icon.png",
