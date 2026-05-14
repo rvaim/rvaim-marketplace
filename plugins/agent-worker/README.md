@@ -69,35 +69,6 @@ Codex：
 $agent-worker
 ```
 
-推荐让主 agent 使用该 skill 后，将复杂实现拆成小任务并通过 worker agent 完成。主 agent 必须读取 diff、测试日志和 policy violations 后再决定接受、打回或应用 patch。
-
-## 审查流程
-
-主 agent 必须读取 worker result、diff 和测试日志后再决策。不要因为 worker summary 看起来正确就接受结果。
-
-推荐顺序：
-
-1. `list_worker_agents`
-2. `validate_acpx`
-3. `run_worker`
-4. 低频调用 `get_worker_status` 或 `watch_worker`
-5. `read_worker_result`
-6. `revise_worker`，如需打回
-7. `apply_worker_patch`，仅审查通过后
-8. `cleanup_worker`
-
-对于复杂实现，默认使用 `isolate_worktree=true`，先在隔离 worktree 中完成改动，再由主 agent 应用 patch。
-
-## 状态轮询
-
-`run_worker` 使用 `no_wait=true` 后，主 agent 不应高频询问状态。核心目的是减少主 agent 的 token 消耗——每次状态查询都会把 worker 输出注入主上下文，频繁查询会迅速耗尽 token 预算。
-
-推荐节奏：
-
-- 启动后等待 15 分钟，期间不要查询状态；之后若仍无响应，每隔 5 分钟查询一次。
-
-默认使用 `get_worker_status`，并限制 `recent_lines`。`watch_worker` 只在需要看更长日志 tail 或诊断卡住原因时使用，避免把 worker 日志大量注入主上下文。
-
 ## 自动触发
 
 Codex 侧通过 `agents/openai.yaml` 允许隐式调用该 skill。普通对话里出现"子代理、worker agent、delegate、leader/reviewer、节省 token"等请求时，Codex 可以自动召回 Agent Worker。
