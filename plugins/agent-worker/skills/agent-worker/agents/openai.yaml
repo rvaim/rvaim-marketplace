@@ -5,7 +5,7 @@ interface:
   default_prompt: "使用 Agent Worker 把复杂任务拆给 worker agent，实现后由主 agent 审查 diff 并决定是否打回。"
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true
 
 dependencies:
   tools:

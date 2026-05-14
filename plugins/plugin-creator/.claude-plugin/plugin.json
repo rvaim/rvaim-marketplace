@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "plugin-creator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "创建、审查和维护 Codex / Claude Code 双平台插件的中文开发辅助插件。",
   "author": {
     "name": "rvaim",
@@ -17,7 +17,6 @@
     "plugin-authoring",
     "skill",
     "marketplace",
-    "hooks",
     "manifest"
   ],
   "skills": "./skills/"

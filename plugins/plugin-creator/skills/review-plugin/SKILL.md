@@ -1,6 +1,6 @@
 ---
 name: review-plugin
-description: 检查一个插件目录是否同时兼容 Codex 和 Claude Code。适用于用户要求审查插件结构、manifest、skills、hooks、marketplace 注册或安装失败原因时。
+description: 检查一个插件目录是否同时兼容 Codex 和 Claude Code。适用于用户要求审查插件结构、manifest、skills、marketplace 注册或安装失败原因时。
 ---
 
 # Review Plugin
@@ -20,16 +20,14 @@ description: 检查一个插件目录是否同时兼容 Codex 和 Claude Code。
 - `.claude-plugin/plugin.json` 是否存在。
 - `.codex-plugin/plugin.json` 是否存在。
 - `skills/` 是否位于插件根目录。
-- 是否误把 `skills/`、`hooks/`、`docs/` 放进 manifest 目录。
+- 是否误把 `skills/`、`docs/` 放进 manifest 目录。
 - 插件根目录是否包含可安装组件，而不是只有 marketplace entry。
 - 模板文件是否只存在于 `templates/` 下，不被 manifest 当作运行时组件加载。
 
 ### 最小化原则
 
-- `plugin-creator` 这类脚手架插件不应默认启用 hooks。
 - 目标插件模板不应默认塞入大量脚本。
 - 不需要运行时能力时，不应创建外层 `bin/`。
-- hooks 示例应放在文档或按需生成，不应伪装成插件自身运行配置。
 - 生成后的目标插件不应残留未替换的 `{{...}}` 占位符或 `example-plugin` 示例名。
 - 不应为了字段完整而写空数组、虚假许可证、虚假隐私政策或不可访问 URL。
 
@@ -45,10 +43,7 @@ description: 检查一个插件目录是否同时兼容 Codex 和 Claude Code。
 - `experimental.monitors`、`lspServers`、`mcpServers` 是否有对应文件，且 README 说明外部依赖。
 - Claude 根目录 `settings.json` 是否只在需要默认 agent 或状态行等设置时存在。
 - Codex `skills/<skill>/agents/openai.yaml` 是否只放在 skill 内，且不替代 `.codex-plugin/plugin.json`。
-- 如果声明 hooks，是否分别指向：
-  - Claude：`./hooks/claude-hooks.json`
-  - Codex：`./hooks/codex-hooks.json`
-- 没有对应组件时，不应声明 `apps`、`mcpServers`、`lspServers`、`hooks`、`agents`、`commands`、`userConfig`、`dependencies`、`experimental.monitors`。
+- 没有对应组件时，不应声明 `apps`、`mcpServers`、`lspServers`、`agents`、`commands`、`userConfig`、`dependencies`、`experimental.monitors`。
 
 ### Marketplace
 
@@ -61,22 +56,12 @@ description: 检查一个插件目录是否同时兼容 Codex 和 Claude Code。
 - 如果使用发布渠道，stable/latest 是否解析为不同版本或不同 Git SHA。
 - 是否错误地为非官方 marketplace 输出 `<claude-code-hint />`。
 
-### Hooks
-
-- Claude hooks 是否使用 Claude schema。
-- Codex hooks 是否使用 Codex schema。
-- 是否把 Claude 专用字段误写进 Codex hooks。
-- 是否把 Codex hooks feature flag 写入说明。
-- Codex hooks 是否覆盖 JSON 和必要的 TOML 说明；插件打包是否仍优先使用 `hooks/codex-hooks.json`。
-- 是否用同一个 `hooks/hooks.json` 试图兼容两边。
-- hooks 模板是否位于插件模板目录下的 `hooks/`，而不是 `templates/` 下面的兄弟级公共目录。
-
 ### Skills 与文档
 
 - 每个 `skills/<name>/SKILL.md` 是否有 `name` 和 `description` frontmatter。
 - `description` 是否能准确触发，不要只写泛泛介绍。
 - `SKILL.md` 是否聚焦执行规则；长表格、字段参考、差异矩阵应放到 `docs/` 或 `references/`。
-- README 是否说明安装方式、目录结构、默认不启用 hooks 的原因和双平台调用方式。
+- README 是否说明安装方式、目录结构和双平台调用方式。
 
 ## 输出格式
 

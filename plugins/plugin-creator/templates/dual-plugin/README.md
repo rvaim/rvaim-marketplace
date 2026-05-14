@@ -8,11 +8,9 @@
 .claude-plugin/plugin.json
 .codex-plugin/plugin.json
 skills/{{SKILL_NAME}}/SKILL.md
-hooks/claude-hooks.json
-hooks/codex-hooks.json
 ```
 
-其中 `hooks/` 是可选 hooks 模板，manifest 默认不声明 hooks。
+模板不包含 hooks 或运行时脚本，manifest 也不声明 hooks。
 
 复制模板后先替换这些占位符：
 
@@ -30,12 +28,6 @@ hooks/codex-hooks.json
 {{SKILL_DESCRIPTION}}
 ```
 
-如果需要 hooks，请按需新增脚本：
-
-```text
-bin/<script>.mjs
-```
-
-不要默认添加无用脚本。`hooks/` 里的配置是模板文件；只有确实需要 hooks 时，才在 manifest 中声明 `./hooks/claude-hooks.json` 或 `./hooks/codex-hooks.json`，并按目标插件路径调整命令。
+不要默认添加无用脚本。如果目标插件确实需要自动执行能力，请在目标插件中单独设计运行时脚本和平台专用配置。
 
 如果插件暂时没有公开主页或仓库，不要保留占位 URL；删除对应字段，等发布前再补。不要为了字段完整而伪造 license、privacyPolicyURL 或 termsOfServiceURL。

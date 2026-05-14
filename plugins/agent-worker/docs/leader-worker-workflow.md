@@ -27,6 +27,12 @@ acpx@latest
 
 `acpx@latest` 当前要求 Node.js 22.12+。如果 MCP 启动阶段全局 npm install 失败，优先检查 Codex / Claude Code 启动环境里的 Node.js 版本、npm 网络访问和全局 npm prefix 写入权限。
 
+## Codex Triggering
+
+Codex 侧通过 `skills/agent-worker/agents/openai.yaml` 设置 `allow_implicit_invocation: true`，让普通对话里的子代理请求可以召回该 skill。
+
+如果自动召回未触发，用户可以用 `$agent-worker` 显式调用。
+
 ## Configuration
 
 Claude Code 安装插件时可以配置：

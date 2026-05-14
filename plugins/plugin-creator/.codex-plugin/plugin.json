@@ -1,6 +1,6 @@
 {
   "name": "plugin-creator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "创建、审查和维护 Codex / Claude Code 双平台插件的中文开发辅助插件。",
   "author": {
     "name": "rvaim",
@@ -16,14 +16,13 @@
     "plugin-authoring",
     "skill",
     "marketplace",
-    "hooks",
     "manifest"
   ],
   "skills": "./skills/",
   "interface": {
     "displayName": "插件创建器",
     "shortDescription": "创建和审查 Codex / Claude Code 双兼容插件。",
-    "longDescription": "面向中文开发者的双平台插件创建与审查工具。它把 Codex 与 Claude Code 的 manifest、marketplace、skills、hooks、模板路径和发布验证规则合并成一套可执行工作流，默认保持脚手架最小化，只在用户明确要求时生成 hooks 或脚本。",
+    "longDescription": "面向中文开发者的双平台插件创建与审查工具。它把 Codex 与 Claude Code 的 manifest、marketplace、skills、模板路径和发布验证规则合并成一套可执行工作流，默认保持脚手架最小化，不生成运行时 hooks 或脚本。",
     "developerName": "rvaim",
     "category": "Development",
     "capabilities": [
@@ -36,8 +35,7 @@
     "logo": "./assets/icon.png",
     "defaultPrompt": [
       "使用插件创建器帮我创建一个 Codex 和 Claude Code 都能安装的双平台插件。",
-      "使用插件创建器检查当前插件目录的 manifest、skills、hooks 和 marketplace 是否双平台兼容。",
-      "使用插件创建器为我的插件按需生成 Claude Code hooks 或 Codex hooks 配置。",
+      "使用插件创建器检查当前插件目录的 manifest、skills 和 marketplace 是否双平台兼容。",
       "使用插件创建器把一个现有 skill 打包成可发布的插件。"
     ]
   }

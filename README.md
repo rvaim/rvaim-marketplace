@@ -56,7 +56,6 @@ rvaim-marketplace/
 /arkts-harmony:harmonyos-docs
 /plugin-creator:create-dual-plugin
 /plugin-creator:review-plugin
-/plugin-creator:create-hooks
 /agent-worker:agent-worker
 ```
 
@@ -113,7 +112,6 @@ $arkts-ts-rules
 $harmonyos-docs
 $create-dual-plugin
 $review-plugin
-$create-hooks
 $agent-worker
 ```
 

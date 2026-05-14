@@ -11,4 +11,4 @@ description: "{{SKILL_DESCRIPTION}}"
 
 1. 写清楚什么时候使用这个 skill。
 2. 大文档放到 `references/` 或插件根目录 `docs/`。
-3. 不要把无关脚本或 hooks 默认塞进模板。
+3. 不要把无关脚本默认塞进模板。

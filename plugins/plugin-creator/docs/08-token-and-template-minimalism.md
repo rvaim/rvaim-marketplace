@@ -7,7 +7,7 @@
 1. 每个新插件都有无用脚本。
 2. 审查插件时要额外读取无关内容。
 3. 后续维护时不清楚脚本是否真的被使用。
-4. 自动 hooks 可能误引用不存在或不必要的脚本。
+4. 自动化配置可能误引用不存在或不必要的脚本。
 
 ## 推荐策略
 
@@ -22,14 +22,6 @@
 
 需要文档，再加 `docs/`。
 
-需要 hooks，再加：
-
-```text
-hooks/claude-hooks.json
-hooks/codex-hooks.json
-bin/<script>.mjs
-```
-
 模板中的具体值使用 `{{...}}` 占位符，避免复制后留下 `example-plugin`、`example-skill` 这类示例名。
 
 ## plugin-creator 的处理
@@ -43,9 +35,6 @@ bin/<script>.mjs
 不提供：
 
 - 外层 `bin/`。
-- 外层 `hooks/`。
 - 模板中的预置脚本。
-
-`templates/dual-plugin/hooks/` 可以保存可选 hooks 模板，因为它位于插件模板目录下，复制后路径仍然是目标插件的 `hooks/`。只有用户明确要求 hooks 时，才在 manifest 中声明 hooks 并创建对应脚本。
 
 这样安装后更干净，也避免模型每次看到一堆无关脚本。

@@ -42,21 +42,12 @@
 | `repository` | 源代码仓库。 |
 | `keywords` | 发现和分类标签。 |
 | `skills` | 共享 skills 目录，通常为 `./skills/`。 |
-| `hooks` | 只有启用 Claude hooks 时填写。 |
 | `mcpServers` | 只有确实捆绑 MCP server 配置时填写。 |
 | `lspServers` | 只有确实捆绑 LSP server 配置时填写。 |
 | `agents` / `commands` | 只有确实提供 Claude agent 或 command 时填写。 |
 | `userConfig` | 需要安装时提示用户输入配置时填写。 |
 | `dependencies` | 依赖其他插件时填写。 |
 | `experimental.monitors` | 需要后台 monitor 时填写。 |
-
-如需 Claude hooks：
-
-```json
-{
-  "hooks": "./hooks/claude-hooks.json"
-}
-```
 
 如需用户配置：
 
@@ -192,14 +183,6 @@ Codex `interface` 常用字段：
 | `composerIcon` / `logo` / `screenshots` | 真实资产路径，通常放在 `./assets/`。 |
 | `defaultPrompt` | 安装后可直接尝试的提示词数组。 |
 
-如需 Codex hooks：
-
-```json
-{
-  "hooks": "./hooks/codex-hooks.json"
-}
-```
-
 如需 Codex app / connector 映射：
 
 ```json
@@ -248,8 +231,6 @@ dependencies:
 | 组件 | 推荐位置 | manifest 字段 | 默认策略 |
 |---|---|---|---|
 | Skills | `./skills/` | `skills` | 默认生成。 |
-| Claude hooks | `./hooks/claude-hooks.json` | `hooks` | 按需生成。 |
-| Codex hooks | `./hooks/codex-hooks.json` | `hooks` | 按需生成。 |
 | MCP servers | `./.mcp.json` | `mcpServers` | 按需生成。 |
 | Codex apps | `./.app.json` | `apps` | 按需生成。 |
 | LSP servers | `./.lsp.json` | `lspServers` | 按需生成，并说明外部二进制依赖。 |
@@ -261,12 +242,10 @@ dependencies:
 
 - 两边 `name` 建议一致。
 - `skills` 指向同一个 `./skills/`。
-- hooks 路径必须分平台，不要写同一个 `hooks/hooks.json`。
-- 没有 hooks 时，不要声明 `hooks` 字段。
 - 没有脚本时，不要创建 `bin/`。
 - 所有路径字段相对于插件根目录，并以 `./` 开头。
 - `skills`、`docs`、`templates` 位于插件根目录，不要放进 `.claude-plugin/` 或 `.codex-plugin/`。
 - 配置字段要真实：没有 license 文件时不要写 license；没有公开隐私政策时不要写 privacy URL。
 - `commands`、`agents`、`apps`、`mcpServers`、`lspServers`、`userConfig`、`dependencies`、`experimental.monitors` 只有真实存在时才声明。
-- 需要安装时输入密钥或路径时优先用 `userConfig`，不要把用户配置硬编码进 hooks、MCP 或 LSP 命令。
+- 需要安装时输入密钥或路径时优先用 `userConfig`，不要把用户配置硬编码进 MCP 或 LSP 命令。
 - Codex 的 `agents/openai.yaml` 是 skill 元数据；Claude Code 不读取它，双平台插件仍需保证 `SKILL.md` 自身描述清楚。
