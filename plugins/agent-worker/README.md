@@ -18,19 +18,21 @@ agent-worker/
 
 ## 工作方式
 
-插件注册 `agent-worker` MCP server。启动 MCP 时，launcher 会自动 clone 或更新：
+插件注册 `agent-worker` MCP server。启动 MCP 时，launcher 会自动全局安装或更新：
 
 ```text
-https://github.com/rvaim/agent-worker-mcp.git
+@rvaim/agent-worker-mcp@latest
+acpx@latest
 ```
 
-随后安装依赖、构建并启动该 MCP server。MCP 暴露 `run_worker`、`revise_worker`、`read_worker_result`、`get_worker_status`、`watch_worker`、`apply_worker_patch`、`cancel_worker`、`cleanup_worker`、`validate_acpx` 和 `list_worker_agents` 等工具。
+随后启动全局 `@rvaim/agent-worker-mcp` 包内的 stdio MCP server，并默认使用全局安装的 `acpx`。MCP 暴露 `run_worker`、`revise_worker`、`read_worker_result`、`get_worker_status`、`watch_worker`、`apply_worker_patch`、`cancel_worker`、`cleanup_worker`、`validate_acpx` 和 `list_worker_agents` 等工具。
 
 ## 默认配置
 
+- Node.js 要求：`acpx@latest` 当前要求 Node.js 22.12+。
 - 默认 worker agent：`claude`
 - 默认 allowlist：`claude,codex,gemini,opencode,qwen,kimi`
-- 默认 acpx 命令：`npx -y acpx@latest`
+- 默认 acpx 命令：`auto`，即使用插件启动时全局安装的 `acpx`
 - 默认权限：`all`
 - 默认自动更新 `agent-worker-mcp`
 

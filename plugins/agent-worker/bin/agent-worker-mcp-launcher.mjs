@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-const REPO_URL = "https://github.com/rvaim/agent-worker-mcp.git";
+const DEFAULT_AGENT_WORKER_PACKAGE = "@rvaim/agent-worker-mcp@latest";
+const DEFAULT_ACPX_PACKAGE = "acpx@latest";
 
 function rawOption(name) {
   return process.env[name] ?? process.env[`CLAUDE_PLUGIN_OPTION_${name}`] ?? process.env[`CLAUDE_PLUGIN_OPTION_${name.toUpperCase()}`];
@@ -53,68 +54,70 @@ function run(command, args, options = {}) {
   }
 }
 
-async function readText(file) {
+async function readJson(file) {
   try {
-    return await readFile(file, "utf8");
+    return JSON.parse(await readFile(file, "utf8"));
   } catch {
-    return "";
+    return null;
   }
 }
 
-async function ensureSource(sourceDir) {
-  const repo = process.env.AGENT_WORKER_MCP_REPO || REPO_URL;
-  const autoUpdate = boolOption("AGENT_WORKER_MCP_AUTO_UPDATE", true);
-
-  await mkdir(path.dirname(sourceDir), { recursive: true });
-
-  if (!existsSync(path.join(sourceDir, ".git"))) {
-    log(`cloning ${repo}`);
-    run("git", ["clone", "--depth", "1", repo, sourceDir]);
-    return true;
-  }
-
-  if (!autoUpdate) return false;
-
-  const before = await readText(path.join(sourceDir, ".git", "HEAD"));
-  log("updating agent-worker-mcp");
-  run("git", ["fetch", "--depth", "1", "origin", "HEAD"], { cwd: sourceDir });
-  run("git", ["reset", "--hard", "FETCH_HEAD"], { cwd: sourceDir });
-  const after = await readText(path.join(sourceDir, ".git", "HEAD"));
-  return before !== after;
-}
-
-async function currentRevision(sourceDir) {
-  const result = spawnSync("git", ["rev-parse", "HEAD"], {
-    cwd: sourceDir,
+function npmOutput(args) {
+  const result = spawnSync("npm", args, {
+    env: process.env,
     encoding: "utf8",
+    maxBuffer: 1024 * 1024,
   });
-  return result.status === 0 ? result.stdout.trim() : "unknown";
-}
 
-async function ensureBuilt(sourceDir, root, sourceChanged) {
-  const dist = path.join(sourceDir, "dist", "index.js");
-  const stamp = path.join(root, "agent-worker-mcp.stamp");
-  const revision = await currentRevision(sourceDir);
-  const previous = await readText(stamp);
-  const needsBuild = sourceChanged || previous.trim() !== revision || !existsSync(dist);
-
-  if (!needsBuild) return dist;
-
-  log("installing dependencies");
-  if (existsSync(path.join(sourceDir, "package-lock.json"))) {
-    run("npm", ["ci"], { cwd: sourceDir });
-  } else {
-    run("npm", ["install"], { cwd: sourceDir });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    if (result.stderr) process.stderr.write(result.stderr);
+    throw new Error(`npm ${args.join(" ")} failed with exit code ${result.status}`);
   }
 
-  log("building agent-worker-mcp");
-  run("npm", ["run", "build"], { cwd: sourceDir });
-  await writeFile(stamp, `${revision}\n`, "utf8");
-  return dist;
+  return result.stdout.trim();
 }
 
-function prepareWorkerEnv() {
-  process.env.ACPX_BIN = option("ACPX_BIN", "npx -y acpx@latest");
+function globalBinDir(prefix) {
+  return process.platform === "win32" ? prefix : path.join(prefix, "bin");
+}
+
+async function ensurePackages(root) {
+  const autoUpdate = boolOption("AGENT_WORKER_MCP_AUTO_UPDATE", true);
+  const agentWorkerPackage = option("AGENT_WORKER_MCP_PACKAGE", DEFAULT_AGENT_WORKER_PACKAGE);
+  const acpxPackage = option("AGENT_WORKER_ACPX_PACKAGE", DEFAULT_ACPX_PACKAGE);
+
+  await mkdir(root, { recursive: true });
+
+  const globalRoot = npmOutput(["root", "-g"]);
+  const globalPrefix = npmOutput(["prefix", "-g"]);
+  const globalBin = globalBinDir(globalPrefix);
+  const server = path.join(globalRoot, "@rvaim", "agent-worker-mcp", "dist", "index.js");
+  const acpx = path.join(globalBin, process.platform === "win32" ? "acpx.cmd" : "acpx");
+
+  if (!autoUpdate && existsSync(server) && existsSync(acpx)) {
+    return { server, acpx, globalBin, globalRoot };
+  }
+
+  log(`installing globally ${agentWorkerPackage} and ${acpxPackage}`);
+  run("npm", ["install", "-g", "--no-audit", "--no-fund", agentWorkerPackage, acpxPackage]);
+
+  if (!existsSync(server)) {
+    throw new Error(`global agent-worker-mcp server was not installed at ${server}`);
+  }
+  if (!existsSync(acpx)) {
+    throw new Error(`global acpx binary was not installed at ${acpx}`);
+  }
+
+  return { server, acpx, globalBin, globalRoot };
+}
+
+function prepareWorkerEnv(globalBin, acpx) {
+  const configuredAcpx = option("ACPX_BIN", "auto");
+  const resolvedAcpx = configuredAcpx.toLowerCase() === "auto" ? acpx : configuredAcpx;
+
+  process.env.PATH = `${globalBin}${path.delimiter}${process.env.PATH ?? ""}`;
+  process.env.ACPX_BIN = resolvedAcpx;
   process.env.DEFAULT_WORKER_AGENT = option("DEFAULT_WORKER_AGENT", "claude");
   process.env.ALLOWED_WORKER_AGENTS = option("ALLOWED_WORKER_AGENTS", "claude,codex,gemini,opencode,qwen,kimi");
   process.env.ACPX_APPROVAL = option("ACPX_APPROVAL", "all");
@@ -122,20 +125,17 @@ function prepareWorkerEnv() {
 }
 
 async function main() {
-  prepareWorkerEnv();
-
   const root = dataRoot();
-  const sourceDir = path.join(root, "agent-worker-mcp");
-  await mkdir(root, { recursive: true });
   process.env.npm_config_cache ??= path.join(root, "npm-cache");
   process.env.NPM_CONFIG_CACHE ??= process.env.npm_config_cache;
 
-  const sourceChanged = await ensureSource(sourceDir);
-  const server = await ensureBuilt(sourceDir, root, sourceChanged);
+  const { server, acpx, globalBin, globalRoot } = await ensurePackages(root);
+  prepareWorkerEnv(globalBin, acpx);
 
-  log(`starting ${server}`);
+  const packageJson = await readJson(path.join(globalRoot, "@rvaim", "agent-worker-mcp", "package.json"));
+  log(`starting ${packageJson?.name ?? "@rvaim/agent-worker-mcp"}@${packageJson?.version ?? "unknown"}`);
   const child = spawn(process.execPath, [server], {
-    cwd: sourceDir,
+    cwd: root,
     env: process.env,
     stdio: "inherit",
   });

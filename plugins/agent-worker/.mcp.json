@@ -9,7 +9,8 @@
       "startup_timeout_sec": 60,
       "tool_timeout_sec": 3600,
       "env": {
-        "AGENT_WORKER_MCP_REPO": "https://github.com/rvaim/agent-worker-mcp.git",
+        "AGENT_WORKER_MCP_PACKAGE": "@rvaim/agent-worker-mcp@latest",
+        "AGENT_WORKER_ACPX_PACKAGE": "acpx@latest",
         "AGENT_WORKER_MCP_AUTO_UPDATE": "${user_config.auto_update_agent_worker_mcp}",
         "ACPX_BIN": "${user_config.acpx_bin}",
         "DEFAULT_WORKER_AGENT": "${user_config.default_worker_agent}",

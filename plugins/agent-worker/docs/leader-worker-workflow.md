@@ -16,7 +16,16 @@ plugins/agent-worker/.mcp.json
 plugins/agent-worker/bin/agent-worker-mcp-launcher.mjs
 ```
 
-launcher 会把 `https://github.com/rvaim/agent-worker-mcp.git` clone 到插件数据目录，后续启动时 fetch/reset 到远端 HEAD，然后执行 `npm ci` 和 `npm run build`。构建完成后启动 `dist/index.js` 作为 stdio MCP server。
+launcher 会运行 npm 全局安装或更新：
+
+```text
+@rvaim/agent-worker-mcp@latest
+acpx@latest
+```
+
+安装完成后，launcher 使用全局包内 `@rvaim/agent-worker-mcp/dist/index.js` 作为 stdio MCP server，并默认把全局安装的 `acpx` 二进制传给 MCP server。
+
+`acpx@latest` 当前要求 Node.js 22.12+。如果 MCP 启动阶段全局 npm install 失败，优先检查 Codex / Claude Code 启动环境里的 Node.js 版本、npm 网络访问和全局 npm prefix 写入权限。
 
 ## Configuration
 
@@ -26,20 +35,22 @@ Claude Code 安装插件时可以配置：
 |---|---|---|
 | `default_worker_agent` | `claude` | 默认 worker agent。 |
 | `allowed_worker_agents` | `claude,codex,gemini,opencode,qwen,kimi` | 允许调用的 worker agent allowlist。 |
-| `acpx_bin` | `npx -y acpx@latest` | 启动 acpx 的命令。 |
+| `acpx_bin` | `auto` | 启动 acpx 的命令。`auto` 表示使用插件启动时全局安装的 acpx。 |
 | `acpx_approval` | `all` | worker 默认权限模式。 |
-| `auto_update_agent_worker_mcp` | `true` | MCP 启动前是否自动更新 agent-worker-mcp。 |
+| `auto_update_agent_worker_mcp` | `true` | MCP 启动前是否自动全局安装或更新 `@rvaim/agent-worker-mcp` 和 `acpx`。 |
 | `worker_max_timeout_seconds` | `3600` | worker 任务默认最大运行秒数。 |
 
 Codex 侧如果暂不支持插件安装时的 `userConfig`，可以通过同名环境变量覆盖：
 
 ```text
 DEFAULT_WORKER_AGENT=claude
-ALLOWED_WORKER_AGENTS=claude,codex
-ACPX_BIN="npx -y acpx@latest"
+ALLOWED_WORKER_AGENTS=claude
+ACPX_BIN=auto
 ACPX_APPROVAL=all
 WORKER_MAX_TIMEOUT_SECONDS=3600
 AGENT_WORKER_MCP_AUTO_UPDATE=true
+AGENT_WORKER_MCP_PACKAGE="@rvaim/agent-worker-mcp@latest"
+AGENT_WORKER_ACPX_PACKAGE="acpx@latest"
 ```
 
 ## Review Discipline

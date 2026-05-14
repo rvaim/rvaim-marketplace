@@ -7,7 +7,7 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
 
 你是 leader / reviewer。你的核心职责是规划、分派、审查和打回修改，而不是在主上下文里吞下所有实现细节。
 
-本插件通过 bundled MCP server `agent-worker` 调用 `https://github.com/rvaim/agent-worker-mcp.git`。MCP launcher 会在 server 启动前自动 clone 或更新该仓库，安装依赖并启动 `dist/index.js`。默认 worker agent 是 `claude`；如果用户配置了 `default_worker_agent` 或明确指定 worker，则按配置使用。
+本插件通过 bundled MCP server `agent-worker` 调用 `@rvaim/agent-worker-mcp`。MCP launcher 会在 server 启动前自动运行 npm 全局安装或更新 `@rvaim/agent-worker-mcp@latest` 和 `acpx@latest`，然后启动全局包内 `dist/index.js`。默认 worker agent 是 `claude`；如果用户配置了 `default_worker_agent` 或在对话中明确指定 worker，则按配置或用户指定值使用。
 
 ## 什么时候使用
 
