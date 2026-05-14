@@ -55,6 +55,10 @@ $agent-worker
 
 推荐让主 agent 使用该 skill 后，将复杂实现拆成小任务并通过 worker agent 完成。主 agent 必须读取 diff、测试日志和 policy violations 后再决定接受、打回或应用 patch。
 
+## 状态轮询
+
+`run_worker` 使用 `no_wait=true` 后，主 agent 应低频检查状态：首次等待 2-3 分钟，普通任务后续至少间隔 3 分钟，长任务提高到 5-8 分钟。默认使用 `get_worker_status`，只在诊断卡住或需要更长日志时使用 `watch_worker`。
+
 ## 自动触发
 
 Codex 侧通过 `agents/openai.yaml` 允许隐式调用该 skill。普通对话里出现“子代理、worker agent、delegate、leader/reviewer、节省 token”等请求时，Codex 可以自动召回 Agent Worker。

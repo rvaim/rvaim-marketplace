@@ -68,10 +68,23 @@ AGENT_WORKER_ACPX_PACKAGE="acpx@latest"
 1. `list_worker_agents`
 2. `validate_acpx`
 3. `run_worker`
-4. `get_worker_status` 或 `watch_worker`
+4. 低频调用 `get_worker_status` 或 `watch_worker`
 5. `read_worker_result`
 6. `revise_worker`，如需打回
 7. `apply_worker_patch`，仅审查通过后
 8. `cleanup_worker`
 
 对于复杂实现，默认使用 `isolate_worktree=true`，先在隔离 worktree 中完成改动，再由主 agent 应用 patch。
+
+## Status Polling
+
+`run_worker` 使用 `no_wait=true` 后，主 agent 不应高频询问状态。
+
+推荐节奏：
+
+- 首次状态检查：启动 worker 后等待 2-3 分钟。
+- 普通任务：后续每 3 分钟左右检查一次。
+- 长任务：预计超过 10 分钟时，每 5-8 分钟检查一次。
+- 用户主动询问状态、任务接近超时、或上次状态显示即将完成时，可以提前检查。
+
+默认使用 `get_worker_status`，并限制 `recent_lines`。`watch_worker` 只在需要看更长日志 tail 或诊断卡住原因时使用，避免把 worker 日志大量注入主上下文。

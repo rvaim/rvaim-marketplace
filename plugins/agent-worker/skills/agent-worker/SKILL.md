@@ -46,7 +46,12 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
    - `no_wait`: `true`
    - `isolate_worktree`: `true`
    - `capture_diff`: `true`
-3. `no_wait=true` 后使用 `get_worker_status` 或 `watch_worker` 轮询，不要在主上下文里复制长日志。
+3. `no_wait=true` 后使用低频轮询，不要反复追问 worker：
+   - 启动后不要立刻连续调用状态工具；首次状态检查至少等待 2-3 分钟。
+   - 普通任务后续至少间隔 3 分钟再调用 `get_worker_status`。
+   - 预计超过 10 分钟的任务，后续间隔提高到 5-8 分钟。
+   - 只有用户主动询问状态、worker 接近超时、或上一轮状态显示即将完成时，才提前检查。
+   - 默认用 `get_worker_status` 且限制 `recent_lines`，不要频繁使用 `watch_worker` 复制长日志。
 4. 完成后调用 `read_worker_result`，并请求 `include_diff=true`、`include_test_log=true`。
 5. 主 agent 必须亲自审查 changed files、diff、测试日志和 policy violations。worker 的自然语言总结不能作为接受依据。
 6. 有阻塞问题时调用 `revise_worker`，反馈必须具体到文件、行为和验收差距。默认最多 3 轮修订。
