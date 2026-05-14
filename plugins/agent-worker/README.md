@@ -9,6 +9,7 @@ agent-worker/
 ├── .claude-plugin/plugin.json
 ├── .codex-plugin/plugin.json
 ├── .mcp.json
+├── assets/icon.png
 ├── bin/agent-worker-mcp-launcher.mjs
 ├── docs/leader-worker-workflow.md
 └── skills/agent-worker/

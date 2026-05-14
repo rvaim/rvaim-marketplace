@@ -1,6 +1,6 @@
 {
   "name": "agent-worker",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "通过 agent-worker-mcp 把复杂任务委托给 Claude Code 等 worker agent，主 agent 只负责规划、审查和打回修改。",
   "author": {
     "name": "rvaim",
@@ -32,6 +32,8 @@
     ],
     "websiteURL": "https://github.com/rvaim/rvaim-marketplace",
     "brandColor": "#0F766E",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
     "defaultPrompt": [
       "使用 Agent Worker，把这个复杂实现拆给 worker agent 完成，主 agent 只负责规划和审查。",
       "使用 Agent Worker 调用 Claude worker 在隔离 worktree 中实现功能，然后审查 diff。",
