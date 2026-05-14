@@ -46,7 +46,7 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
    - `no_wait`: `true`
    - `isolate_worktree`: `true`
    - `capture_diff`: `true`
-3. `no_wait=true` 后使用低频轮询，不要反复追问 worker：
+3. `no_wait=true` 后使用低频轮询，不要反复追问 worker。核心目的是减少主 agent 的 token 消耗——每次状态查询都会把 worker 输出注入主上下文，频繁查询会迅速耗尽 token 预算：
    - 启动后等待 15 分钟，期间不要查询状态；之后若仍无响应，每隔 5 分钟查询一次。
    - 默认用 `get_worker_status` 且限制 `recent_lines`，不要频繁使用 `watch_worker` 复制长日志。
 4. 完成后调用 `read_worker_result`，并请求 `include_diff=true`、`include_test_log=true`。

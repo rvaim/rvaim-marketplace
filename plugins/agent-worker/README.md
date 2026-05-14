@@ -90,7 +90,7 @@ $agent-worker
 
 ## 状态轮询
 
-`run_worker` 使用 `no_wait=true` 后，主 agent 不应高频询问状态。
+`run_worker` 使用 `no_wait=true` 后，主 agent 不应高频询问状态。核心目的是减少主 agent 的 token 消耗——每次状态查询都会把 worker 输出注入主上下文，频繁查询会迅速耗尽 token 预算。
 
 推荐节奏：
 
