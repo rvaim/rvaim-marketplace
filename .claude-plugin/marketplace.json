@@ -72,7 +72,7 @@
     {
       "name": "agent-worker",
       "description": "通过 agent-worker-mcp 把复杂任务委托给 Claude Code 等 worker agent，主 agent 只负责规划、审查和打回修改。",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "author": {
         "name": "rvaim"
       },

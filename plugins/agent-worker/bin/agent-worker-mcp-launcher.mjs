@@ -4,11 +4,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { McpMessageParser, serializeMcpMessage } from "./mcp-message-codec.mjs";
 import { StatusPollingGate, STATUS_POLL_INTERVAL_MS } from "./status-polling-gate.mjs";
 
 const DEFAULT_AGENT_WORKER_PACKAGE = "@rvaim/agent-worker-mcp@latest";
 const DEFAULT_ACPX_PACKAGE = "acpx@latest";
-const FRAME_SEPARATOR = Buffer.from("\r\n\r\n");
 
 function rawOption(name) {
   return process.env[name] ?? process.env[`CLAUDE_PLUGIN_OPTION_${name}`] ?? process.env[`CLAUDE_PLUGIN_OPTION_${name.toUpperCase()}`];
@@ -43,34 +43,56 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-class McpFrameParser {
-  constructor(onFrame) {
-    this.onFrame = onFrame;
-    this.buffer = Buffer.alloc(0);
+function closeStream(stream) {
+  try {
+    stream.end();
+  } catch {
+    // Best effort during process shutdown.
   }
+}
 
-  push(chunk) {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
+function installChildShutdownHandlers(child) {
+  let shuttingDown = false;
+  let forwardedSignal = null;
 
-    while (true) {
-      const headerEnd = this.buffer.indexOf(FRAME_SEPARATOR);
-      if (headerEnd === -1) return;
+  const shutdown = (reason, signal = "SIGTERM", exitCode = 143) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    forwardedSignal = signal;
+    log(`shutting down child MCP server: ${reason}`);
+    closeStream(child.stdin);
 
-      const headerBytes = this.buffer.subarray(0, headerEnd);
-      const headerText = headerBytes.toString("utf8");
-      const match = headerText.match(/content-length:\s*(\d+)/i);
-      if (!match) throw new Error("missing Content-Length header in MCP frame");
-
-      const contentLength = Number.parseInt(match[1], 10);
-      const frameLength = headerEnd + FRAME_SEPARATOR.length + contentLength;
-      if (this.buffer.length < frameLength) return;
-
-      const frame = this.buffer.subarray(0, frameLength);
-      const body = this.buffer.subarray(headerEnd + FRAME_SEPARATOR.length, frameLength);
-      this.buffer = this.buffer.subarray(frameLength);
-      this.onFrame(frame, body.toString("utf8"));
+    if (!child.killed && child.exitCode === null) {
+      child.kill(signal);
     }
-  }
+
+    const forceExitTimer = setTimeout(() => {
+      if (!child.killed && child.exitCode === null) {
+        child.kill("SIGKILL");
+      }
+      process.exit(exitCode);
+    }, 8_000);
+    forceExitTimer.unref();
+  };
+
+  process.once("SIGINT", () => shutdown("launcher received SIGINT", "SIGINT", 130));
+  process.once("SIGTERM", () => shutdown("launcher received SIGTERM", "SIGTERM", 143));
+  process.stdin.once("end", () => closeStream(child.stdin));
+  process.stdin.once("close", () => closeStream(child.stdin));
+
+  child.on("exit", (code, signal) => {
+    if (shuttingDown) {
+      process.exit(code ?? exitCodeForSignal(forwardedSignal));
+    }
+    if (signal) process.kill(process.pid, signal);
+    process.exit(code ?? 0);
+  });
+}
+
+function exitCodeForSignal(signal) {
+  if (signal === "SIGINT") return 130;
+  if (signal === "SIGTERM") return 143;
+  return 1;
 }
 
 function run(command, args, options = {}) {
@@ -178,39 +200,35 @@ async function main() {
 
   const gate = new StatusPollingGate();
   let upstreamQueue = Promise.resolve();
+  let clientFraming = "jsonl";
 
   process.stdin.on("data", (chunk) => upstreamParser.push(chunk));
-  child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+  child.stdout.on("data", (chunk) => downstreamParser.push(chunk));
   child.stderr.on("data", (chunk) => process.stderr.write(chunk));
 
-  const upstreamParser = new McpFrameParser((frame, bodyText) => {
+  const upstreamParser = new McpMessageParser((message, framing) => {
+    if (!message) return;
+    clientFraming = framing;
     upstreamQueue = upstreamQueue.then(async () => {
-      let message = null;
-      try {
-        message = JSON.parse(bodyText);
-      } catch {
-        message = null;
-      }
-
       const { waitMs, toolName, taskId } = gate.observeMessage(message);
       if (waitMs > 0) {
         log(`status polling gate active for ${toolName} (${taskId}); sleeping ${Math.ceil(waitMs / 1000)} seconds before forwarding`);
         await sleep(waitMs);
       }
 
-      child.stdin.write(frame);
+      child.stdin.write(serializeMcpMessage(message, "jsonl"));
     }).catch((error) => {
       log(`failed to forward MCP request: ${error.stack || error.message}`);
       child.kill("SIGTERM");
     });
   });
 
-  process.stdin.on("end", () => child.stdin.end());
-
-  child.on("exit", (code, signal) => {
-    if (signal) process.kill(process.pid, signal);
-    process.exit(code ?? 0);
+  const downstreamParser = new McpMessageParser((message) => {
+    if (!message) return;
+    process.stdout.write(serializeMcpMessage(message, clientFraming));
   });
+
+  installChildShutdownHandlers(child);
 }
 
 main().catch((error) => {
