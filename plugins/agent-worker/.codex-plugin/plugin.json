@@ -1,6 +1,6 @@
 {
   "name": "agent-worker",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "通过 agent-worker-mcp 把复杂任务委托给 Claude Code 等 worker agent，主 agent 只负责规划、审查和打回修改。",
   "author": {
     "name": "rvaim",
@@ -23,7 +23,7 @@
   "interface": {
     "displayName": "Agent Worker",
     "shortDescription": "把复杂实现委托给 worker agent，主 agent 专注规划与审查。",
-    "longDescription": "Agent Worker 将 rvaim/agent-worker-mcp 作为 bundled MCP server 接入。它在准备使用子代理时自动安装或更新 MCP 代码，并引导主 agent 以 leader/reviewer 方式拆任务、调用 worker、审查 diff、打回修订和应用 patch，从而减少主上下文 token 消耗。",
+    "longDescription": "Agent Worker 将 rvaim/agent-worker-mcp 作为 bundled MCP server 接入。它在准备使用子代理时自动安装或更新 MCP 代码，并引导主 agent 以 leader/reviewer 方式拆任务、调用 worker、审查 diff、打回修订和应用 patch。插件默认强调 reference-style 上下文注入、summary-style 返回结果和低频状态读取，用来减少主上下文 token 消耗。",
     "developerName": "rvaim",
     "category": "Development",
     "capabilities": [
@@ -37,7 +37,9 @@
     "defaultPrompt": [
       "使用 Agent Worker，把这个复杂实现拆给 worker agent 完成，主 agent 只负责规划和审查。",
       "使用 Agent Worker 调用 Claude worker 在隔离 worktree 中实现功能，然后审查 diff。",
-      "使用 Agent Worker 对 worker 的结果做 reviewer 检查，不合格就打回 revise_worker。"
+      "使用 Agent Worker 对 worker 的结果做 reviewer 检查，不合格就打回 revise_worker。",
+      "优先使用 context_mode=reference、response_mode=summary 和 read_worker_result(view=review) 来减少主上下文 token 消耗。",
+      "当 run_worker 使用 no_wait=true 时，状态查询必须遵守固定 300 秒间隔；不要自行估算时间，launcher 会强制延迟 get_worker_status 和 watch_worker。"
     ]
   }
 }

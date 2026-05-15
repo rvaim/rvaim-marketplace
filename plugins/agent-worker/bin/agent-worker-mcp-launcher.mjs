@@ -4,9 +4,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { StatusPollingGate, STATUS_POLL_INTERVAL_MS } from "./status-polling-gate.mjs";
 
 const DEFAULT_AGENT_WORKER_PACKAGE = "@rvaim/agent-worker-mcp@latest";
 const DEFAULT_ACPX_PACKAGE = "acpx@latest";
+const FRAME_SEPARATOR = Buffer.from("\r\n\r\n");
 
 function rawOption(name) {
   return process.env[name] ?? process.env[`CLAUDE_PLUGIN_OPTION_${name}`] ?? process.env[`CLAUDE_PLUGIN_OPTION_${name.toUpperCase()}`];
@@ -35,6 +37,40 @@ function dataRoot() {
 
 function log(message) {
   process.stderr.write(`[agent-worker] ${message}\n`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+class McpFrameParser {
+  constructor(onFrame) {
+    this.onFrame = onFrame;
+    this.buffer = Buffer.alloc(0);
+  }
+
+  push(chunk) {
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+
+    while (true) {
+      const headerEnd = this.buffer.indexOf(FRAME_SEPARATOR);
+      if (headerEnd === -1) return;
+
+      const headerBytes = this.buffer.subarray(0, headerEnd);
+      const headerText = headerBytes.toString("utf8");
+      const match = headerText.match(/content-length:\s*(\d+)/i);
+      if (!match) throw new Error("missing Content-Length header in MCP frame");
+
+      const contentLength = Number.parseInt(match[1], 10);
+      const frameLength = headerEnd + FRAME_SEPARATOR.length + contentLength;
+      if (this.buffer.length < frameLength) return;
+
+      const frame = this.buffer.subarray(0, frameLength);
+      const body = this.buffer.subarray(headerEnd + FRAME_SEPARATOR.length, frameLength);
+      this.buffer = this.buffer.subarray(frameLength);
+      this.onFrame(frame, body.toString("utf8"));
+    }
+  }
 }
 
 function run(command, args, options = {}) {
@@ -137,8 +173,39 @@ async function main() {
   const child = spawn(process.execPath, [server], {
     cwd: root,
     env: process.env,
-    stdio: "inherit",
+    stdio: ["pipe", "pipe", "pipe"],
   });
+
+  const gate = new StatusPollingGate();
+  let upstreamQueue = Promise.resolve();
+
+  process.stdin.on("data", (chunk) => upstreamParser.push(chunk));
+  child.stdout.on("data", (chunk) => process.stdout.write(chunk));
+  child.stderr.on("data", (chunk) => process.stderr.write(chunk));
+
+  const upstreamParser = new McpFrameParser((frame, bodyText) => {
+    upstreamQueue = upstreamQueue.then(async () => {
+      let message = null;
+      try {
+        message = JSON.parse(bodyText);
+      } catch {
+        message = null;
+      }
+
+      const { waitMs, toolName, taskId } = gate.observeMessage(message);
+      if (waitMs > 0) {
+        log(`status polling gate active for ${toolName} (${taskId}); sleeping ${Math.ceil(waitMs / 1000)} seconds before forwarding`);
+        await sleep(waitMs);
+      }
+
+      child.stdin.write(frame);
+    }).catch((error) => {
+      log(`failed to forward MCP request: ${error.stack || error.message}`);
+      child.kill("SIGTERM");
+    });
+  });
+
+  process.stdin.on("end", () => child.stdin.end());
 
   child.on("exit", (code, signal) => {
     if (signal) process.kill(process.pid, signal);

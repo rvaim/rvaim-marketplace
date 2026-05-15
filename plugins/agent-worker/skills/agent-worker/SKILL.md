@@ -5,7 +5,7 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
 
 # Agent Worker
 
-你是 leader / reviewer。你的核心职责是规划、分派、审查和打回修改，而不是在主上下文里吞下所有实现细节。
+你是 leader / reviewer。这个插件的首要目标不是“把任务交给别人”，而是把实现细节、日志和中间推理留在 worker 侧，尽量节省主 agent 的上下文 token。你的职责是规划、分派、审查和打回修改，而不是在主上下文里吞下所有实现细节。
 
 本插件通过 bundled MCP server `agent-worker` 调用 `@rvaim/agent-worker-mcp`。MCP launcher 会在 server 启动前自动运行 npm 全局安装或更新 `@rvaim/agent-worker-mcp@latest` 和 `acpx@latest`，然后启动全局包内 `dist/index.js`。默认 worker agent 是 `claude`；如果用户配置了 `default_worker_agent` 或在对话中明确指定 worker，则按配置或用户指定值使用。
 
@@ -46,10 +46,17 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
    - `no_wait`: `true`
    - `isolate_worktree`: `true`
    - `capture_diff`: `true`
-3. `no_wait=true` 后使用低频轮询，不要反复追问 worker。核心目的是减少主 agent 的 token 消耗——每次状态查询都会把 worker 输出注入主上下文，频繁查询会迅速耗尽 token 预算：
-   - 启动后等待 15 分钟，期间不要查询状态；之后若仍无响应，每隔 5 分钟查询一次。
-   - 默认用 `get_worker_status` 且限制 `recent_lines`，不要频繁使用 `watch_worker` 复制长日志。
-4. 完成后调用 `read_worker_result`，并请求 `include_diff=true`、`include_test_log=true`。
+   - `context_mode`: `reference`
+   - `response_mode`: `summary`
+3. `no_wait=true` 后，状态查询必须走固定 300 秒门控，不允许主 agent 自己估算时间：
+   - launcher 会拦截 `get_worker_status` 和 `watch_worker`，在真正转发前强制执行一次 `sleep 300` 级别的等待。
+   - `run_worker` 只要使用了 `no_wait=true`，第一次状态查询也必须等满 300 秒；之后每次状态查询之间也至少间隔 300 秒。
+   - 主 agent 不要自行决定“已经等够了”，也不要改用高频 `watch_worker` 绕过该限制。
+   - 默认用 `get_worker_status` 且限制 `recent_lines`，只在确实需要更长日志 tail 时才使用 `watch_worker`。
+4. 完成后调用 `read_worker_result`：
+   - 默认先用 `view="summary"` 读取紧凑结果。
+   - 正式审查时改用 `view="review"`，只读取 diff、changed files、测试日志和必要摘要。
+   - 只有排查 MCP 产物本身时才用 `view="full"`，不要默认把完整 result JSON 塞回主上下文。
 5. 主 agent 必须亲自审查 changed files、diff、测试日志和 policy violations。worker 的自然语言总结不能作为接受依据。
 6. 有阻塞问题时调用 `revise_worker`，反馈必须具体到文件、行为和验收差距。默认最多 3 轮修订。
 7. 隔离 worktree 的结果只有在审查通过后才能调用 `apply_worker_patch`；先用 `check_only=true` 做可应用性检查。
@@ -58,6 +65,10 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
 ## Token 节省规则
 
 - 给 worker 的上下文只传必要文件。优先用 `context_files` 和 `skill_paths` 精准注入，不要复制整个代码库说明。
+- `context_files` 默认使用 `context_mode="reference"`，让 worker 按需读取文件路径；只有必须把文件全文塞进 prompt 时才用 `inline`。
+- `response_mode` 默认使用 `summary`。只有排查 worker/MCP 行为时才要求更重的完整输出。
+- `read_worker_result` 默认先看 `summary`，审查时用 `review`，不要把 `full` 当常规入口。
+- 状态查询默认用 `get_worker_status`，并把 `recent_lines` 压到很小；`watch_worker` 只是诊断工具，不是高频进度流。
 - 指令要短而完整：目标、边界、测试、输出格式，比背景叙述更重要。
 - worker 输出要求结构化、精简。主 agent 只读取 result、diff 和必要日志 tail。
 - 多个独立任务可以并行委托，但每个 worker 的写入范围必须互不重叠。
@@ -79,6 +90,11 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
     "dist/**",
     "node_modules/**"
   ],
+  "context_files": [
+    "docs/architecture.md"
+  ],
+  "context_mode": "reference",
+  "response_mode": "summary",
   "approval": "all",
   "mode": "exec",
   "no_wait": true,
@@ -94,6 +110,14 @@ description: 使用 agent-worker-mcp 把复杂任务委托给 Claude Code、Code
   }
 }
 ```
+
+## 推荐读取策略
+
+1. `run_worker(no_wait=true, response_mode="summary")`
+2. 300 秒后，如有必要再用 `get_worker_status`，并限制 `recent_lines`
+3. 完成后先 `read_worker_result(view="summary")`
+4. 确认值得审查后，再 `read_worker_result(view="review", include_diff=true, include_test_log=true)`
+5. 只有调试 MCP 产物异常时，才切到 `view="full"`
 
 ## 审查标准
 
