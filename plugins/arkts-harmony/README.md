@@ -6,6 +6,7 @@
 
 - ArkTS / TS 迁移规则 skill：Claude Code 使用 `/arkts-harmony:arkts-ts-rules`，Codex 使用 `$arkts-ts-rules`
 - HarmonyOS/OpenHarmony 开发文档查阅 skill：Claude Code 使用 `/arkts-harmony:harmonyos-docs`，Codex 使用 `$harmonyos-docs`
+- 文档查阅优先使用中文 OpenHarmony docs，中文入口或链接不可用时自动切换到英文应用开发文档入口
 - 修改 `.ets`、`.ts`、`.tsx` 文件后的轻量自动检查 hooks
 - 完整保留四份原始 Markdown 资料
 - 中文规则索引与资料清单
