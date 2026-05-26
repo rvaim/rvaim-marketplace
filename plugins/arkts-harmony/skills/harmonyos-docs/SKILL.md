@@ -29,6 +29,12 @@ https://raw.githubusercontent.com/rvaim/openharmony-docs/refs/heads/master/en/ap
 
 涵盖：Ability Kit、ArkUI、ArkTS、ArkData、媒体、图形、安全、网络、AI 等所有 Kit 的开发指南和设计说明。
 
+官方搜索兜底：
+
+```
+https://developer.huawei.com/consumer/cn/doc/search?type=guides&val={关键词}
+```
+
 ### API 参考
 
 中文入口：
@@ -49,11 +55,18 @@ https://raw.githubusercontent.com/rvaim/openharmony-docs/refs/heads/master/en/ap
 
 涵盖：所有模块的 API 接口定义、参数说明、返回值、枚举等精确接口文档。
 
+官方搜索兜底：
+
+```
+https://developer.huawei.com/consumer/cn/doc/search?type=API&val={关键词}
+```
+
 ## 选入口策略
 
 - 用户问 "怎么用 X"、"如何实现 Y"、"X 是什么" → 开发指南
 - 用户问 "X 的参数是什么"、"Y 返回什么类型"、"Z 接口签名" → API 参考
 - 不确定属于哪类 → 先查开发指南，目录中会有 API 参考的交叉链接
+- 中英文 raw 文档都没有结果 → 按同一问题类型使用华为开发者官方搜索；不确定属于哪类时同时查 guides 和 API
 
 ## 查找策略
 
@@ -63,7 +76,8 @@ https://raw.githubusercontent.com/rvaim/openharmony-docs/refs/heads/master/en/ap
 4. `Readme-CN.md` 结尾 → 子目录索引，继续下钻。
 5. 其他 `.md` 结尾 → 目标文档，拼接完整 URL 拉取内容。
 6. 如果中文入口、中文目录链接或中文目标文档拉取不到、返回 404、目录中没有匹配链接，切换到对应英文入口和英文基 URL 重新查找。英文目录使用 `Readme-EN.md`。
-7. 外部链接（`https://developer.huawei.com`、`https://gitcode.com`）→ 告知用户直接访问。
+7. 如果英文入口、英文目录链接或英文目标文档也拉取不到、返回 404、目录中没有匹配链接，打开或提供华为开发者官方搜索链接兜底。
+8. 外部链接（`https://gitcode.com` 等）→ 告知用户直接访问。
 
 ## URL 拼接规则
 
@@ -72,6 +86,7 @@ https://raw.githubusercontent.com/rvaim/openharmony-docs/refs/heads/master/en/ap
 - `../` 跳出当前目录 → 解析为更上层路径。
 - 优先用 `raw.githubusercontent.com` 的 raw Markdown 格式，而非 `github.com/blob/`。
 - 中文路径和英文路径只替换语言目录与索引后缀：`zh-cn/.../Readme-CN.md` 对应 `en/.../Readme-EN.md`。
+- 官方搜索中的 `{关键词}` 必须替换为 URL 编码后的查询词，例如组件名、Kit 名或 API 名。
 
 ## 开发指南顶层结构
 
@@ -102,6 +117,6 @@ https://raw.githubusercontent.com/rvaim/openharmony-docs/refs/heads/master/en/ap
 
 - **已知知识不查**：ArkTS 语法规则（如不用 `any`、不用 `var`）已在 `arkts-ts-rules` skill 中覆盖，不要重复查询。
 - **逐级查找**：不要猜测 URL，每级拉取目录后确认下一步。
-- **中文优先，英文兜底**：只有中文入口或中文链接不可用、找不到匹配项时，才使用英文入口。
+- **中文优先，英文兜底，官方搜索最后兜底**：只有中文入口或中文链接不可用、找不到匹配项时，才使用英文入口；中英文都没有结果时，打开或提供华为开发者官方搜索链接。
 - **长文档做摘要**：WebFetch 用 `prompt` 参数描述要提取的信息，避免全量返回。
-- **外部链接不可拉取**：非 raw.githubusercontent.com 域直接告知用户链接。
+- **外部链接处理**：华为开发者官方搜索是中英文 raw 文档都失败后的兜底，站点可能拦截命令行抓取；其他非 raw.githubusercontent.com 域直接告知用户链接。

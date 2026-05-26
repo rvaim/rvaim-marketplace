@@ -1,6 +1,6 @@
 {
   "name": "arkts-harmony",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "面向 ArkTS / TypeScript / HarmonyOS 开发的代码规范、迁移规则、性能实践和开发文档查阅插件。",
   "author": {
     "name": "rvaim",
