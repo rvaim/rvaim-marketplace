@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "arkts-harmony",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "source": {
         "source": "local",
         "path": "./plugins/arkts-harmony"
@@ -18,7 +18,7 @@
       "category": "Development",
       "interface": {
         "displayName": "ArkTS / HarmonyOS 开发规则",
-        "shortDescription": "ArkTS、TypeScript、HarmonyOS 迁移规则、代码审查与开发文档查阅。"
+        "shortDescription": "ArkTS、TypeScript、HarmonyOS 迁移规则、代码审查与 DevEco MCP 文档查阅。"
       }
     },
     {

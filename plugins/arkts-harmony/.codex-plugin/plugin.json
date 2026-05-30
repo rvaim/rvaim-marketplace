@@ -1,7 +1,7 @@
 {
   "name": "arkts-harmony",
-  "version": "1.0.4",
-  "description": "面向 ArkTS / TypeScript / HarmonyOS 开发的代码规范、迁移规则、性能实践和开发文档查阅插件。",
+  "version": "1.0.5",
+  "description": "面向 ArkTS / TypeScript / HarmonyOS 开发的代码规范、迁移规则、性能实践和 DevEco MCP 文档查阅插件。",
   "author": {
     "name": "rvaim",
     "url": "https://github.com/rvaim"
@@ -18,20 +18,21 @@
     "migration",
     "code-review",
     "api-reference",
-    "documentation"
+    "documentation",
+    "mcp"
   ],
   "skills": "./skills/",
-  "hooks": "./hooks/codex-hooks.json",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "ArkTS / HarmonyOS 开发规则",
-    "shortDescription": "ArkTS、TypeScript、HarmonyOS 迁移规则、代码审查与开发文档查阅。",
-    "longDescription": "提供 ArkTS 语法适配、TypeScript 到 ArkTS 迁移、高性能编程实践、HarmonyOS 开发约束等规则知识，以及 HarmonyOS/OpenHarmony 开发文档查阅能力，用于代码生成、代码审查、迁移改造和 API 查询。",
+    "shortDescription": "ArkTS、TypeScript、HarmonyOS 迁移规则、代码审查与 DevEco MCP 文档查阅。",
+    "longDescription": "提供 ArkTS 语法适配、TypeScript 到 ArkTS 迁移、高性能编程实践、HarmonyOS 开发约束等规则知识，以及基于 DevEco CodeGenie MCP 的 HarmonyOS/OpenHarmony 开发文档查阅能力，用于代码生成、代码审查、迁移改造和 API 查询。",
     "developerName": "rvaim",
     "category": "Development",
     "capabilities": [
       "Read",
       "Write",
-      "WebFetch"
+      "MCP"
     ],
     "websiteURL": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/arkts-harmony/README.md",
     "brandColor": "#0F766E",
@@ -41,7 +42,7 @@
       "使用 ArkTS / HarmonyOS 开发规则检查当前文件。",
       "根据 ArkTS 规则将这段 TypeScript 代码改造成 ArkTS 兼容写法。",
       "检查这次改动是否包含 ArkTS 不支持的 TypeScript 特性。",
-      "查阅 HarmonyOS/OpenHarmony 开发文档，确认这个 API 的用法。"
+      "通过 DevEco MCP 查阅 HarmonyOS/OpenHarmony 开发文档，确认这个 API 的用法。"
     ]
   }
 }
