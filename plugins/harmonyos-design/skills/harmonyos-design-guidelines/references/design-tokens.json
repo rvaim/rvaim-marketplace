@@ -1,0 +1,460 @@
+{
+  "metadata": {
+    "verifiedAt": "2026-07-22",
+    "colorFormat": "#AARRGGBB",
+    "colorHexCase": "lowercase-normalized",
+    "dimensionUnit": "vp",
+    "systemColorSource": "https://developer.huawei.com/consumer/cn/doc/design-guides/color-0000001776857164#section17672143841113",
+    "wearableColorSource": "https://developer.huawei.com/consumer/cn/doc/design-guides/color-0000001776857164#section8205174119302",
+    "cornerRadiusSource": "https://developer.huawei.com/consumer/cn/doc/design-guides/corner-radius-parameter-0000002556468705",
+    "paddingSource": "https://developer.huawei.com/consumer/cn/doc/design-guides/interval-parameter-0000002562577161",
+    "missingLevelPolicy": "仅保存官方全量表中出现的 Token，不推导缺失 level"
+  },
+  "systemColors": {
+    "brand": {
+      "semantic": "品牌色",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "warning": {
+      "semantic": "一级警示色",
+      "light": "#ffe84026",
+      "dark": "#ffd94838"
+    },
+    "alert": {
+      "semantic": "二级警示色",
+      "light": "#ffed6f21",
+      "dark": "#ffdb6b42"
+    },
+    "confirm": {
+      "semantic": "确认色",
+      "light": "#ff64bb5c",
+      "dark": "#ff5ba854"
+    },
+    "font_primary": {
+      "semantic": "一级文本",
+      "light": "#e5000000",
+      "dark": "#e5ffffff"
+    },
+    "font_secondary": {
+      "semantic": "二级文本",
+      "light": "#99000000",
+      "dark": "#99ffffff"
+    },
+    "font_tertiary": {
+      "semantic": "三级文本",
+      "light": "#66000000",
+      "dark": "#66ffffff"
+    },
+    "font_fourth": {
+      "semantic": "四级文本",
+      "light": "#33000000",
+      "dark": "#33ffffff"
+    },
+    "font_emphasize": {
+      "semantic": "高亮文本",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "font_on_primary": {
+      "semantic": "一级文本反色",
+      "light": "#ffffffff",
+      "dark": "#ffffffff"
+    },
+    "font_on_secondary": {
+      "semantic": "二级文本反色",
+      "light": "#99ffffff",
+      "dark": "#99ffffff"
+    },
+    "font_on_tertiary": {
+      "semantic": "三级文本反色",
+      "light": "#66ffffff",
+      "dark": "#66ffffff"
+    },
+    "font_on_fourth": {
+      "semantic": "四级文本反色",
+      "light": "#33ffffff",
+      "dark": "#33ffffff"
+    },
+    "icon_primary": {
+      "semantic": "一级图标",
+      "light": "#e5000000",
+      "dark": "#e5ffffff"
+    },
+    "icon_secondary": {
+      "semantic": "二级图标",
+      "light": "#99000000",
+      "dark": "#99ffffff"
+    },
+    "icon_tertiary": {
+      "semantic": "三级图标",
+      "light": "#66000000",
+      "dark": "#66ffffff"
+    },
+    "icon_fourth": {
+      "semantic": "四级图标",
+      "light": "#33000000",
+      "dark": "#33ffffff"
+    },
+    "icon_emphasize": {
+      "semantic": "高亮图标",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "icon_sub_emphasize": {
+      "semantic": "高亮辅助图标",
+      "light": "#660a59f7",
+      "dark": "#66317af7"
+    },
+    "icon_on_primary": {
+      "semantic": "一级图标反色",
+      "light": "#ffffffff",
+      "dark": "#ffffffff"
+    },
+    "icon_on_secondary": {
+      "semantic": "二级图标反色",
+      "light": "#99ffffff",
+      "dark": "#99ffffff"
+    },
+    "icon_on_tertiary": {
+      "semantic": "三级图标反色",
+      "light": "#66ffffff",
+      "dark": "#66ffffff"
+    },
+    "icon_on_fourth": {
+      "semantic": "四级图标反色",
+      "light": "#33ffffff",
+      "dark": "#33ffffff"
+    },
+    "background_primary": {
+      "semantic": "一级背景（实色/不透明色）",
+      "light": "#ffffffff",
+      "dark": "#ffe5e5e5"
+    },
+    "background_secondary": {
+      "semantic": "二级背景（实色/不透明色）",
+      "light": "#fff1f3f5",
+      "dark": "#ff191a1c"
+    },
+    "background_tertiary": {
+      "semantic": "三级背景（实色/不透明色）",
+      "light": "#ffe5e5ea",
+      "dark": "#ff202224"
+    },
+    "background_fourth": {
+      "semantic": "四级背景（实色/不透明色）",
+      "light": "#ffd1d1d6",
+      "dark": "#ff2e3033"
+    },
+    "background_emphasize": {
+      "semantic": "高亮背景（实色/不透明色）",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "comp_foreground_primary": {
+      "semantic": "前背景",
+      "light": "#ff000000",
+      "dark": "#ffe5e5e5"
+    },
+    "comp_background_primary": {
+      "semantic": "白色背景",
+      "light": "#ffffffff",
+      "dark": "#ff202224"
+    },
+    "comp_background_primary_contrary": {
+      "semantic": "常亮背景",
+      "light": "#ffffffff",
+      "dark": "#ffe5e5e5"
+    },
+    "comp_background_gray": {
+      "semantic": "灰色背景",
+      "light": "#fff1f3f5",
+      "dark": "#ffe5e5ea"
+    },
+    "comp_background_secondary": {
+      "semantic": "二级背景",
+      "light": "#19000000",
+      "dark": "#19ffffff"
+    },
+    "comp_background_tertiary": {
+      "semantic": "三级背景",
+      "light": "#0c000000",
+      "dark": "#0cffffff"
+    },
+    "comp_background_emphasize": {
+      "semantic": "高亮背景",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "comp_background_neutral": {
+      "semantic": "黑色中性高亮背景",
+      "light": "#ff000000",
+      "dark": "#ffffffff"
+    },
+    "comp_emphasize_secondary": {
+      "semantic": "20%高亮背景",
+      "light": "#330a59f7",
+      "dark": "#33317af7"
+    },
+    "comp_emphasize_tertiary": {
+      "semantic": "10%高亮背景",
+      "light": "#190a59f7",
+      "dark": "#19317af7"
+    },
+    "comp_divider": {
+      "semantic": "分割线颜色",
+      "light": "#33000000",
+      "dark": "#33ffffff"
+    },
+    "comp_common_contrary": {
+      "semantic": "通用反色",
+      "light": "#ffffffff",
+      "dark": "#ff000000"
+    },
+    "comp_background_focus": {
+      "semantic": "获焦态背景色",
+      "light": "#fff1f3f5",
+      "dark": "#ff000000"
+    },
+    "comp_focused_primary": {
+      "semantic": "获焦态一级反色",
+      "light": "#e5000000",
+      "dark": "#e5ffffff"
+    },
+    "comp_focused_secondary": {
+      "semantic": "获焦态二级反色",
+      "light": "#99000000",
+      "dark": "#99ffffff"
+    },
+    "comp_focused_tertiary": {
+      "semantic": "获焦态三级反色",
+      "light": "#66000000",
+      "dark": "#66ffffff"
+    },
+    "interactive_hover": {
+      "semantic": "通用悬停交互式颜色",
+      "light": "#0c000000",
+      "dark": "#0cffffff"
+    },
+    "interactive_pressed": {
+      "semantic": "通用按压交互式颜色",
+      "light": "#19000000",
+      "dark": "#19ffffff"
+    },
+    "interactive_focus": {
+      "semantic": "通用获焦交互式颜色",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "interactive_active": {
+      "semantic": "通用激活交互式颜色",
+      "light": "#ff0a59f7",
+      "dark": "#ff317af7"
+    },
+    "interactive_select": {
+      "semantic": "通用选择交互式颜色",
+      "light": "#330a59f7",
+      "dark": "#33317af7"
+    },
+    "interactive_click": {
+      "semantic": "通用点击交互式颜色",
+      "light": "#19000000",
+      "dark": "#19ffffff"
+    }
+  },
+  "wearableColors": {
+    "brand": {
+      "semantic": "品牌色",
+      "light": "#ff0a59f7",
+      "dark": "#ff1f71ff"
+    },
+    "warning": {
+      "semantic": "一级警示色",
+      "light": "#ffe84026",
+      "dark": "#ffe84026"
+    },
+    "alert": {
+      "semantic": "二级警示色",
+      "light": "#ffed6f21",
+      "dark": "#ffed6f21"
+    },
+    "confirm": {
+      "semantic": "确认色",
+      "light": "#ff64bb5c",
+      "dark": "#ff64bb5c"
+    },
+    "font_primary": {
+      "semantic": "一级文本",
+      "light": "#e5000000",
+      "dark": "#ffffffff"
+    },
+    "font_secondary": {
+      "semantic": "二级文本",
+      "light": "#99000000",
+      "dark": "#a9ffffff"
+    },
+    "font_tertiary": {
+      "semantic": "三级文本",
+      "light": "#66000000",
+      "dark": "#66ffffff"
+    },
+    "font_fourth": {
+      "semantic": "四级文本",
+      "light": "#33000000",
+      "dark": "#33ffffff"
+    },
+    "font_emphasize": {
+      "semantic": "高亮文本",
+      "light": "#ff0a59f7",
+      "dark": "#ff5ea1ff"
+    },
+    "font_on_primary": {
+      "semantic": "一级文本反色",
+      "light": "#ffffffff",
+      "dark": "#ffffffff"
+    },
+    "font_on_secondary": {
+      "semantic": "二级文本反色",
+      "light": "#99ffffff",
+      "dark": "#a9ffffff"
+    },
+    "font_on_tertiary": {
+      "semantic": "三级文本反色",
+      "light": "#66ffffff",
+      "dark": "#66ffffff"
+    },
+    "font_on_fourth": {
+      "semantic": "四级文本反色",
+      "light": "#33ffffff",
+      "dark": "#33ffffff"
+    },
+    "icon_primary": {
+      "semantic": "一级图标",
+      "light": "#e5000000",
+      "dark": "#ffffffff"
+    },
+    "icon_secondary": {
+      "semantic": "二级图标",
+      "light": "#a9000000",
+      "dark": "#a9ffffff"
+    },
+    "icon_tertiary": {
+      "semantic": "三级图标",
+      "light": "#66000000",
+      "dark": "#66ffffff"
+    },
+    "icon_fourth": {
+      "semantic": "四级图标",
+      "light": "#33000000",
+      "dark": "#33ffffff"
+    },
+    "icon_emphasize": {
+      "semantic": "高亮图标",
+      "light": "#ff0a59f7",
+      "dark": "#ff5ea1ff"
+    },
+    "icon_sub_emphasize": {
+      "semantic": "高亮辅助图标",
+      "light": "#660a597f",
+      "dark": "#665ea1ff"
+    },
+    "icon_on_primary": {
+      "semantic": "一级图标反色",
+      "light": "#ffffffff",
+      "dark": "#ffffffff"
+    },
+    "icon_on_secondary": {
+      "semantic": "二级图标反色",
+      "light": "#a9ffffff",
+      "dark": "#a9ffffff"
+    },
+    "icon_on_tertiary": {
+      "semantic": "三级图标反色",
+      "light": "#66ffffff",
+      "dark": "#66ffffff"
+    },
+    "icon_on_fourth": {
+      "semantic": "四级图标反色",
+      "light": "#33ffffff",
+      "dark": "#33ffffff"
+    },
+    "background_emphasize": {
+      "semantic": "高亮背景（实色/不透明色）",
+      "light": "#ff0a59f7",
+      "dark": "#ff1f71ff"
+    },
+    "comp_background_emphasize": {
+      "semantic": "高亮背景",
+      "light": "#ff0a59f7",
+      "dark": "#ff1f71ff"
+    },
+    "comp_emphasize_secondary": {
+      "semantic": "20%高亮背景",
+      "light": "#330a59f7",
+      "dark": "#331f71ff"
+    },
+    "comp_emphasize_tertiary": {
+      "semantic": "10%高亮背景",
+      "light": "#190a59f7",
+      "dark": "#191f71ff"
+    },
+    "comp_divider": {
+      "semantic": "分割线颜色",
+      "light": "#33000000",
+      "dark": "#33ffffff"
+    }
+  },
+  "cornerRadiusVp": {
+    "corner_radius_none": 0,
+    "corner_radius_level1": 2,
+    "corner_radius_level2": 4,
+    "corner_radius_level3": 6,
+    "corner_radius_level4": 8,
+    "corner_radius_level5": 10,
+    "corner_radius_level6": 12,
+    "corner_radius_level7": 14,
+    "corner_radius_level8": 16,
+    "corner_radius_level9": 18,
+    "corner_radius_level10": 20,
+    "corner_radius_level11": 22,
+    "corner_radius_level12": 24,
+    "corner_radius_level13": 26,
+    "corner_radius_level16": 32,
+    "corner_radius_level18": 36
+  },
+  "paddingVp": {
+    "Padding_level0": 0,
+    "Padding_level1": 2,
+    "Padding_level2": 4,
+    "Padding_level3": 6,
+    "Padding_level4": 8,
+    "Padding_level5": 10,
+    "Padding_level6": 12,
+    "Padding_level7": 14,
+    "Padding_level8": 16,
+    "Padding_level9": 18,
+    "Padding_level10": 20,
+    "Padding_level11": 22,
+    "Padding_level12": 24,
+    "Padding_level13": 26,
+    "Padding_level16": 32,
+    "Padding_level17": 34,
+    "Padding_level18": 36,
+    "Padding_level19": 38,
+    "Padding_level20": 40,
+    "Padding_level21": 42,
+    "Padding_level22": 44,
+    "Padding_level23": 46,
+    "Padding_level25": 50,
+    "Padding_level26": 52,
+    "Padding_level27": 54,
+    "Padding_level28": 56,
+    "Padding_level29": 58,
+    "Padding_level30": 60,
+    "Padding_level32": 64,
+    "Padding_level33": 66,
+    "Padding_level34": 68,
+    "Padding_level35": 70,
+    "Padding_level36": 72
+  }
+}

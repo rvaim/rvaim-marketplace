@@ -1,0 +1,4 @@
+interface:
+  display_name: "HarmonyOS 官方设计指南"
+  short_description: "依据华为官方规范设计和审查 HarmonyOS 应用界面。"
+  default_prompt: "使用 $harmonyos-design-guidelines 设计或审查这个 HarmonyOS 界面。"

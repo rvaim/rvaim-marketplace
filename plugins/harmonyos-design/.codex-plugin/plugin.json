@@ -1,0 +1,40 @@
+{
+  "name": "harmonyos-design",
+  "version": "1.0.0",
+  "description": "依据华为官方 HarmonyOS 通用设计基础进行界面设计、Token 选型、设计转代码与视觉审查。",
+  "author": {
+    "name": "rvaim",
+    "url": "https://github.com/rvaim"
+  },
+  "homepage": "https://github.com/rvaim/rvaim-marketplace/tree/main/plugins/harmonyos-design",
+  "repository": "https://github.com/rvaim/rvaim-marketplace",
+  "keywords": [
+    "harmonyos",
+    "huawei",
+    "design-system",
+    "design-tokens",
+    "arkui",
+    "color",
+    "typography",
+    "immersive-light"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "HarmonyOS 官方设计指南",
+    "shortDescription": "沉淀华为官方 HarmonyOS 视觉规范、Token 与跨设备设计审查。",
+    "longDescription": "覆盖 HarmonyOS 通用设计基础中的设计理念、色彩、鸿蒙黑体、文本排版、应用图标、HarmonyOS Symbol、沉浸光感、圆角和间隔，并保存系统与智能穿戴颜色 Token、排版规格及跨设备参数，用于界面设计、设计转代码和视觉审查。",
+    "developerName": "rvaim",
+    "category": "Development",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/rvaim/rvaim-marketplace/tree/main/plugins/harmonyos-design",
+    "brandColor": "#0A59F7",
+    "defaultPrompt": [
+      "依据 HarmonyOS 官方设计指南设计这个界面，并给出所用 Token。",
+      "检查当前界面是否符合 HarmonyOS 色彩、排版、圆角和间隔规范。",
+      "把这份设计稿转换为支持深浅色与多设备的 HarmonyOS 视觉规格。"
+    ]
+  }
+}

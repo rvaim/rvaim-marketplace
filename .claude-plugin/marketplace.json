@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "rvaim-marketplace",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "rvaim 的个人 Claude Code 插件市场，用于沉淀个人开发规则、代码迁移规范、审查习惯和自动化工作流。",
   "owner": {
     "name": "rvaim"
@@ -68,6 +68,37 @@
         "manifest"
       ],
       "source": "./plugins/plugin-creator",
+      "strict": true
+    },
+    {
+      "name": "harmonyos-design",
+      "description": "依据华为官方 HarmonyOS 通用设计基础进行界面设计、Token 选型、设计转代码与视觉审查。",
+      "version": "1.0.0",
+      "author": {
+        "name": "rvaim"
+      },
+      "homepage": "https://github.com/rvaim/rvaim-marketplace/tree/main/plugins/harmonyos-design",
+      "repository": "https://github.com/rvaim/rvaim-marketplace",
+      "keywords": [
+        "harmonyos",
+        "huawei",
+        "design-system",
+        "design-tokens",
+        "arkui",
+        "color",
+        "typography",
+        "immersive-light"
+      ],
+      "category": "Development",
+      "tags": [
+        "harmonyos",
+        "design-guidelines",
+        "design-tokens",
+        "multi-device",
+        "dark-mode",
+        "visual-review"
+      ],
+      "source": "./plugins/harmonyos-design",
       "strict": true
     }
   ]

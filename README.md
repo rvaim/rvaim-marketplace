@@ -7,6 +7,7 @@ rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace
 | 插件 | 用途 |
 |---|---|
 | `arkts-harmony` | ArkTS / TypeScript / HarmonyOS 迁移规则、代码审查规则和自动后置检查。 |
+| `harmonyos-design` | 华为官方 HarmonyOS 通用设计基础、设计 Token、跨设备界面设计与视觉审查。 |
 | `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 |
 
 ## 目录结构
@@ -20,6 +21,7 @@ rvaim-marketplace/
 │       └── marketplace.json      # Codex marketplace
 ├── plugins/                      # 插件源码
 │   ├── arkts-harmony/
+│   ├── harmonyos-design/
 │   ├── plugin-creator/
 └── README.md
 ```
@@ -42,6 +44,7 @@ rvaim-marketplace/
 
 ```text
 /plugin install arkts-harmony@rvaim-marketplace
+/plugin install harmonyos-design@rvaim-marketplace
 /plugin install plugin-creator@rvaim-marketplace
 /reload-plugins
 ```
@@ -51,6 +54,7 @@ rvaim-marketplace/
 ```text
 /arkts-harmony:arkts-ts-rules
 /arkts-harmony:harmonyos-docs
+/harmonyos-design:harmonyos-design-guidelines
 /plugin-creator:create-dual-plugin
 /plugin-creator:review-plugin
 ```
@@ -60,6 +64,7 @@ rvaim-marketplace/
 ```text
 /plugin marketplace update rvaim-marketplace
 /plugin update arkts-harmony@rvaim-marketplace
+/plugin update harmonyos-design@rvaim-marketplace
 /plugin update plugin-creator@rvaim-marketplace
 /reload-plugins
 ```
@@ -105,6 +110,7 @@ Codex marketplace 文件位于：
 ```text
 $arkts-ts-rules
 $harmonyos-docs
+$harmonyos-design-guidelines
 $create-dual-plugin
 $review-plugin
 ```

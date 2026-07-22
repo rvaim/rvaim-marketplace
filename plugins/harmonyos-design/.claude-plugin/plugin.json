@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "harmonyos-design",
+  "version": "1.0.0",
+  "description": "依据华为官方 HarmonyOS 通用设计基础进行界面设计、Token 选型、设计转代码与视觉审查。",
+  "author": {
+    "name": "rvaim",
+    "url": "https://github.com/rvaim"
+  },
+  "homepage": "https://github.com/rvaim/rvaim-marketplace/tree/main/plugins/harmonyos-design",
+  "repository": "https://github.com/rvaim/rvaim-marketplace",
+  "keywords": [
+    "harmonyos",
+    "huawei",
+    "design-system",
+    "design-tokens",
+    "arkui",
+    "color",
+    "typography",
+    "immersive-light"
+  ],
+  "skills": "./skills/"
+}
