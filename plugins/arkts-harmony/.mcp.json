@@ -1,10 +1,35 @@
 {
   "mcpServers": {
-    "deveco_mcp": {
+    "deveco-mcp": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
         "@deveco-codegenie/mcp@beta"
+      ]
+    },
+    "deveco-arkts-lsp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@rvaim/deveco-arkts-lsp-temp"
+      ]
+    },
+    "deveco-mobile-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@rvaim/deveco-mobile-mcp-temp"
+      ]
+    },
+    "harmonyos-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "harmonyos-mcp"
       ]
     }
   }

@@ -6,7 +6,7 @@ rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace
 
 | 插件 | 用途 |
 |---|---|
-| `arkts-harmony` | ArkTS / TypeScript / HarmonyOS 迁移规则、代码审查规则和自动后置检查。 |
+| `arkts-harmony` | ArkTS / HarmonyOS 迁移与审查规则，以及文档查询、代码智能、设备自动化 MCP。 |
 | `harmonyos-design` | 华为官方 HarmonyOS 通用设计基础、设计 Token、跨设备界面设计与视觉审查。 |
 | `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 |
 

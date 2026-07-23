@@ -11,7 +11,7 @@ description: 查阅 HarmonyOS/OpenHarmony 应用开发文档。仅在你不确�
 
 使用插件内置的 DevEco CodeGenie MCP 查询文档。
 
-插件 MCP 配置位于 `plugins/arkts-harmony/.mcp.json`，server 名称为 `deveco_mcp`：
+插件 MCP 配置位于 `plugins/arkts-harmony/.mcp.json`，server 名称为 `deveco-mcp`：
 
 ```json
 {
@@ -26,7 +26,7 @@ description: 查阅 HarmonyOS/OpenHarmony 应用开发文档。仅在你不确�
 ## 使用策略
 
 1. 先判断问题是否确实需要查文档：API 签名、参数、返回值、组件属性、Kit 用法、版本差异、示例代码等需要查询；ArkTS 基础语法约束优先使用 `arkts-ts-rules`。
-2. 通过 MCP 查找 HarmonyOS/OpenHarmony 文档。Codex 环境中如需发现工具，先用 `tool_search` 搜索 `HarmonyOS docs`、`DevEco`、`CodeGenie` 或 `deveco_mcp`；Claude Code 环境中查看已启用 MCP 工具列表。
+2. 通过 MCP 查找 HarmonyOS/OpenHarmony 文档。Codex 环境中如需发现工具，先用 `tool_search` 搜索 `HarmonyOS docs`、`DevEco`、`CodeGenie` 或 `deveco-mcp`；Claude Code 环境中查看已启用 MCP 工具列表。
 3. 如果 MCP 暴露 `harmonyos_knowledge_search` 或同等语义工具，优先使用该工具。
 4. 查询关键词保持短而精确，包含组件/API/Kit 名称和问题类型，例如 `Navigation titleMode API`、`List contentStartOffset`、`AbilityStage onCreate`。
 5. 需要区分指南和 API 时，在关键词中显式加入 `开发指南`、`API 参考`、`参数`、`返回值`、`示例` 等限定词。

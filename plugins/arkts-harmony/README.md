@@ -6,7 +6,10 @@
 
 - ArkTS / TS 迁移规则 skill：Claude Code 使用 `/arkts-harmony:arkts-ts-rules`，Codex 使用 `$arkts-ts-rules`
 - HarmonyOS/OpenHarmony 开发文档查阅 skill：Claude Code 使用 `/arkts-harmony:harmonyos-docs`，Codex 使用 `$harmonyos-docs`
-- 文档查阅通过插件内置 DevEco CodeGenie MCP：`npx -y @deveco-codegenie/mcp@beta`
+- DevEco CodeGenie MCP：查询 HarmonyOS/OpenHarmony 开发文档
+- ArkTS LSP MCP：查找定义、引用、悬浮信息、文件符号和调用层级
+- DevEco Mobile MCP：连接 HarmonyOS 设备并执行应用安装、启动、交互和截图
+- HarmonyOS MCP：驱动 DevEco 工具链完成模拟器管理、构建、安装、UI 自动化和日志检查
 - 修改 `.ets`、`.ts`、`.tsx` 文件后的轻量自动检查 hooks
 - 完整保留四份原始 Markdown 资料
 - 中文规则索引与资料清单
@@ -67,12 +70,25 @@ codex_hooks = true
 
 脚本只做轻量扫描，不会替代编译器或完整代码审查。
 
-## 文档查询 MCP
+## MCP 服务
 
-插件声明的 MCP server 名称为 `deveco_mcp`：
+插件声明四个 MCP server：
 
-```bash
-npx -y @deveco-codegenie/mcp@beta
-```
+| server | 用途 | 启动方式 |
+|---|---|---|
+| `deveco-mcp` | HarmonyOS/OpenHarmony 文档查询 | `npx -y @deveco-codegenie/mcp@beta` |
+| `deveco-arkts-lsp` | ArkTS 定义、引用、悬浮信息、符号与调用层级 | `npx -y @rvaim/deveco-arkts-lsp-temp` |
+| `deveco-mobile-mcp` | HarmonyOS/iOS/Android 设备自动化 | `npx -y @rvaim/deveco-mobile-mcp-temp` |
+| `harmonyos-mcp` | DevEco 模拟器、构建、安装、启动、UI 自动化与日志 | `npx -y harmonyos-mcp` |
 
-启用插件后，`harmonyos-docs` skill 会优先使用该 MCP 暴露的 HarmonyOS/OpenHarmony 文档查询工具，不再维护 raw GitHub 文档 URL 或华为开发者搜索兜底流程。
+正式包名恢复前，插件临时使用以上两个带 `-temp` 后缀的 npm 包，并由 npm 的 `latest` 标签解析当前最新版本。两个包的功能源码来自对应上游仓库，未修改其业务代码；正式包可重新发布后再切回正式包名。
+
+### 前置条件
+
+- Node.js 20 或更高版本，并可使用 `npm` 和 `npx`。
+- 使用 `deveco-arkts-lsp` 时已安装 DevEco Studio 或 HarmonyOS SDK；默认把 MCP 进程当前目录作为项目目录，也可设置 `PROJECT_PATH`。
+- 使用 `deveco-mobile-mcp` 操作 HarmonyOS 设备时，已安装并配置 `hdc`，且设备或模拟器可连接。
+- 使用 `harmonyos-mcp` 时已安装 DevEco Studio，并可使用 `hdc`、`hvigorw` 和 Emulator；非标准安装路径可通过 `DEVECO_STUDIO_HOME` 指定。
+- 首次启动外部 MCP 时可以访问 npm registry。
+
+启用插件后，`harmonyos-docs` skill 会优先使用 `deveco-mcp` 暴露的文档查询工具，不再维护 raw GitHub 文档 URL 或华为开发者搜索兜底流程。
