@@ -13,7 +13,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@rvaim/deveco-arkts-lsp-temp"
+        "@rvaim/deveco-arkts-lsp"
       ]
     },
     "deveco-mobile-mcp": {
@@ -21,7 +21,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@rvaim/deveco-mobile-mcp-temp"
+        "@rvaim/deveco-mobile-mcp"
       ]
     },
     "harmonyos-mcp": {

@@ -77,11 +77,11 @@ codex_hooks = true
 | server | 用途 | 启动方式 |
 |---|---|---|
 | `deveco-mcp` | HarmonyOS/OpenHarmony 文档查询 | `npx -y @deveco-codegenie/mcp@beta` |
-| `deveco-arkts-lsp` | ArkTS 定义、引用、悬浮信息、符号与调用层级 | `npx -y @rvaim/deveco-arkts-lsp-temp` |
-| `deveco-mobile-mcp` | HarmonyOS/iOS/Android 设备自动化 | `npx -y @rvaim/deveco-mobile-mcp-temp` |
+| `deveco-arkts-lsp` | ArkTS 定义、引用、悬浮信息、符号与调用层级 | `npx -y @rvaim/deveco-arkts-lsp` |
+| `deveco-mobile-mcp` | HarmonyOS/iOS/Android 设备自动化 | `npx -y @rvaim/deveco-mobile-mcp` |
 | `harmonyos-mcp` | DevEco 模拟器、构建、安装、启动、UI 自动化与日志 | `npx -y harmonyos-mcp` |
 
-正式包名恢复前，插件临时使用以上两个带 `-temp` 后缀的 npm 包，并由 npm 的 `latest` 标签解析当前最新版本。两个包的功能源码来自对应上游仓库，未修改其业务代码；正式包可重新发布后再切回正式包名。
+上述两个 `@rvaim` MCP 依赖不锁定具体版本，由 npm 的 `latest` 标签解析当前正式版本。两个包的功能源码来自对应上游仓库，未修改其业务代码。
 
 ### 前置条件
 
