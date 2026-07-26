@@ -1,6 +1,6 @@
 {
   "name": "arkts-harmony",
-  "version": "1.1.0+codex.20260726080658",
+  "version": "1.1.0+codex.20260726082211",
   "description": "\u9762\u5411 ArkTS / TypeScript / HarmonyOS \u5f00\u53d1\u7684\u4ee3\u7801\u89c4\u8303\u3001\u8fc1\u79fb\u89c4\u5219\uff0c\u4ee5\u53ca\u5b98\u65b9 DevEco CLI \u5de5\u7a0b\u5168\u751f\u547d\u5468\u671f\u3001\u5728\u7ebf\u77e5\u8bc6\u67e5\u8be2\u3001\u4ee3\u7801\u667a\u80fd\u548c\u8bbe\u5907\u81ea\u52a8\u5316 MCP \u80fd\u529b\u3002",
   "author": {
     "name": "rvaim",

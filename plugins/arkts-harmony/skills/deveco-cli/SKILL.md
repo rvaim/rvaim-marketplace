@@ -1,6 +1,6 @@
 ---
 name: deveco-cli
-description: 使用上游官方 @deveco/deveco-cli 管理 HarmonyOS 应用开发全生命周期，包括工程脚手架、同步与构建、安装运行、多设备、多模块、模拟器实例与镜像、许可、hilog 与崩溃日志、本地文档、HarmonyOS Skills 和 ArkTS/C++ 静态检查。处理含 build-profile.json5 或 oh-package.json5 的工程，或用户提及 HarmonyOS、鸿蒙、DevEco、ArkTS、ArkUI、设备、模拟器、构建、运行、日志、文档或 Skills 时使用。
+description: 使用上游官方 @deveco/deveco-cli 管理 HarmonyOS 应用开发全生命周期，包括工程脚手架、同步与构建、安装运行、多设备、多模块、用户明确要求后才可启用的模拟器实例与镜像、许可、hilog 与崩溃日志、本地文档、HarmonyOS Skills 和 ArkTS/C++ 静态检查。处理含 build-profile.json5 或 oh-package.json5 的工程，或用户提及 HarmonyOS、鸿蒙、DevEco、ArkTS、ArkUI、设备、模拟器、构建、运行、日志、文档或 Skills 时使用。
 ---
 
 # DevEco CLI
@@ -31,14 +31,26 @@ npx -y @deveco/deveco-cli <command>
 | 构建、安装并启动一个或多个模块 | `run` |
 | 复用已有产物部署 | `run --skip-build` |
 | 设备列表和详情 | `device list`、`device view` |
-| 模拟器实例启停与创建删除 | `emulator list/start/stop/create/delete` |
-| 模拟器镜像与许可 | `emulator image`、`emulator license` |
+| 用户明确要求的模拟器实例操作 | `emulator list/start/stop/create/delete` |
+| 用户明确要求的模拟器镜像与许可 | `emulator image`、`emulator license` |
 | `hilog`、时间范围、关键词与崩溃日志 | `log` |
 | 本地 HarmonyOS 文档 | `docs search/read/catalog` |
 | HarmonyOS Skills | `skills list/find/add/remove` |
 | `.ets`、C/C++ 静态检查 | 插件内 `deveco-cli` MCP 的 `check` 工具 |
 
 `build` 和 `run` 会判断是否需要工程同步或重新构建；配置未变化时允许 CLI 跳过重复工作。`run --module` 支持多个模块，并兼容在线签名场景。
+
+## 模拟器默认禁用
+
+1. 默认不得调用任何模拟器相关命令或工具，包括只读查询、实例启停、创建删除、镜像查询下载删除和许可查看接受。
+2. “构建工程”“运行应用”“测试应用”“选择一个设备”等一般请求不构成模拟器授权。没有可用真机时停止并说明情况，不得自动查询、启动、创建或下载模拟器。
+3. `device list` 可能被动显示已经运行的模拟器；没有模拟器授权时不得选择或操作该目标，只处理真机结果。
+4. 用户明确要求“查看模拟器”时，只允许执行 `emulator list`；明确要求查看镜像或许可时，才允许执行对应只读命令。
+5. 用户明确要求“使用模拟器运行”时，只允许使用已在运行的模拟器。没有运行中的实例时，先询问是否启动指定实例；不得据此推导出创建实例或下载镜像的授权。
+6. `emulator start/stop/create/delete`、`emulator image download/remove` 和 `emulator license accept` 分别需要用户明确要求对应操作，不能用一次笼统授权替代。
+7. 下载镜像前说明设备类型、系统版本、可获得的大小与剩余磁盘空间；创建实例前说明名称、设备类型、系统版本和磁盘写入影响，然后再次取得明确同意。
+8. 创建所需镜像不存在时停止。创建授权不包含镜像下载，只有再次取得独立下载授权后才能继续。
+9. 这些约束同样适用于 `harmonyos-mcp`、底层模拟器命令和其他工具，不得通过替代入口绕过。
 
 ## 工作流
 
@@ -47,7 +59,7 @@ npx -y @deveco/deveco-cli <command>
 1. 确认目标目录不存在或为空。
 2. 使用 `create --app-name <name> --project-path <path>` 创建工程。
 3. 进入工程根目录并运行 `build`。
-4. 使用 `device list` 或 `emulator list` 确认目标。
+4. 默认使用 `device list` 确认真机目标；只有用户已明确要求使用模拟器时，才按“模拟器默认禁用”规则处理模拟器。
 5. 使用 `run --module <module> --device <name-or-serial>` 安装并启动。
 6. 使用 `log --level E --bundle-name <bundle>` 检查错误。
 
@@ -75,7 +87,7 @@ npx -y @deveco/deveco-cli <command>
 
 ## 工具分工
 
-- 工程脚手架、构建、安装运行、设备、模拟器、镜像、许可、日志、本地文档和 Skills：使用本 Skill 调用官方 CLI。
+- 工程脚手架、构建、安装运行、设备、日志、本地文档和 Skills：使用本 Skill 调用官方 CLI；模拟器、镜像和许可只有在用户明确要求后才能使用。
 - `.ets` 与 C/C++ 静态语法诊断：使用插件内官方 `deveco-cli` MCP 的 `check`，文件路径相对工程根目录。
 - 定义、引用、悬浮信息、文件符号和调用层级：使用 `deveco-arkts-lsp`。
 - UI 树、截图、点击、滑动、输入和页面状态等待：使用 `harmonyos-mcp`。
@@ -88,8 +100,9 @@ npx -y @deveco/deveco-cli <command>
 - `create` 前确认目标目录不存在或为空，避免覆盖用户文件。
 - `build clean` 会删除构建产物，只在确需干净构建时使用。
 - `run --uninstall` 会删除设备上的旧应用及其数据，只有用户明确要求或签名冲突确需处理时才使用。
-- `emulator delete`、`emulator image remove`、`skills add/remove` 会修改外部状态，只在用户请求对应操作时执行。
+- 所有模拟器操作默认禁用，严格遵循“模拟器默认禁用”中的逐项授权规则。
+- `emulator delete`、`emulator image remove`、`skills add/remove` 会修改外部状态，只在用户明确请求对应操作时执行。
 - `emulator license accept` 必须由用户在交互式终端阅读并接受协议，Agent 不代替确认。
-- 镜像下载可能耗时较长；失败后不要自动反复重试。
+- 镜像下载会大量写入磁盘且可能耗时较长；未获得独立明确授权时不得执行，失败后不要自动反复重试。
 - `emulator create` 超时后不要修改 SDK 文件或反复创建；请用户打开 DevEco Studio 设备管理器确认。
 - `log --follow` 是持续命令，完成诊断后及时停止；它不能与 `--to` 同时使用。

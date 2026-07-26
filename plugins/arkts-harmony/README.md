@@ -6,12 +6,12 @@
 
 - ArkTS / TS 迁移规则 skill：Claude Code 使用 `/arkts-harmony:arkts-ts-rules`，Codex 使用 `$arkts-ts-rules`
 - HarmonyOS/OpenHarmony 开发文档查阅 skill：Claude Code 使用 `/arkts-harmony:harmonyos-docs`，Codex 使用 `$harmonyos-docs`
-- DevEco CLI skill：优先使用上游官方 CLI 完成工程脚手架、同步构建、多模块安装运行、在线签名、设备、模拟器实例与镜像、许可、日志、本地文档和 Skills 管理
+- DevEco CLI skill：优先使用上游官方 CLI 完成工程脚手架、同步构建、多模块安装运行、在线签名、设备、日志、本地文档和 Skills 管理；模拟器实例、镜像与许可默认禁用，仅在用户明确要求后使用
 - ArkTS Knowledge Search MCP：独立提供 DevEco Code `arkts_knowledge_search` 在线知识查询
 - DevEco CLI MCP：使用上游官方 `.ets` 与 C/C++ 静态检查服务
 - ArkTS LSP MCP：查找定义、引用、悬浮信息、文件符号和调用层级
 - DevEco Mobile MCP：连接 HarmonyOS 设备并执行应用安装、启动、交互和截图
-- HarmonyOS MCP：驱动 DevEco 工具链完成模拟器管理、构建、安装、UI 自动化和日志检查
+- HarmonyOS MCP：驱动 DevEco 工具链完成构建、安装、UI 自动化和日志检查；其中模拟器管理同样默认禁用
 - 修改 `.ets`、`.ts`、`.tsx` 文件后的轻量自动检查 hooks
 - 完整保留四份原始 Markdown 资料
 - 中文规则索引与资料清单
@@ -86,7 +86,7 @@ codex_hooks = true
 | `deveco-cli` | 上游官方 `.ets` 与 C/C++ 静态检查 | `npx -y @deveco/deveco-cli serve mcp` |
 | `deveco-arkts-lsp` | ArkTS 定义、引用、悬浮信息、符号与调用层级 | `npx -y @rvaim/deveco-arkts-lsp` |
 | `deveco-mobile-mcp` | HarmonyOS/iOS/Android 设备自动化 | `npx -y @rvaim/deveco-mobile-mcp` |
-| `harmonyos-mcp` | DevEco 模拟器、构建、安装、启动、UI 自动化与日志 | `npx -y harmonyos-mcp` |
+| `harmonyos-mcp` | DevEco 构建、安装、启动、UI 自动化与日志；模拟器能力仅按明确授权使用 | `npx -y harmonyos-mcp` |
 
 所有启动命令均不锁定具体版本，由 npm 解析当前正式版本。`@rvaim/arkts_knowledge_search` 不安装或启动 DevEco Code，也不包含 `@deveco/deveco-cli`；两者是相互独立的插件依赖。
 
@@ -98,7 +98,7 @@ codex_hooks = true
 npx -y @deveco/deveco-cli <command>
 ```
 
-- `create`、`build`、`run`、`device`、`emulator`、`log`、`docs` 和 `skills` 优先使用上游官方 CLI。
+- `create`、`build`、`run`、`device`、`log`、`docs` 和 `skills` 优先使用上游官方 CLI；`emulator` 仅在用户明确要求对应操作后使用。
 - 官方 CLI 会封装 `ohpm`、`hvigor`、`hdc`、模拟器和 `hilog`，在已有对应能力时不直接拼接底层命令。
 - `build` 与 `run` 会判断是否需要重新同步或构建；`run` 支持一次部署多个模块并兼容在线签名。
 - `.ets` 与 C/C++ 静态检查使用官方 `deveco-cli` MCP。
@@ -115,15 +115,17 @@ npx -y @deveco/deveco-cli <command>
 | 清理构建产物 | `build clean` |
 | 构建、安装并启动一个或多个模块 | `run` |
 | 部署已有产物 | `run --skip-build` |
-| 查询真机和运行中的模拟器 | `device list/view` |
-| 管理模拟器实例 | `emulator list/start/stop/create/delete` |
-| 管理系统镜像与许可 | `emulator image`、`emulator license` |
+| 查询连接设备；未获授权时只处理真机 | `device list/view` |
+| 用户明确要求后管理模拟器实例 | `emulator list/start/stop/create/delete` |
+| 用户明确要求后管理系统镜像与许可 | `emulator image`、`emulator license` |
 | 查询、筛选、追踪 `hilog` 与崩溃日志 | `log` |
 | 查询内置 HarmonyOS 文档 | `docs search/read/catalog` |
 | 查询和管理 HarmonyOS Skills | `skills list/find/add/remove` |
 | 检查 `.ets` 与 C/C++ 语法 | `serve mcp` |
 
 官方 Skills 目录可以按需发现 ArkUI、ArkTS 检索、崩溃、卡死、内存泄漏、测试和多设备适配等专项能力。插件只执行 `skills list/find` 做只读发现；安装或移除前需要用户确认，不自动使用 `skills add --all`，也不把全部上游 Skill 源码复制进本插件。
+
+模拟器能力默认完全禁用，普通的构建、运行、测试或设备选择请求不会触发模拟器查询、启停、创建、镜像下载或许可操作，也不会在真机不可用时自动回退到模拟器。用户明确要求使用模拟器后仍按操作逐项授权；镜像下载和实例创建需要分别说明磁盘影响并再次确认，创建缺少镜像时不能自动下载。该约束同时适用于官方 CLI、`harmonyos-mcp` 和底层命令。
 
 详细参数和安全边界由 `deveco-cli` skill 提供。插件不会运行 `devecocli update` 或 `init`：前者由未锁版本的 `npx` 替代，后者会重复修改 Agent 配置。
 
