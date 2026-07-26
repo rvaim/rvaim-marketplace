@@ -38,9 +38,10 @@ skills/arkts-ts-rules/references/SOURCE_MANIFEST.md
 2. 如果涉及语法迁移、编译错误、ArkTS 约束、性能优化，先读取 `rule-index.md` 定位相关条目。
 3. 对具体规则、例子、改法不要凭记忆编造；需要精确判断时读取 `original-docs/` 中对应原文。
 4. 需要精确定位定义、引用、悬浮信息、文件符号或调用层级时，优先使用插件提供的 `deveco-arkts-lsp` MCP；工具不可用时再使用代码搜索。
-5. 需要驱动 DevEco 工具链完成模拟器管理、构建、安装、启动、UI 自动化或日志检查时，优先使用 `harmonyos-mcp`；需要 HarmonyOS、iOS、Android 通用设备操作时使用 `deveco-mobile-mcp`。
-6. 修改代码时保持合法 TS/ArkTS，避免只做正则替换。
-7. 输出时优先说明：问题点、原因、改法、行为风险。
+5. 需要创建、构建、安装运行、管理 HarmonyOS 设备或模拟器、读取日志时，优先使用 `deveco-cli` skill 调用上游官方 `@deveco/deveco-cli`。
+6. 需要 `.ets` 或 C/C++ 静态语法诊断时，使用插件提供的官方 `deveco-cli` MCP；需要 UI 树、截图、点击、滑动、输入或页面状态等待时使用 `harmonyos-mcp`；需要 HarmonyOS、iOS、Android 通用设备操作时使用 `deveco-mobile-mcp`。
+7. 修改代码时保持合法 TS/ArkTS，避免只做正则替换。
+8. 输出时优先说明：问题点、原因、改法、行为风险。
 
 ## 高频硬性规则
 

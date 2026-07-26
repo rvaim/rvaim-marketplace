@@ -1,11 +1,21 @@
 {
   "mcpServers": {
-    "deveco-mcp": {
+    "arkts-knowledge-search": {
       "type": "stdio",
       "command": "npx",
       "args": [
         "-y",
-        "@deveco-codegenie/mcp@beta"
+        "@rvaim/arkts_knowledge_search"
+      ]
+    },
+    "deveco-cli": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@deveco/deveco-cli",
+        "serve",
+        "mcp"
       ]
     },
     "deveco-arkts-lsp": {

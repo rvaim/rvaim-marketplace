@@ -6,7 +6,9 @@
 
 - ArkTS / TS 迁移规则 skill：Claude Code 使用 `/arkts-harmony:arkts-ts-rules`，Codex 使用 `$arkts-ts-rules`
 - HarmonyOS/OpenHarmony 开发文档查阅 skill：Claude Code 使用 `/arkts-harmony:harmonyos-docs`，Codex 使用 `$harmonyos-docs`
-- DevEco CodeGenie MCP：查询 HarmonyOS/OpenHarmony 开发文档
+- DevEco CLI skill：优先使用上游官方 CLI 完成创建、构建、运行、设备、模拟器、日志、本地文档和 Skills 管理
+- ArkTS Knowledge Search MCP：独立提供 DevEco Code `arkts_knowledge_search` 在线知识查询
+- DevEco CLI MCP：使用上游官方 `.ets` 与 C/C++ 静态检查服务
 - ArkTS LSP MCP：查找定义、引用、悬浮信息、文件符号和调用层级
 - DevEco Mobile MCP：连接 HarmonyOS 设备并执行应用安装、启动、交互和截图
 - HarmonyOS MCP：驱动 DevEco 工具链完成模拟器管理、构建、安装、UI 自动化和日志检查
@@ -23,6 +25,7 @@ arkts-harmony/
 ├── .mcp.json
 ├── skills/
 │   ├── arkts-ts-rules/
+│   ├── deveco-cli/
 │   └── harmonyos-docs/
 ├── hooks/
 │   ├── hooks.json
@@ -72,23 +75,56 @@ codex_hooks = true
 
 ## MCP 服务
 
-插件声明四个 MCP server：
+插件声明五个 MCP server：
 
 | server | 用途 | 启动方式 |
 |---|---|---|
-| `deveco-mcp` | HarmonyOS/OpenHarmony 文档查询 | `npx -y @deveco-codegenie/mcp@beta` |
+| `arkts-knowledge-search` | ArkTS/HarmonyOS 在线知识查询与独立登录 | `npx -y @rvaim/arkts_knowledge_search` |
+| `deveco-cli` | 上游官方 `.ets` 与 C/C++ 静态检查 | `npx -y @deveco/deveco-cli serve mcp` |
 | `deveco-arkts-lsp` | ArkTS 定义、引用、悬浮信息、符号与调用层级 | `npx -y @rvaim/deveco-arkts-lsp` |
 | `deveco-mobile-mcp` | HarmonyOS/iOS/Android 设备自动化 | `npx -y @rvaim/deveco-mobile-mcp` |
 | `harmonyos-mcp` | DevEco 模拟器、构建、安装、启动、UI 自动化与日志 | `npx -y harmonyos-mcp` |
 
-上述两个 `@rvaim` MCP 依赖不锁定具体版本，由 npm 的 `latest` 标签解析当前正式版本。两个包的功能源码来自对应上游仓库，未修改其业务代码。
+所有启动命令均不锁定具体版本，由 npm 解析当前正式版本。`@rvaim/arkts_knowledge_search` 不安装或启动 DevEco Code，也不包含 `@deveco/deveco-cli`；两者是相互独立的插件依赖。
+
+### DevEco CLI 与能力分工
+
+插件的 `deveco-cli` skill 使用以下命令入口：
+
+```bash
+npx -y @deveco/deveco-cli <command>
+```
+
+- `create`、`build`、`run`、`device`、`emulator`、`log`、`docs` 和 `skills` 优先使用上游官方 CLI。
+- `.ets` 与 C/C++ 静态检查使用官方 `deveco-cli` MCP。
+- 定义、引用、悬浮和调用层级使用 `deveco-arkts-lsp`。
+- UI 树、截图、点击、滑动、输入和页面状态等待使用 `harmonyos-mcp`。
+- 跨 HarmonyOS、iOS、Android 的通用设备操作使用 `deveco-mobile-mcp`。
+
+### 文档来源与在线登录
+
+`harmonyos-docs` skill 在插件层选择两个独立来源：
+
+- API、组件、Kit、参数、返回值与示例优先使用 `@deveco/deveco-cli docs` 本地文档。
+- 最新版本、新增、废弃、兼容性、路线图和本地未命中问题使用 `arkts_knowledge_search` 在线知识。
+- 构建错误、异常和复杂故障可同时使用两种来源。
+
+首次使用在线查询时，可以调用 `arkts_knowledge_login`，或在终端执行：
+
+```bash
+npx -y @rvaim/arkts_knowledge_search login
+```
+
+登录只会打开华为官方 OAuth 页面。JWT 加密保存在 `~/.config/arkts-knowledge-search/`，短期 `accessToken` 只保存在进程内存中。
 
 ### 前置条件
 
 - Node.js 20 或更高版本，并可使用 `npm` 和 `npx`。
+- 首次启动外部 MCP 或 DevEco CLI 时可以访问 npm registry。
+- 在线知识查询需要中国站华为账号与网络连接；不登录时 DevEco CLI 本地文档仍可独立使用。
+- 使用 DevEco CLI 工具链和官方静态检查 MCP 时已安装 DevEco Studio 6.1 或更高版本。
 - 使用 `deveco-arkts-lsp` 时已安装 DevEco Studio 或 HarmonyOS SDK；默认把 MCP 进程当前目录作为项目目录，也可设置 `PROJECT_PATH`。
 - 使用 `deveco-mobile-mcp` 操作 HarmonyOS 设备时，已安装并配置 `hdc`，且设备或模拟器可连接。
 - 使用 `harmonyos-mcp` 时已安装 DevEco Studio，并可使用 `hdc`、`hvigorw` 和 Emulator；非标准安装路径可通过 `DEVECO_STUDIO_HOME` 指定。
-- 首次启动外部 MCP 时可以访问 npm registry。
 
-启用插件后，`harmonyos-docs` skill 会优先使用 `deveco-mcp` 暴露的文档查询工具，不再维护 raw GitHub 文档 URL 或华为开发者搜索兜底流程。
+启用插件后，不再使用原 `@deveco-codegenie/mcp@beta`。在线知识由 `@rvaim/arkts_knowledge_search` 提供，本地文档和工具链由上游官方 `@deveco/deveco-cli` 独立提供。

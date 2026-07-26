@@ -1,49 +1,48 @@
 ---
 name: harmonyos-docs
-description: 查阅 HarmonyOS/OpenHarmony 应用开发文档。仅在你不确定或不知道某个 API、组件、Kit 用法时使用，通过 DevEco CodeGenie MCP 查询开发指南和 API 参考。已知的知识直接回答即可。
+description: 查阅 HarmonyOS/OpenHarmony 应用开发文档。仅在不确定 API、组件、Kit、版本变化或错误解决方式时使用；按场景选择 @deveco/deveco-cli 本地文档或 arkts_knowledge_search 在线知识查询。已知知识直接回答。
 ---
 
 # HarmonyOS 应用开发文档查阅
 
-仅在 **不确定或不知道** HarmonyOS/OpenHarmony 的 API、组件、Kit 开发指南时才查文档。已知规则（如 ArkTS 语法限制）直接使用已有知识回答，不要重复查询。
+仅在不确定 HarmonyOS/OpenHarmony API、组件、Kit、版本或错误结论时查询。ArkTS 语法限制优先使用 `arkts-ts-rules`。
 
-## 查询入口
+## 两个独立来源
 
-使用插件内置的 DevEco CodeGenie MCP 查询文档。
+本地文档来自官方 DevEco CLI：
 
-插件 MCP 配置位于 `plugins/arkts-harmony/.mcp.json`，server 名称为 `deveco-mcp`：
-
-```json
-{
-  "command": "npx",
-  "args": [
-    "-y",
-    "@deveco-codegenie/mcp@beta"
-  ]
-}
+```bash
+npx -y @deveco/deveco-cli docs search <keywords...> --format json
+npx -y @deveco/deveco-cli docs read <documentId>
 ```
 
-## 使用策略
+在线知识使用插件 MCP 工具：
 
-1. 先判断问题是否确实需要查文档：API 签名、参数、返回值、组件属性、Kit 用法、版本差异、示例代码等需要查询；ArkTS 基础语法约束优先使用 `arkts-ts-rules`。
-2. 通过 MCP 查找 HarmonyOS/OpenHarmony 文档。Codex 环境中如需发现工具，先用 `tool_search` 搜索 `HarmonyOS docs`、`DevEco`、`CodeGenie` 或 `deveco-mcp`；Claude Code 环境中查看已启用 MCP 工具列表。
-3. 如果 MCP 暴露 `harmonyos_knowledge_search` 或同等语义工具，优先使用该工具。
-4. 查询关键词保持短而精确，包含组件/API/Kit 名称和问题类型，例如 `Navigation titleMode API`、`List contentStartOffset`、`AbilityStage onCreate`。
-5. 需要区分指南和 API 时，在关键词中显式加入 `开发指南`、`API 参考`、`参数`、`返回值`、`示例` 等限定词。
-6. MCP 返回多条结果时，优先采用官方 API 参考、开发指南、最佳实践、版本变更说明；对不确定的信息标注为推断，不要伪装成已确认结论。
-7. MCP 查询不到或工具不可用时，直接说明 MCP 未返回可用结果，并给出基于现有知识的保守建议；不要改用 raw GitHub URL、手动拼接文档路径或华为开发者搜索兜底。
+```text
+arkts_knowledge_search
+```
 
-## 回答要求
+在线 MCP 包为 `@rvaim/arkts_knowledge_search`，只负责在线查询和独立登录，不包含或依赖 `@deveco/deveco-cli`。
 
-- 简要说明使用了 MCP 查询，列出最相关的文档标题或来源类型。
-- API 类问题要回答接口名、参数、返回值、约束和最小示例。
-- 组件/ArkUI 类问题要回答适用组件、属性或方法、状态管理注意点、常见限制。
-- 迁移/编译错误类问题要结合 `arkts-ts-rules`，把文档结论转化成可执行改法。
-- 不确定时明确说不确定，并说明 MCP 返回结果缺少哪类信息。
+## 来源选择
 
-## 重要规则
+1. API、组件、Kit、参数、返回值、示例和稳定指南优先查询本地文档。
+2. 最新版本、新增、废弃、兼容性、路线图和本地未命中的问题查询在线知识。
+3. 构建错误、运行异常和复杂故障可同时查询本地文档与在线知识。
+4. 用户明确指定来源时严格遵循。
+5. 本地查询返回 `documentId` 时，用 `docs read` 核对完整原文。
+6. 在线工具只返回语义检索内容，不将其伪装成具有稳定文档 ID 的原文。
 
-- **已知知识不查**：ArkTS 语法规则（如不用 `any`、不用 `var`）已在 `arkts-ts-rules` skill 中覆盖，不要重复查询。
-- **只走 MCP**：文档查询通过 DevEco CodeGenie MCP 完成，不再使用 raw GitHub 文档、手动 URL 拼接或华为开发者搜索兜底。
-- **短查询、少结果、再细化**：先查精确关键词，再根据 MCP 结果追加模块名、API 名或错误信息二次查询。
-- **来源可追溯**：回答中保留 MCP 返回的文档标题、模块名或来源类型，避免只给无来源结论。
+## 在线登录
+
+在线查询提示未登录时，先使用 `arkts_knowledge_status` 检查状态。确需在线内容时调用 `arkts_knowledge_login`，并说明将打开华为官方登录页面。
+
+不得索取、展示或记录 JWT、`accessToken`、`refreshToken`。
+
+## 查询要求
+
+- 关键词保持短而精确，包含 API、组件、Kit、装饰器、生命周期、错误文本或现象。
+- 多个互不依赖的问题可分别查询，不把不相关内容塞进同一个问题。
+- 回答中标明使用了“DevEco CLI 本地文档”“在线知识”或“两者”，并保留相关标题、`documentId` 或在线来源类型。
+- 查询失败时明确说明缺失来源，再给出基于现有知识的保守建议。
+- 不使用 raw GitHub URL、手动拼接文档路径或非官方搜索作为静默兜底。
