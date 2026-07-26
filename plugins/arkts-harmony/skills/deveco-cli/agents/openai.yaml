@@ -1,4 +1,4 @@
 interface:
   display_name: "DevEco CLI"
-  short_description: "使用官方 DevEco CLI 创建、构建、运行和调试 HarmonyOS 应用"
-  default_prompt: "使用 $deveco-cli 构建并运行当前 HarmonyOS 工程。"
+  short_description: "使用官方 DevEco CLI 管理 HarmonyOS 工程全生命周期"
+  default_prompt: "使用 $deveco-cli 创建、构建、运行当前 HarmonyOS 工程，并在失败时检查设备与日志。"

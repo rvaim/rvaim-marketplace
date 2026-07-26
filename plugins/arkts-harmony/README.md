@@ -6,7 +6,7 @@
 
 - ArkTS / TS 迁移规则 skill：Claude Code 使用 `/arkts-harmony:arkts-ts-rules`，Codex 使用 `$arkts-ts-rules`
 - HarmonyOS/OpenHarmony 开发文档查阅 skill：Claude Code 使用 `/arkts-harmony:harmonyos-docs`，Codex 使用 `$harmonyos-docs`
-- DevEco CLI skill：优先使用上游官方 CLI 完成创建、构建、运行、设备、模拟器、日志、本地文档和 Skills 管理
+- DevEco CLI skill：优先使用上游官方 CLI 完成工程脚手架、同步构建、多模块安装运行、在线签名、设备、模拟器实例与镜像、许可、日志、本地文档和 Skills 管理
 - ArkTS Knowledge Search MCP：独立提供 DevEco Code `arkts_knowledge_search` 在线知识查询
 - DevEco CLI MCP：使用上游官方 `.ets` 与 C/C++ 静态检查服务
 - ArkTS LSP MCP：查找定义、引用、悬浮信息、文件符号和调用层级
@@ -26,6 +26,9 @@ arkts-harmony/
 ├── skills/
 │   ├── arkts-ts-rules/
 │   ├── deveco-cli/
+│   │   ├── SKILL.md
+│   │   ├── agents/openai.yaml
+│   │   └── references/commands.md
 │   └── harmonyos-docs/
 ├── hooks/
 │   ├── hooks.json
@@ -96,10 +99,33 @@ npx -y @deveco/deveco-cli <command>
 ```
 
 - `create`、`build`、`run`、`device`、`emulator`、`log`、`docs` 和 `skills` 优先使用上游官方 CLI。
+- 官方 CLI 会封装 `ohpm`、`hvigor`、`hdc`、模拟器和 `hilog`，在已有对应能力时不直接拼接底层命令。
+- `build` 与 `run` 会判断是否需要重新同步或构建；`run` 支持一次部署多个模块并兼容在线签名。
 - `.ets` 与 C/C++ 静态检查使用官方 `deveco-cli` MCP。
 - 定义、引用、悬浮和调用层级使用 `deveco-arkts-lsp`。
 - UI 树、截图、点击、滑动、输入和页面状态等待使用 `harmonyos-mcp`。
 - 跨 HarmonyOS、iOS、Android 的通用设备操作使用 `deveco-mobile-mcp`。
+
+官方 CLI 在插件中的完整能力：
+
+| 场景 | 命令 |
+|---|---|
+| 创建 Empty Ability 工程 | `create` |
+| 构建模块、Target 或产品 | `build` |
+| 清理构建产物 | `build clean` |
+| 构建、安装并启动一个或多个模块 | `run` |
+| 部署已有产物 | `run --skip-build` |
+| 查询真机和运行中的模拟器 | `device list/view` |
+| 管理模拟器实例 | `emulator list/start/stop/create/delete` |
+| 管理系统镜像与许可 | `emulator image`、`emulator license` |
+| 查询、筛选、追踪 `hilog` 与崩溃日志 | `log` |
+| 查询内置 HarmonyOS 文档 | `docs search/read/catalog` |
+| 查询和管理 HarmonyOS Skills | `skills list/find/add/remove` |
+| 检查 `.ets` 与 C/C++ 语法 | `serve mcp` |
+
+官方 Skills 目录可以按需发现 ArkUI、ArkTS 检索、崩溃、卡死、内存泄漏、测试和多设备适配等专项能力。插件只执行 `skills list/find` 做只读发现；安装或移除前需要用户确认，不自动使用 `skills add --all`，也不把全部上游 Skill 源码复制进本插件。
+
+详细参数和安全边界由 `deveco-cli` skill 提供。插件不会运行 `devecocli update` 或 `init`：前者由未锁版本的 `npx` 替代，后者会重复修改 Agent 配置。
 
 ### 文档来源与在线登录
 

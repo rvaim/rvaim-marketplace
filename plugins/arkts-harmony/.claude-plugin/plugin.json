@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "arkts-harmony",
   "version": "1.1.0",
-  "description": "鸿蒙 ArkTS / TypeScript 迁移规则、官方 DevEco CLI、在线知识查询、代码智能、设备自动化 MCP 和自动后置检查。",
+  "description": "鸿蒙 ArkTS / TypeScript 迁移规则、官方 DevEco CLI 工程全生命周期、在线知识查询、代码智能、设备自动化 MCP 和自动后置检查。",
   "author": {
     "name": "rvaim",
     "url": "https://github.com/rvaim"
@@ -16,7 +16,10 @@
     "typescript",
     "migration",
     "deveco",
+    "cli",
     "arkui",
+    "emulator",
+    "hilog",
     "code-review",
     "api-reference",
     "documentation",
