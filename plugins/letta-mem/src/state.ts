@@ -221,7 +221,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
-    definitionVersion: 2,
+    definitionVersion: 3,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }

@@ -11,10 +11,7 @@ function createConfig(
   return {
     serverUrl,
     autoStartServer: true,
-    serverBackend: "api",
     model: "auto",
-    mixedMemory: false,
-    sharedMemory: true,
     dataDir: "/tmp/letta-mem-app-server-tests",
     namespace: "app-server-tests",
     requestTimeoutMs: 1_000,
@@ -91,7 +88,6 @@ describe("本地 App Server 自动启动", () => {
     expect(setup.launch).toHaveBeenCalledWith(
       "/runtime/letta.js",
       "ws://127.0.0.1:4500",
-      "api",
     );
     expect(setup.release).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(
