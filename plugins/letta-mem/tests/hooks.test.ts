@@ -4,7 +4,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -49,10 +49,7 @@ function createConfig(): RuntimeConfig {
   return {
     serverUrl: "ws://127.0.0.1:4500",
     autoStartServer: false,
-    serverBackend: "api",
     model: "auto",
-    mixedMemory: false,
-    sharedMemory: false,
     dataDir,
     namespace: "hook-tests",
     requestTimeoutMs: 1_000,
@@ -138,14 +135,10 @@ describe("后台记忆 Hook", () => {
     const createAgent = vi.fn(async (
       _options: Parameters<AgentClient["createAgent"]>[0],
     ) => "agent-1");
-    let firstSessionOptions: Parameters<AgentClient["createSession"]>[1] | undefined;
     const createAgentSession = vi.fn((
       _agentId: string,
-      options: Parameters<AgentClient["createSession"]>[1],
-    ) => {
-      firstSessionOptions = options;
-      return first.session;
-    });
+      _options: Parameters<AgentClient["createSession"]>[1],
+    ) => first.session);
     const resumeAgentSession = vi.fn(() => resumed.session);
     const client: AgentClient = {
       createAgent,
@@ -173,37 +166,29 @@ describe("后台记忆 Hook", () => {
       "claude-session-1",
     );
     expect(createAgent).toHaveBeenCalledOnce();
-    expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: projectPath,
-      memfs: true,
-      baseTools: [],
-    }));
     const createdAgentOptions = createAgent.mock.calls[0]?.[0];
     expect(createdAgentOptions?.systemPrompt)
+      .toContain("如何判断、组织和保存记忆完全由你");
+    expect(createdAgentOptions?.systemPrompt)
       .toContain("判断语言时只参考 role=\"user\" 的消息");
-    expect(createdAgentOptions?.memory.every((block) => block.value === ""))
-      .toBe(true);
-    expect(createdAgentOptions?.memory.every(
-      (block) => block.description === undefined,
-    )).toBe(true);
+    expect(createdAgentOptions?.systemPrompt)
+      .toContain("证据不足或无法确定适用范围时，默认限定为当前工作区");
+    expect(createdAgentOptions).not.toHaveProperty("memory");
+    expect(createdAgentOptions).not.toHaveProperty("memfs");
+    expect(createdAgentOptions).not.toHaveProperty("cwd");
+    expect(createdAgentOptions).not.toHaveProperty("baseTools");
     expect(createAgentSession).toHaveBeenCalledWith(
       "agent-1",
-      expect.objectContaining({
-        cwd: projectPath,
-        allowedTools: ["memory", "memory_apply_patch"],
-        permissionMode: "strict",
-        skillSources: [],
-        canUseTool: expect.any(Function),
-      }),
+      {
+        permissionMode: "unrestricted",
+        maxApprovalRecoveryAttempts: 0,
+      },
     );
-    expect(await firstSessionOptions?.canUseTool("memory", {})).toEqual({
-      behavior: "allow",
-    });
-    expect(await firstSessionOptions?.canUseTool("Bash", {})).toEqual({
-      behavior: "deny",
-      message: "letta-mem 只允许修改当前 Agent 的 MemFS 与已挂载的原生 Shared Memory repository",
-      interrupt: false,
-    });
+    const createdSessionOptions = createAgentSession.mock.calls[0]?.[1];
+    expect(createdSessionOptions).not.toHaveProperty("allowedTools");
+    expect(createdSessionOptions).not.toHaveProperty("skillSources");
+    expect(createdSessionOptions).not.toHaveProperty("canUseTool");
+    expect(createdSessionOptions).not.toHaveProperty("cwd");
     expect(firstState).toMatchObject({
       agentId: "agent-1",
       conversationId: "conversation-1",
@@ -237,10 +222,10 @@ describe("后台记忆 Hook", () => {
     );
     expect(resumeAgentSession).toHaveBeenCalledWith(
       "conversation-1",
-      expect.objectContaining({
-        cwd: projectPath,
-        permissionMode: "strict",
-      }),
+      {
+        permissionMode: "unrestricted",
+        maxApprovalRecoveryAttempts: 0,
+      },
     );
     expect(resumedState.lastProcessedLine).toBe(1);
     expect(resumedState.recentDigests).toHaveLength(2);
@@ -250,110 +235,54 @@ describe("后台记忆 Hook", () => {
     expect(loadContextSnapshot(config, projectPath)?.text).toBe("第二版相关上下文");
   });
 
-  it("共享记忆只调用一个工作区 Agent 并由它自行判断作用域", async () => {
-    const config = { ...createConfig(), sharedMemory: true };
-    const workspacePath = join(config.dataDir, "shared-workspace");
+  it("每个批次只交给 Letta 一次并携带作用域约束而非存储策略", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "policy-free-workspace");
     const transcriptPath = createTranscript(
       config,
       "所有项目都禁用 any，但这个仓库使用 pnpm。",
     );
-    const workspace = createSession(
-      "conversation-workspace",
-      "当前工作区使用 pnpm，并遵守禁用 any 的共享规范。",
-      "agent-workspace",
+    const opened = createSession(
+      "conversation-policy-free",
+      "下一轮相关上下文",
+      "agent-policy-free",
     );
-    const createAgent = vi.fn(async (
-      _options: Parameters<AgentClient["createAgent"]>[0],
-    ) => "agent-workspace");
-    let sessionOptions: Parameters<AgentClient["createSession"]>[1] | undefined;
-    const createAgentSession = vi.fn((
-      _agentId: string,
-      options: Parameters<AgentClient["createSession"]>[1],
-    ) => {
-      sessionOptions = options;
-      return workspace.session;
-    });
     const client: AgentClient = {
-      serverBackend: "api",
-      createAgent,
-      createSession: createAgentSession,
-      resumeSession: vi.fn(() => workspace.session),
+      createAgent: vi.fn(async () => "agent-policy-free"),
+      createSession: vi.fn(() => opened.session),
+      resumeSession: vi.fn(() => opened.session),
       agents: {
         list: vi.fn(async () => []),
       },
     };
-    const log = vi.fn() as LogFunction;
 
     await expect(handleUpdateMemory(config, {
-      session_id: "shared-session",
+      session_id: "policy-free-session",
       transcript_path: transcriptPath,
       cwd: workspacePath,
-    }, log, vi.fn(async () => client) as AgentClientFactory)).resolves.toBe("");
+    }, vi.fn() as LogFunction, vi.fn(async () => client) as AgentClientFactory))
+      .resolves.toBe("");
 
-    expect(createAgent).toHaveBeenCalledOnce();
-    expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: workspacePath,
-      name: expect.stringContaining("shared-workspace"),
-      systemPrompt: expect.stringContaining("插件只提交一次完整批次"),
+    expect(opened.sent).toHaveLength(1);
+    expect(opened.sent[0]).toContain("<memory_scope_policy>");
+    expect(opened.sent[0]).toContain("才适合作为跨工作区共享记忆");
+    expect(opened.sent[0]).toContain("必须限定为当前 workspace_path 的工作区记忆");
+    expect(opened.sent[0]).toContain("默认限定为当前工作区");
+    expect(opened.sent[0]).toContain("自行决定每项信息的作用域、组织方式与保存位置");
+    expect(opened.sent[0]).toContain("调用方不会预分类");
+    expect(opened.sent[0]).not.toContain("<memory_mode>");
+    expect(opened.sent[0]).not.toContain("<shared_memory_enabled>");
+    expect(opened.sent[0]).not.toContain("<native_shared_memory_root>");
+    expect(client.createAgent).toHaveBeenCalledWith(expect.not.objectContaining({
+      memory: expect.anything(),
+      memfs: expect.anything(),
     }));
-    expect(createAgentSession).toHaveBeenCalledWith(
-      "agent-workspace",
-      expect.objectContaining({
-        cwd: workspacePath,
-        allowedTools: expect.arrayContaining([
-          "memory",
-          "memory_apply_patch",
-          "Read",
-          "Write",
-          "Edit",
-          "Bash",
-        ]),
-      }),
-    );
-    expect(workspace.sent).toHaveLength(1);
-    expect(workspace.sent[0]).toContain("<shared_memory_enabled>true</shared_memory_enabled>");
-    expect(workspace.sent[0]).toContain("<native_shared_memory_root>");
-    expect(workspace.sent[0]).toContain("插件没有预先分类");
-    expect(workspace.sent[0]).not.toContain("<shared_memory_context>");
-    expect(await sessionOptions?.canUseTool("memory", {})).toEqual({
-      behavior: "allow",
+    const options = vi.mocked(client.createSession).mock.calls[0]?.[1];
+    expect(options).toEqual({
+      permissionMode: "unrestricted",
+      maxApprovalRecoveryAttempts: 0,
     });
-    expect(await sessionOptions?.canUseTool("Bash", {
-      command: "pwd",
-      description: "查看目录",
-    })).toMatchObject({ behavior: "deny" });
-    const sharedRepositoryPath = join(
-      homedir(),
-      ".letta",
-      "agents",
-      "agent-workspace",
-      "team-memory",
-    );
-    expect(await sessionOptions?.canUseTool("Write", {
-      file_path: join(sharedRepositoryPath, "coding-standards.md"),
-      content: "共享规范",
-    })).toEqual({ behavior: "allow" });
-    expect(await sessionOptions?.canUseTool("Write", {
-      file_path: join(workspacePath, "README.md"),
-      content: "不应修改工程",
-    })).toMatchObject({ behavior: "deny" });
-    expect(await sessionOptions?.canUseTool("Bash", {
-      command: `git -C "${sharedRepositoryPath}" status --short`,
-      description: "检查共享记忆状态",
-    })).toEqual({ behavior: "allow" });
-    expect(await sessionOptions?.canUseTool("Bash", {
-      command: `git -C "${sharedRepositoryPath}" status; pwd`,
-      description: "尝试执行额外命令",
-    })).toMatchObject({ behavior: "deny" });
-    expect(workspace.close).toHaveBeenCalledOnce();
-    expect(loadSessionState(config, workspacePath, "shared-session"))
-      .toMatchObject({
-        agentId: "agent-workspace",
-        conversationId: "conversation-workspace",
-        lastProcessedLine: 0,
-      });
-    expect(loadContextSnapshot(config, workspacePath)?.text)
-      .toContain("当前工作区使用 pnpm，并遵守禁用 any 的共享规范。");
+    expect(opened.close).toHaveBeenCalledOnce();
   });
 
   it("相同 Claude 会话 ID 在不同工作区中创建不同 Agent", async () => {
@@ -541,9 +470,7 @@ describe("后台记忆 Hook", () => {
     expect(firstAgentId).toBe("agent-workspace-cross-host");
     expect(secondAgentId).toBe("agent-workspace-cross-host");
     expect(createAgent).toHaveBeenCalledOnce();
-    expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: workspacePath,
-    }));
+    expect(createAgent.mock.calls[0]?.[0]).not.toHaveProperty("cwd");
     expect(client.agents.list).toHaveBeenLastCalledWith({
       tags: [
         "letta-mem",
@@ -557,160 +484,6 @@ describe("后台记忆 Hook", () => {
       "info",
       "agent-reused",
       "agent-workspace-cross-host",
-    );
-  });
-
-  it("混合记忆模式让不同工作区共享名为 letta-mem 的 Agent", async () => {
-    const config = {
-      ...createConfig(),
-      model: "deepseek/deepseek-v4-flash",
-      mixedMemory: true,
-      sharedMemory: true,
-    };
-    const firstWorkspace = join(config.dataDir, "mixed-first");
-    const secondWorkspace = join(config.dataDir, "mixed-second");
-    const transcripts = [
-      createTranscript(config, "第一个工作区消息", "mixed-first.jsonl"),
-      createTranscript(config, "第二个工作区消息", "mixed-second.jsonl"),
-    ];
-    const openedSessions: ReturnType<typeof createSession>[] = [];
-    let conversationSequence = 0;
-    const createAgent = vi.fn(async () => "agent-mixed");
-    const createAgentSession = vi.fn((agentId: string) => {
-      const opened = createSession(
-        `mixed-conversation-${++conversationSequence}`,
-        `混合上下文-${conversationSequence}`,
-        agentId,
-      );
-      openedSessions.push(opened);
-      return opened.session;
-    });
-    const client: AgentClient = {
-      createAgent,
-      createSession: createAgentSession,
-      resumeSession: vi.fn((conversationId: string) => createSession(
-        conversationId,
-        "恢复的混合上下文",
-        "agent-mixed",
-      ).session),
-      agents: {
-        list: vi.fn(async () => []),
-      },
-    };
-    const log = vi.fn() as LogFunction;
-    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
-
-    const workspaces: Array<[string, string, string]> = [
-      [firstWorkspace, transcripts[0] ?? "", "mixed-session-first"],
-      [secondWorkspace, transcripts[1] ?? "", "mixed-session-second"],
-    ];
-    for (const [cwd, transcriptPath, sessionId] of workspaces) {
-      await handleUpdateMemory(config, {
-        session_id: sessionId,
-        transcript_path: transcriptPath,
-        cwd,
-      }, log, clientFactory);
-    }
-
-    expect(createAgent).toHaveBeenCalledOnce();
-    expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: firstWorkspace,
-      name: "letta-mem",
-      model: "deepseek/deepseek-v4-flash",
-      tags: expect.arrayContaining(["letta-mem-memory-mode:mixed"]),
-      systemPrompt: expect.stringContaining("自行判断共享与独立作用域"),
-    }));
-    expect(createAgentSession).toHaveBeenCalledTimes(2);
-    expect(createAgentSession.mock.calls.map((call) => call[0]))
-      .toEqual(["agent-mixed", "agent-mixed"]);
-    expect(createAgentSession).toHaveBeenNthCalledWith(
-      1,
-      "agent-mixed",
-      expect.objectContaining({ cwd: firstWorkspace }),
-    );
-    expect(createAgentSession).toHaveBeenNthCalledWith(
-      2,
-      "agent-mixed",
-      expect.objectContaining({ cwd: secondWorkspace }),
-    );
-    expect(openedSessions[0]?.sent[0]).toContain("<memory_mode>mixed</memory_mode>");
-    expect(openedSessions[0]?.sent[0])
-      .toContain("<shared_memory_enabled>true</shared_memory_enabled>");
-    expect(openedSessions[0]?.sent[0])
-      .toContain("你必须自行判断每项信息的作用域");
-    expect(openedSessions[0]?.sent[0]).not.toContain("<shared_memory_context>");
-    expect(openedSessions[0]?.sent[0]).toContain(firstWorkspace);
-    expect(openedSessions[1]?.sent[0]).toContain(secondWorkspace);
-    expect(loadContextSnapshot(config, firstWorkspace)?.text).toBe("混合上下文-1");
-    expect(loadContextSnapshot(config, secondWorkspace)?.text).toBe("混合上下文-2");
-    expect(loadSessionState(config, firstWorkspace, "mixed-session-first").agentId)
-      .toBe("agent-mixed");
-    expect(loadSessionState(config, secondWorkspace, "mixed-session-second").agentId)
-      .toBe("agent-mixed");
-  });
-
-  it("Claude Code 与 Codex 的独立本地数据目录会复用同一个混合 Agent", async () => {
-    const firstConfig = { ...createConfig(), mixedMemory: true };
-    const secondConfig = { ...createConfig(), mixedMemory: true };
-    let storedAgent: {
-      id: string;
-      name: string;
-      tags: string[];
-      model: string;
-    } | undefined;
-    const createAgent = vi.fn(async (
-      options: Parameters<AgentClient["createAgent"]>[0],
-    ) => {
-      storedAgent = {
-        id: "agent-cross-host",
-        name: options.name,
-        tags: options.tags,
-        model: "deepseek/deepseek-v4-pro",
-      };
-      return storedAgent.id;
-    });
-    const renameStoredAgent = (): void => {
-      if (storedAgent) storedAgent.name = "用户重命名后的混合记忆";
-    };
-    const client: AgentClient = {
-      createAgent,
-      createSession: vi.fn(() => createSession("unused", "").session),
-      resumeSession: vi.fn(() => createSession("unused", "").session),
-      agents: {
-        list: vi.fn(async () => storedAgent ? [storedAgent] : []),
-        update: vi.fn(async (agentId) => ({ id: agentId })),
-      },
-    };
-    const log = vi.fn() as LogFunction;
-
-    const firstAgentId = await resolveAgentId(
-      firstConfig,
-      client,
-      "/workspace/shared",
-      log,
-    );
-    renameStoredAgent();
-    const secondAgentId = await resolveAgentId(
-      secondConfig,
-      client,
-      "/workspace/another",
-      log,
-    );
-
-    expect(firstAgentId).toBe("agent-cross-host");
-    expect(secondAgentId).toBe("agent-cross-host");
-    expect(createAgent).toHaveBeenCalledOnce();
-    expect(client.agents.list).toHaveBeenCalledTimes(2);
-    expect(client.agents.list).toHaveBeenLastCalledWith({
-      tags: ["letta-mem", "letta-mem-memory-mode:mixed"],
-      matchAllTags: true,
-      limit: 10,
-      order: "desc",
-    });
-    expect(log).toHaveBeenCalledWith(
-      "info",
-      "agent-reused",
-      "agent-cross-host",
     );
   });
 
@@ -760,7 +533,7 @@ describe("后台记忆 Hook", () => {
     expect(update).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledWith("agent-existing", expect.objectContaining({
       model: "deepseek/deepseek-v4-flash",
-      system: expect.stringContaining("插件只提交一次完整批次"),
+      system: expect.stringContaining("如何判断、组织和保存记忆完全由你"),
     }));
     expect(client.createAgent).not.toHaveBeenCalled();
     expect(client.resumeSession).not.toHaveBeenCalled();
@@ -821,7 +594,7 @@ describe("后台记忆 Hook", () => {
   });
 
   it("单个 Agent 处理失败时保留待处理项且不影响宿主", async () => {
-    const config = { ...createConfig(), sharedMemory: true };
+    const config = createConfig();
     const workspacePath = join(config.dataDir, "shared-failure-workspace");
     const transcriptPath = createTranscript(config, "需要判断作用域的记忆");
     const agentClose = vi.fn();
@@ -878,7 +651,7 @@ describe("后台记忆 Hook", () => {
     );
   });
 
-  it("Agent 已创建但 MemFS 后置初始化报错时会恢复该 Agent", async () => {
+  it("Agent 已创建但默认初始化报错时会恢复该 Agent", async () => {
     const config = createConfig();
     const projectPath = join(config.dataDir, "project");
     const transcriptPath = createTranscript(config, "恢复后仍需处理的消息");
@@ -900,7 +673,7 @@ describe("后台记忆 Hook", () => {
       }]);
     const client: AgentClient = {
       createAgent: vi.fn(async () => {
-        throw new Error("模拟 MemFS 后置初始化失败");
+        throw new Error("模拟 Agent 默认初始化失败");
       }),
       createSession: vi.fn(() => recoveredSession.session),
       resumeSession: vi.fn(() => recoveredSession.session),
@@ -979,11 +752,11 @@ describe("后台记忆 Hook", () => {
 
     expect(client.resumeSession).toHaveBeenCalledWith(
       "conversation-stale",
-      expect.objectContaining({ permissionMode: "strict" }),
+      expect.objectContaining({ permissionMode: "unrestricted" }),
     );
     expect(client.createSession).toHaveBeenCalledWith(
       "agent-1",
-      expect.objectContaining({ permissionMode: "strict" }),
+      expect.objectContaining({ permissionMode: "unrestricted" }),
     );
     expect(stale.close).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(
@@ -1043,13 +816,13 @@ describe("后台记忆 Hook", () => {
     expect(createAgentSession).toHaveBeenNthCalledWith(
       1,
       "agent-stale",
-      expect.objectContaining({ permissionMode: "strict" }),
+      expect.objectContaining({ permissionMode: "unrestricted" }),
     );
     expect(createAgent).toHaveBeenCalledOnce();
     expect(createAgentSession).toHaveBeenNthCalledWith(
       2,
       "agent-new",
-      expect.objectContaining({ permissionMode: "strict" }),
+      expect.objectContaining({ permissionMode: "unrestricted" }),
     );
     expect(stale.close).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(
@@ -1323,7 +1096,7 @@ describe("后台记忆 Hook", () => {
   });
 
   it("compact 时只保留工作区 Agent 的会话映射", async () => {
-    const config = { ...createConfig(), sharedMemory: true };
+    const config = createConfig();
     const workspacePath = join(config.dataDir, "compact-shared-workspace");
     const legacyState: SessionState & {
       sharedAgentId: string;

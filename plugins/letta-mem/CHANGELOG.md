@@ -1,5 +1,24 @@
 # 变更日志
 
+## 2.4.1
+
+- 保留插件对 Letta Agent 的详细记忆作用域约束：稳定且脱离当前代码库仍成立的信息可跨工作区共享，项目事实、决定、配置、待办和例外必须限定于当前工作区。
+- 同时包含通用原则与项目细节的信息由 Agent 拆分作用域；证据不足时默认限定于当前工作区，不得把其他工作区事实当成当前工作区事实。
+- 作用域约束只描述语义判断，不指定 Shared Memory repository、MemFS、block、archive、文件路径或其他存储实现。
+- 不再覆盖新 Agent 的 `baseTools`；后台 Session 使用 `unrestricted`，不提供工具白名单、skills 白名单或审批回调，让 Letta Agent 能调用当前环境实际提供的原生记忆能力。
+- 继续保持 backend 中立：插件不选择、不校验、不拒绝 Letta 当前使用的本地、云端或自托管 backend。
+
+## 2.4.0
+
+- 明确插件只负责把编码会话与约束交给 Letta Agent；记忆价值、作用域、组织方式、存储位置和同步操作全部由 Letta 自行决定。
+- 移除 `serverBackend`、`mixedMemory`、`sharedMemory` 运行配置及对应环境变量的行为；遗留字段会被忽略，不再影响 Agent 或存储。
+- 自动启动 Letta Code App Server 时不再传 `--backend`，也不检查或拒绝服务当前选择的 backend。
+- 移除 Shared Memory repository 路径发现、文件权限、Git 命令和专用工具白名单；后台 Session 不再覆盖 Letta 的默认工具集与 skills。
+- 创建新 Agent 时不再传入插件定义的 `memory`、`memfs` 或 `cwd`，不预建任何记忆块或目录结构。
+- 转录任务只描述长期记忆目标、工作区上下文、语言规则与安全约束，不再携带 memory mode、共享开关或存储机制提示。
+- 恢复不含 backend 的原每工作区状态命名空间，以继续处理升级前的 Agent 映射与待处理队列。
+- 移除对 `@letta-ai/letta-code/app-server-client` 的直接运行时导入，修复插件缓存目录缺少该包时无法创建 Agent 的问题。
+
 ## 2.3.0
 
 - 移除插件维护的 `letta-mem · shared` Agent、第二条 Conversation、共享上下文转发和本地共享会话映射；每个转录批次现在只发送给当前工作区或混合 Agent 一次。

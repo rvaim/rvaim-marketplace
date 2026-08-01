@@ -33,16 +33,16 @@ afterEach(() => {
 });
 
 describe("运行配置", () => {
-  it("默认连接本机的远程 App Server", () => {
+  it("默认只配置 Letta 连接与模型，不声明存储策略", () => {
     const config = readRuntimeConfig(env());
 
     expect(config.serverUrl).toBe("http://127.0.0.1:4500");
     expect(config.autoStartServer).toBe(true);
-    expect(config.serverBackend).toBe("api");
     expect(config.model).toBe("auto");
-    expect(config.mixedMemory).toBe(false);
-    expect(config.sharedMemory).toBe(true);
     expect(config.namespace).toHaveLength(20);
+    expect(config).not.toHaveProperty("serverBackend");
+    expect(config).not.toHaveProperty("mixedMemory");
+    expect(config).not.toHaveProperty("sharedMemory");
   });
 
   it("Claude Code 与 Codex 可以读取同一个共享配置文件", () => {
@@ -50,16 +50,12 @@ describe("运行配置", () => {
       serverUrl: "ws://127.0.0.1:4600/ws",
       autoStartServer: false,
       model: "deepseek/deepseek-v4-flash",
-      mixedMemory: true,
-      sharedMemory: false,
     });
     const config = readRuntimeConfig(env({ LETTA_MEM_CONFIG_PATH: path }));
 
     expect(config.serverUrl).toBe("http://127.0.0.1:4600");
     expect(config.autoStartServer).toBe(false);
     expect(config.model).toBe("deepseek/deepseek-v4-flash");
-    expect(config.mixedMemory).toBe(true);
-    expect(config.sharedMemory).toBe(false);
   });
 
   it("环境变量可以临时覆盖共享配置文件", () => {
@@ -67,51 +63,46 @@ describe("运行配置", () => {
       serverUrl: "http://127.0.0.1:4600",
       autoStartServer: false,
       model: "deepseek/deepseek-v4-flash",
-      mixedMemory: true,
-      sharedMemory: false,
     });
     const config = readRuntimeConfig(env({
       LETTA_MEM_CONFIG_PATH: path,
       LETTA_APP_SERVER_URL: "http://127.0.0.1:4700",
       LETTA_MEM_AUTO_START_SERVER: "true",
       LETTA_MEM_MODEL: "auto",
-      LETTA_MEM_MIXED_MEMORY: "false",
-      LETTA_MEM_SHARED_MEMORY: "true",
     }));
 
     expect(config.serverUrl).toBe("http://127.0.0.1:4700");
     expect(config.autoStartServer).toBe(true);
     expect(config.model).toBe("auto");
-    expect(config.mixedMemory).toBe(false);
-    expect(config.sharedMemory).toBe(true);
   });
 
-  it("模型变化复用状态，混合记忆模式使用独立命名空间", () => {
+  it("忽略旧版存储策略字段和环境变量", () => {
+    const path = sharedConfig({
+      serverBackend: "unsupported-backend",
+      mixedMemory: "旧值不再解析",
+      sharedMemory: { enabled: true },
+    });
+    const baseline = readRuntimeConfig(env({ LETTA_MEM_CONFIG_PATH: path }));
+    const legacyOverrides = readRuntimeConfig(env({
+      LETTA_MEM_CONFIG_PATH: path,
+      LETTA_MEM_SERVER_BACKEND: "任意旧值",
+      LETTA_MEM_MIXED_MEMORY: "任意旧值",
+      LETTA_MEM_SHARED_MEMORY: "任意旧值",
+    }));
+
+    expect(legacyOverrides).toEqual(baseline);
+  });
+
+  it("模型变化不会切换本地状态命名空间", () => {
     const automatic = readRuntimeConfig(env({ LETTA_MEM_MODEL: "auto" }));
     const explicit = readRuntimeConfig(env({
       LETTA_MEM_MODEL: "deepseek/deepseek-v4-flash",
     }));
-    const mixed = readRuntimeConfig(env({
-      LETTA_MEM_MODEL: "deepseek/deepseek-v4-flash",
-      LETTA_MEM_MIXED_MEMORY: "true",
-    }));
 
     expect(automatic.namespace).toBe(explicit.namespace);
-    expect(mixed.namespace).not.toBe(explicit.namespace);
   });
 
-  it("切换共享记忆不会丢失原工作区状态命名空间", () => {
-    const enabled = readRuntimeConfig(env({
-      LETTA_MEM_SHARED_MEMORY: "true",
-    }));
-    const disabled = readRuntimeConfig(env({
-      LETTA_MEM_SHARED_MEMORY: "false",
-    }));
-
-    expect(enabled.namespace).toBe(disabled.namespace);
-  });
-
-  it("切换自动启动不会改变记忆状态命名空间", () => {
+  it("切换自动启动不会改变本地状态命名空间", () => {
     const enabled = readRuntimeConfig(env({
       LETTA_MEM_AUTO_START_SERVER: "true",
     }));
@@ -122,6 +113,11 @@ describe("运行配置", () => {
     expect(enabled.namespace).toBe(disabled.namespace);
   });
 
+  it("继续使用旧版每工作区状态命名空间", () => {
+    const config = readRuntimeConfig(env());
+    expect(config.namespace).toBe("b576c18487a1cbb4b2d1");
+  });
+
   it("将空模型和 auto 别名规范为 auto", () => {
     expect(readRuntimeConfig(env({ LETTA_MEM_MODEL: " " })).model).toBe("auto");
     expect(readRuntimeConfig(env({ LETTA_MEM_MODEL: "letta/auto" })).model)
@@ -130,38 +126,10 @@ describe("运行配置", () => {
       .toBe("auto");
   });
 
-  it("拒绝无效的混合记忆布尔值", () => {
-    expect(() => readRuntimeConfig(env({
-      LETTA_MEM_MIXED_MEMORY: "yes",
-    }))).toThrow("混合记忆配置必须是");
-  });
-
-  it("拒绝无效的共享记忆布尔值", () => {
-    expect(() => readRuntimeConfig(env({
-      LETTA_MEM_SHARED_MEMORY: "yes",
-    }))).toThrow("共享记忆配置必须是");
-  });
-
   it("拒绝无效的自动启动布尔值", () => {
     expect(() => readRuntimeConfig(env({
       LETTA_MEM_AUTO_START_SERVER: "yes",
     }))).toThrow("App Server 自动启动配置必须是");
-  });
-
-  it("原生 Shared Memory 拒绝 local backend", () => {
-    expect(() => readRuntimeConfig(env({
-      LETTA_MEM_SERVER_BACKEND: "local",
-    }))).toThrow("原生 Shared Memory repository 需要 api backend");
-  });
-
-  it("关闭共享记忆后可以使用 local backend", () => {
-    const config = readRuntimeConfig(env({
-      LETTA_MEM_SERVER_BACKEND: "local",
-      LETTA_MEM_SHARED_MEMORY: "false",
-    }));
-
-    expect(config.serverBackend).toBe("local");
-    expect(config.sharedMemory).toBe(false);
   });
 
   it("拒绝共享配置中类型错误的 autoStartServer", () => {
@@ -169,13 +137,6 @@ describe("运行配置", () => {
 
     expect(() => readRuntimeConfig(env({ LETTA_MEM_CONFIG_PATH: path })))
       .toThrow("共享配置 autoStartServer 必须是布尔值");
-  });
-
-  it("拒绝共享配置中类型错误的 sharedMemory", () => {
-    const path = sharedConfig({ sharedMemory: "true" });
-
-    expect(() => readRuntimeConfig(env({ LETTA_MEM_CONFIG_PATH: path })))
-      .toThrow("共享配置 sharedMemory 必须是布尔值");
   });
 
   it("接受 App Server 的 WebSocket 地址并规范为 HTTP 根地址", () => {

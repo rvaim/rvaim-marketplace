@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ensureLocalAppServer,
 } from "../src/app-server.js";
@@ -11,10 +11,7 @@ function createConfig(
   return {
     serverUrl,
     autoStartServer: true,
-    serverBackend: "api",
     model: "auto",
-    mixedMemory: false,
-    sharedMemory: true,
     dataDir: "/tmp/letta-mem-app-server-tests",
     namespace: "app-server-tests",
     requestTimeoutMs: 1_000,
@@ -27,6 +24,10 @@ function createConfig(
 function neverExits(): Promise<string> {
   return new Promise(() => {});
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function createDependencies(
   probeReady: AppServerDependencies["probeReady"],
@@ -58,6 +59,28 @@ function createDependencies(
 }
 
 describe("本地 App Server 自动启动", () => {
+  it("复用兼容服务时不检查其 backend 值", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      type: "app_server_info_response",
+      request_id: "request-backend-neutral",
+      success: true,
+      backend: "由 Letta 自行选择的实现",
+      letta_code_version: "0.30.0",
+      protocol_version: 1,
+      capabilities: {
+        agent_management: true,
+        conversation_management: true,
+        memory_management: true,
+        runtime_start: true,
+        split_channels: false,
+      },
+    }), { status: 200 })));
+    const log = vi.fn() as LogFunction;
+
+    await expect(ensureLocalAppServer(createConfig(), log)).resolves.toBe("ready");
+    expect(log).not.toHaveBeenCalled();
+  });
+
   it("已就绪时直接复用现有服务", async () => {
     const probeReady = vi.fn(async () => true);
     const setup = createDependencies(probeReady);
@@ -91,7 +114,6 @@ describe("本地 App Server 自动启动", () => {
     expect(setup.launch).toHaveBeenCalledWith(
       "/runtime/letta.js",
       "ws://127.0.0.1:4500",
-      "api",
     );
     expect(setup.release).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith(

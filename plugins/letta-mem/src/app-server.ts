@@ -26,7 +26,6 @@ interface AppServerInfo {
   type?: string;
   request_id?: string;
   success?: boolean;
-  backend?: string;
   letta_code_version?: string;
   protocol_version?: number;
   capabilities?: {
@@ -55,7 +54,6 @@ export interface AppServerDependencies {
   launch: (
     entry: string,
     listenUrl: string,
-    backend: RuntimeConfig["serverBackend"],
   ) => AppServerLaunch;
   acquireLock: (path: string) => (() => void) | null;
   delay: (milliseconds: number) => Promise<void>;
@@ -92,7 +90,6 @@ async function probeReady(
       && typeof info.request_id === "string"
       && info.request_id.length > 0
       && info.success === true
-      && (info.backend === "local" || info.backend === "api")
       && typeof info.letta_code_version === "string"
       && info.protocol_version === SUPPORTED_APP_SERVER_PROTOCOL
       && info.capabilities?.agent_management === true
@@ -165,7 +162,6 @@ function prepareServerLog(): string {
 function launch(
   entry: string,
   listenUrl: string,
-  backend: RuntimeConfig["serverBackend"],
 ): AppServerLaunch {
   const logPath = prepareServerLog();
   const descriptor = openSync(logPath, "a", 0o600);
@@ -185,8 +181,6 @@ function launch(
       process.execPath,
       [
         entry,
-        "--backend",
-        backend,
         "server",
         "--listen",
         listenUrl,
@@ -302,7 +296,6 @@ export async function ensureLocalAppServer(
       const launched = dependencies.launch(
         entry,
         listenUrl,
-        config.serverBackend,
       );
       log(
         "info",

@@ -182,7 +182,6 @@ async function openSessionWithRecovery(
       initialAgentId,
       conversationId,
       workspacePath,
-      config.sharedMemory,
     );
     return { agentId: initialAgentId, ...opened };
   } catch (error) {
@@ -197,7 +196,6 @@ async function openSessionWithRecovery(
         initialAgentId,
         undefined,
         workspacePath,
-        config.sharedMemory,
       );
       log("warn", "conversation-recreated", conversationId);
       return { agentId: initialAgentId, ...opened };
@@ -220,7 +218,6 @@ async function openSessionWithRecovery(
     recoveredAgentId,
     undefined,
     workspacePath,
-    config.sharedMemory,
   );
   log("warn", "agent-reference-recreated", initialAgentId);
   return { agentId: recoveredAgentId, ...opened };
@@ -435,8 +432,6 @@ async function processPendingUpdate(
         sessionId,
         workspacePath,
         batch.events,
-        config.mixedMemory,
-        config.sharedMemory,
       );
       const guidance = await sendAgentUpdate(agentSession, message);
       const trimmedGuidance = normalizedGuidance(
