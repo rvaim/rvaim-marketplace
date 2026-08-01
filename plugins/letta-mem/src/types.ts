@@ -14,6 +14,9 @@ export interface HookInput {
   hook_event_name?: string;
   source?: string;
   prompt?: string;
+  title?: string;
+  thread_title?: string;
+  conversation_title?: string;
   stop_hook_active?: boolean;
   last_assistant_message?: string;
 }
@@ -45,6 +48,8 @@ export interface SessionState {
   agentId?: string;
   agentModel?: string;
   conversationId?: string;
+  conversationTitle?: string;
+  conversationTitleSource?: "hook" | "codex" | "prompt";
   lastProcessedLine: number;
   recentDigests: string[];
   pendingAssistantDigests?: string[];

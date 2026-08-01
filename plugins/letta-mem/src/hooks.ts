@@ -7,6 +7,12 @@ import {
   normalizeWorkspacePath,
 } from "./context.js";
 import {
+  resolveConversationTitle,
+} from "./conversation-title.js";
+import type {
+  ResolvedConversationTitle,
+} from "./conversation-title.js";
+import {
   agentScopeKey,
   createAgentClient,
   formatMemoryContextRequest,
@@ -238,10 +244,12 @@ interface MappedAgentSession {
 async function openMappedAgentSession(
   config: RuntimeConfig,
   workspacePath: string,
-  sessionId: string,
+  input: HookInput,
   log: LogFunction,
   clientFactory: AgentClientFactory,
 ): Promise<MappedAgentSession> {
+  const sessionId = validSessionId(input);
+  if (!sessionId) throw new Error("缺少编码会话标识");
   const state = loadSessionState(config, workspacePath, sessionId);
   const client = await clientFactory(config);
   const resolvedAgentId = await resolveAgentId(
@@ -283,12 +291,68 @@ async function openMappedAgentSession(
     opened.session.close();
     throw new Error("无法保存 Letta 会话映射");
   }
+  await syncConversationTitle(
+    config,
+    workspacePath,
+    sessionId,
+    client,
+    opened.conversationId,
+    resolveConversationTitle(input),
+    log,
+  );
   return {
     client,
     agentId: opened.agentId,
     conversationId: opened.conversationId,
     session: opened.session,
   };
+}
+
+async function syncConversationTitle(
+  config: RuntimeConfig,
+  workspacePath: string,
+  sessionId: string,
+  client: MappedAgentSession["client"],
+  conversationId: string,
+  resolved: ResolvedConversationTitle | undefined,
+  log: LogFunction,
+): Promise<void> {
+  if (!resolved || !client.conversations?.update) return;
+  const state = loadSessionState(config, workspacePath, sessionId);
+  if (
+    state.conversationTitle === resolved.value
+    && state.conversationTitleSource === resolved.source
+  ) return;
+  if (
+    state.conversationTitleSource !== undefined
+    && state.conversationTitleSource !== "prompt"
+    && resolved.source === "prompt"
+  ) return;
+
+  try {
+    await withOperationTimeout(
+      client.conversations.update(conversationId, {
+        summary: resolved.value,
+      }),
+      Math.min(Math.max(config.requestTimeoutMs, 500), 3_000),
+      "Letta Conversation 标题同步超时",
+    );
+    await updateSessionState(
+      config,
+      workspacePath,
+      sessionId,
+      (latest) => ({
+        ...latest,
+        conversationTitle: resolved.value,
+        conversationTitleSource: resolved.source,
+      }),
+      2_000,
+    );
+    log("info", "conversation-title-synced", conversationId);
+  } catch (error) {
+    const detail = error instanceof Error ? errorDetail(error) : String(error);
+    log("warn", "conversation-title-sync-failed", detail);
+  }
 }
 
 function messageContentText(message: AgentConversationMessage): string {
@@ -397,6 +461,12 @@ export async function handleSessionStart(
         ...(state.conversationId !== undefined
           ? { conversationId: state.conversationId }
           : {}),
+        ...(state.conversationTitle !== undefined
+          ? { conversationTitle: state.conversationTitle }
+          : {}),
+        ...(state.conversationTitleSource !== undefined
+          ? { conversationTitleSource: state.conversationTitleSource }
+          : {}),
         ...(state.lastSeenConversationMessageId !== undefined
           ? {
               lastSeenConversationMessageId:
@@ -434,7 +504,7 @@ export async function handlePrepareSession(
     const opened = await openMappedAgentSession(
       config,
       workspacePath,
-      sessionId,
+      input,
       log,
       clientFactory,
     );
@@ -494,7 +564,7 @@ export async function handleInjectContext(
     const opened = await openMappedAgentSession(
       config,
       workspacePath,
-      sessionId,
+      input,
       log,
       clientFactory,
     );
@@ -594,6 +664,15 @@ export async function handleSyncContext(
   try {
     const client = await clientFactory(config);
     if (!client.conversations) return "";
+    await syncConversationTitle(
+      config,
+      workspacePath,
+      sessionId,
+      client,
+      state.conversationId,
+      resolveConversationTitle(input),
+      log,
+    );
     if (!state.lastSeenConversationMessageId) {
       await updateConversationCursor(
         config,
@@ -793,6 +872,15 @@ async function processPendingUpdate(
         );
         if (!mapped) throw new Error("无法保存 Letta 会话映射");
         state = mapped;
+        await syncConversationTitle(
+          config,
+          workspacePath,
+          sessionId,
+          client,
+          openedConversationId,
+          resolveConversationTitle(input),
+          log,
+        );
       }
 
       if (!agentId || !conversationId) {

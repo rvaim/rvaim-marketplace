@@ -89,6 +89,10 @@ export interface AgentClient {
     ) => Promise<AgentRecord>;
   };
   conversations?: {
+    update?(
+      conversationId: string,
+      options: { summary?: string; description?: string },
+    ): Promise<unknown>;
     listMessages(
       conversationId: string,
       options?: {
@@ -389,14 +393,14 @@ async function resolveDefinedAgentId(
 ): Promise<string> {
   const scopeKey = definition.scopeKey;
   const cached = loadAgentReference(config, scopeKey);
-  if (cached?.model === config.model && cached.definitionVersion === 5) {
+  if (cached?.model === config.model && cached.definitionVersion === 6) {
     return cached.agentId;
   }
 
   const release = await acquireAgentLock(config);
   try {
     const afterLock = loadAgentReference(config, scopeKey);
-    if (afterLock?.model === config.model && afterLock.definitionVersion === 5) {
+    if (afterLock?.model === config.model && afterLock.definitionVersion === 6) {
       return afterLock.agentId;
     }
     if (afterLock) {

@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2.5.1
+
+- 将语言约束扩展到 Letta Agent 处理记忆时产生的全部自然语言，包括分析说明、工具调用前后说明、记忆标题、摘要、正文和最终返回；每轮以对应用户消息的主要语言为准。
+- 将 Codex 当前任务标题同步为对应 Letta Conversation 的 `summary`，解决 Letta App 列表长期显示 `No summary` 的问题；Codex Hook 未直接提供标题时，只读查询本地任务索引，查不到再使用首条用户消息回退。
+- Conversation 标题变更后会在后续 Hook 中再次同步；插件仅保存上次同步标记用于去重，不接管 Letta Conversation 或记忆的持久化。
+- 明确工作区 `cwd` 是 SDK Session 的执行属性：插件创建和恢复的后台会话始终使用当前工作区；Letta App 手动打开同一 Conversation 时显示的是 App 自己新建的前台会话目录。
+
 ## 2.5.0
 
 - `UserPromptSubmit` 不再把插件本地 `contexts` 快照作为正常读取来源；现在会把当前问题、工作区路径和作用域约束实时交给对应 Letta Agent，由 Agent 使用其当前拥有的原生记忆能力返回相关上下文。

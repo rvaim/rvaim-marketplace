@@ -138,6 +138,7 @@ describe("后台记忆 Hook", () => {
       "agent-prepared",
     );
     const createSessionMock = vi.fn(() => opened.session);
+    const updateConversation = vi.fn(async () => ({}));
     const client: AgentClient = {
       createAgent: vi.fn(async () => "agent-prepared"),
       createSession: createSessionMock,
@@ -145,11 +146,16 @@ describe("后台记忆 Hook", () => {
       agents: {
         list: vi.fn(async () => []),
       },
+      conversations: {
+        update: updateConversation,
+        listMessages: vi.fn(async () => ({ messages: [] })),
+      },
     };
 
     await expect(handlePrepareSession(config, {
       session_id: "session-prepared",
       cwd: workspacePath,
+      thread_title: "优化 Letta 记忆插件",
     }, vi.fn() as LogFunction, vi.fn(async () => client) as AgentClientFactory))
       .resolves.toBe("");
 
@@ -159,10 +165,18 @@ describe("后台记忆 Hook", () => {
     );
     expect(opened.sent).toHaveLength(0);
     expect(opened.close).toHaveBeenCalledOnce();
+    expect(updateConversation).toHaveBeenCalledWith(
+      "conversation-prepared",
+      {
+        summary: "优化 Letta 记忆插件",
+      },
+    );
     expect(loadSessionState(config, workspacePath, "session-prepared"))
       .toMatchObject({
         agentId: "agent-prepared",
         conversationId: "conversation-prepared",
+        conversationTitle: "优化 Letta 记忆插件",
+        conversationTitleSource: "hook",
       });
   });
 
@@ -376,6 +390,8 @@ describe("后台记忆 Hook", () => {
       .toContain("如何判断、组织和保存记忆完全由你");
     expect(createdAgentOptions?.systemPrompt)
       .toContain("判断语言时只参考 role=\"user\" 的消息");
+    expect(createdAgentOptions?.systemPrompt)
+      .toContain("分析说明、工具调用前后说明、记忆标题、记忆摘要、记忆正文和最终响应");
     expect(createdAgentOptions?.systemPrompt)
       .toContain("证据不足或无法确定适用范围时，默认限定为当前工作区");
     expect(createdAgentOptions).not.toHaveProperty("memory");

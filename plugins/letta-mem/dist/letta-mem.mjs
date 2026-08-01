@@ -2,8 +2,8 @@
 
 // src/hooks.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { homedir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join3, resolve as resolve2 } from "node:path";
+import { homedir as homedir2 } from "node:os";
+import { isAbsolute as isAbsolute2, join as join4, resolve as resolve2 } from "node:path";
 
 // src/context.ts
 import { realpathSync } from "node:fs";
@@ -103,6 +103,8 @@ function loadSessionState(config, workspacePath, sessionId) {
       ...typeof value.agentId === "string" ? { agentId: value.agentId } : {},
       ...typeof value.agentModel === "string" ? { agentModel: value.agentModel } : {},
       ...typeof value.conversationId === "string" ? { conversationId: value.conversationId } : {},
+      ...typeof value.conversationTitle === "string" ? { conversationTitle: value.conversationTitle } : {},
+      ...value.conversationTitleSource === "hook" || value.conversationTitleSource === "codex" || value.conversationTitleSource === "prompt" ? { conversationTitleSource: value.conversationTitleSource } : {},
       ...typeof value.lastInjectedContextRevision === "string" ? { lastInjectedContextRevision: value.lastInjectedContextRevision } : {},
       ...typeof value.lastSeenConversationMessageId === "string" ? {
         lastSeenConversationMessageId: value.lastSeenConversationMessageId
@@ -159,7 +161,7 @@ function saveAgentReference(config, scopeKey, agentId, model = "auto") {
     agentId,
     scopeKey,
     model,
-    definitionVersion: 5,
+    definitionVersion: 6,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
 }
@@ -488,6 +490,70 @@ async function claimCachedContext(config, sessionId, workspacePath) {
   );
 }
 
+// src/conversation-title.ts
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir } from "node:os";
+import { join as join2 } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+var MAX_CONVERSATION_TITLE_CHARS = 200;
+function normalizedTitle(value) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) return void 0;
+  return Array.from(normalized).slice(0, MAX_CONVERSATION_TITLE_CHARS).join("");
+}
+function codexDataDirectories() {
+  const configured = process.env.CODEX_HOME?.trim();
+  const defaultDirectory = join2(homedir(), ".codex");
+  return [.../* @__PURE__ */ new Set([
+    ...configured ? [configured] : [],
+    defaultDirectory
+  ])];
+}
+function readCodexConversationTitle(sessionId, dataDirectories = codexDataDirectories()) {
+  for (const directory of dataDirectories) {
+    for (const databasePath of [
+      join2(directory, "state_5.sqlite"),
+      join2(directory, "sqlite", "state_5.sqlite")
+    ]) {
+      if (!existsSync2(databasePath)) continue;
+      let database;
+      try {
+        database = new DatabaseSync(databasePath, {
+          readOnly: true,
+          timeout: 100
+        });
+        const row = database.prepare(
+          "SELECT title, name FROM threads WHERE id = ? LIMIT 1"
+        ).get(sessionId);
+        const title = normalizedTitle(
+          typeof row?.name === "string" && row.name.trim() ? row.name : typeof row?.title === "string" ? row.title : void 0
+        );
+        if (title) return title;
+      } catch {
+      } finally {
+        try {
+          database?.close();
+        } catch {
+        }
+      }
+    }
+  }
+  return void 0;
+}
+function resolveConversationTitle(input) {
+  const hookTitle = normalizedTitle(
+    input.thread_title ?? input.conversation_title ?? input.title
+  );
+  if (hookTitle) return { value: hookTitle, source: "hook" };
+  const sessionId = input.session_id?.trim();
+  if (sessionId) {
+    const codexTitle = readCodexConversationTitle(sessionId);
+    if (codexTitle) return { value: codexTitle, source: "codex" };
+  }
+  const promptTitle = normalizedTitle(input.prompt);
+  return promptTitle ? { value: promptTitle, source: "prompt" } : void 0;
+}
+
 // src/letta.ts
 import {
   basename,
@@ -496,7 +562,9 @@ import {
 import { pathToFileURL } from "node:url";
 
 // src/memory-language.ts
-var MEMORY_LANGUAGE_POLICY = `- \u6BCF\u6761\u65B0\u5EFA\u6216\u5B9E\u8D28\u4FEE\u6539\u7684\u8BB0\u5FC6\uFF0C\u5FC5\u987B\u4F7F\u7528\u4EA7\u751F\u8BE5\u4E8B\u5B9E\u7684\u7528\u6237\u6D88\u606F\u6240\u4F7F\u7528\u7684\u81EA\u7136\u8BED\u8A00\u3002
+var MEMORY_LANGUAGE_POLICY = `- \u5904\u7406\u6BCF\u4E2A\u8BF7\u6C42\u65F6\u4EA7\u751F\u7684\u5168\u90E8\u81EA\u7136\u8BED\u8A00\u5185\u5BB9\uFF0C\u5305\u62EC\u5206\u6790\u8BF4\u660E\u3001\u5DE5\u5177\u8C03\u7528\u524D\u540E\u8BF4\u660E\u3001\u8BB0\u5FC6\u6807\u9898\u3001\u8BB0\u5FC6\u6458\u8981\u3001\u8BB0\u5FC6\u6B63\u6587\u548C\u6700\u7EC8\u54CD\u5E94\uFF0C\u90FD\u5FC5\u987B\u4F7F\u7528\u5BF9\u5E94\u7528\u6237\u6D88\u606F\u7684\u4E3B\u8981\u81EA\u7136\u8BED\u8A00\u3002
+- \u5BF9 <memory_context_request>\uFF0C\u4EE5 current_user_prompt \u7684\u4E3B\u8981\u8BED\u8A00\u4F5C\u4E3A\u672C\u8F6E\u5904\u7406\u8BED\u8A00\uFF1B\u5BF9 <coding_session_update>\uFF0C\u4EE5 transcript \u4E2D\u6700\u65B0\u4E00\u6761 role="user" \u6D88\u606F\u7684\u4E3B\u8981\u8BED\u8A00\u4F5C\u4E3A\u672C\u8F6E\u5904\u7406\u8BED\u8A00\u3002
+- \u6BCF\u6761\u65B0\u5EFA\u6216\u5B9E\u8D28\u4FEE\u6539\u7684\u8BB0\u5FC6\uFF0C\u5FC5\u987B\u4F7F\u7528\u4EA7\u751F\u8BE5\u4E8B\u5B9E\u7684\u7528\u6237\u6D88\u606F\u6240\u4F7F\u7528\u7684\u81EA\u7136\u8BED\u8A00\u3002
 - \u5224\u65AD\u8BED\u8A00\u65F6\u53EA\u53C2\u8003 role="user" \u7684\u6D88\u606F\uFF0C\u4E0D\u5F97\u8DDF\u968F\u52A9\u624B\u3001\u7CFB\u7EDF\u3001\u5DE5\u5177\u8F93\u51FA\u6216\u5F53\u524D\u6A21\u578B\u7684\u9ED8\u8BA4\u8BED\u8A00\u3002
 - \u7528\u6237\u7528\u7B80\u4F53\u4E2D\u6587\u8868\u8FBE\u7684\u4E8B\u5B9E\u7528\u7B80\u4F53\u4E2D\u6587\u4FDD\u5B58\uFF1B\u7528\u6237\u7528\u82F1\u6587\u8868\u8FBE\u7684\u4E8B\u5B9E\u7528\u82F1\u6587\u4FDD\u5B58\uFF1B\u7528\u6237\u4F7F\u7528\u5176\u4ED6\u8BED\u8A00\u65F6\u4E5F\u4F7F\u7528\u5BF9\u5E94\u8BED\u8A00\u4FDD\u5B58\u3002
 - \u540C\u4E00\u6761\u7528\u6237\u6D88\u606F\u6DF7\u5408\u591A\u79CD\u8BED\u8A00\u65F6\uFF0C\u4F7F\u7528\u5176\u4E3B\u8981\u53D9\u8FF0\u8BED\u8A00\uFF1B\u4EE3\u7801\u6807\u8BC6\u7B26\u3001\u5E93\u540D\u3001API \u540D\u3001\u6587\u4EF6\u8DEF\u5F84\u3001\u547D\u4EE4\u548C\u5FC5\u8981\u539F\u6587\u4FDD\u6301\u539F\u6837\u3002
@@ -699,13 +767,13 @@ async function prepareReusableAgent(config, client, reusable, definition) {
 async function resolveDefinedAgentId(config, client, definition, log) {
   const scopeKey = definition.scopeKey;
   const cached = loadAgentReference(config, scopeKey);
-  if (cached?.model === config.model && cached.definitionVersion === 5) {
+  if (cached?.model === config.model && cached.definitionVersion === 6) {
     return cached.agentId;
   }
   const release = await acquireAgentLock(config);
   try {
     const afterLock = loadAgentReference(config, scopeKey);
-    if (afterLock?.model === config.model && afterLock.definitionVersion === 5) {
+    if (afterLock?.model === config.model && afterLock.definitionVersion === 6) {
       return afterLock.agentId;
     }
     if (afterLock) {
@@ -821,12 +889,12 @@ async function sendAgentUpdate(session, message) {
 import {
   appendFileSync,
   chmodSync as chmodSync2,
-  existsSync as existsSync2,
+  existsSync as existsSync3,
   mkdirSync as mkdirSync2,
   renameSync as renameSync2,
   statSync as statSync2
 } from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+import { dirname as dirname2, join as join3 } from "node:path";
 var MAX_LOG_BYTES = 1e6;
 function sanitize(value, secrets) {
   let sanitized = value;
@@ -837,7 +905,7 @@ function sanitize(value, secrets) {
 }
 function rotateIfNeeded(logPath) {
   try {
-    if (existsSync2(logPath) && statSync2(logPath).size >= MAX_LOG_BYTES) {
+    if (existsSync3(logPath) && statSync2(logPath).size >= MAX_LOG_BYTES) {
       renameSync2(logPath, `${logPath}.1`);
       chmodSync2(`${logPath}.1`, 384);
     }
@@ -845,7 +913,7 @@ function rotateIfNeeded(logPath) {
   }
 }
 function createLogger(config) {
-  const logPath = join2(config.dataDir, "logs", "letta-mem.log");
+  const logPath = join3(config.dataDir, "logs", "letta-mem.log");
   const secrets = config.authToken ? [config.authToken] : [];
   return (level, event, detail = "") => {
     try {
@@ -873,13 +941,13 @@ function errorDetail(error) {
 import {
   closeSync as closeSync2,
   createReadStream,
-  existsSync as existsSync3,
+  existsSync as existsSync4,
   fstatSync,
   openSync as openSync2
 } from "node:fs";
 import { createInterface } from "node:readline";
 async function transcriptTailLineIndex(transcriptPath) {
-  if (!transcriptPath || !existsSync3(transcriptPath)) return -1;
+  if (!transcriptPath || !existsSync4(transcriptPath)) return -1;
   let descriptor;
   try {
     descriptor = openSync2(transcriptPath, "r");
@@ -1079,7 +1147,7 @@ async function readTranscriptIncrement(transcriptPath, startLine, recentDigests2
   let lineIndex = -1;
   let tailIncomplete = false;
   const boundedEnd = endLineIndex ?? Number.POSITIVE_INFINITY;
-  if (transcriptPath && existsSync3(transcriptPath) && boundedEnd >= 0) {
+  if (transcriptPath && existsSync4(transcriptPath) && boundedEnd >= 0) {
     const lines = createInterface({
       input: createReadStream(transcriptPath),
       crlfDelay: Infinity
@@ -1189,9 +1257,9 @@ function validSessionId(input) {
 function normalizeTranscriptPath(value, cwd) {
   const trimmed = value?.trim();
   if (!trimmed) return void 0;
-  if (trimmed === "~") return homedir();
+  if (trimmed === "~") return homedir2();
   if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
-    return join3(homedir(), trimmed.slice(2));
+    return join4(homedir2(), trimmed.slice(2));
   }
   if (isAbsolute2(trimmed)) return resolve2(trimmed);
   return resolve2(cwd?.trim() || process.cwd(), trimmed);
@@ -1320,7 +1388,9 @@ async function openSessionWithRecovery(config, client, scopeKey, initialAgentId,
   log("warn", "agent-reference-recreated", initialAgentId);
   return { agentId: recoveredAgentId, ...opened };
 }
-async function openMappedAgentSession(config, workspacePath, sessionId, log, clientFactory) {
+async function openMappedAgentSession(config, workspacePath, input, log, clientFactory) {
+  const sessionId = validSessionId(input);
+  if (!sessionId) throw new Error("\u7F3A\u5C11\u7F16\u7801\u4F1A\u8BDD\u6807\u8BC6");
   const state = loadSessionState(config, workspacePath, sessionId);
   const client = await clientFactory(config);
   const resolvedAgentId = await resolveAgentId(
@@ -1357,12 +1427,51 @@ async function openMappedAgentSession(config, workspacePath, sessionId, log, cli
     opened.session.close();
     throw new Error("\u65E0\u6CD5\u4FDD\u5B58 Letta \u4F1A\u8BDD\u6620\u5C04");
   }
+  await syncConversationTitle(
+    config,
+    workspacePath,
+    sessionId,
+    client,
+    opened.conversationId,
+    resolveConversationTitle(input),
+    log
+  );
   return {
     client,
     agentId: opened.agentId,
     conversationId: opened.conversationId,
     session: opened.session
   };
+}
+async function syncConversationTitle(config, workspacePath, sessionId, client, conversationId, resolved, log) {
+  if (!resolved || !client.conversations?.update) return;
+  const state = loadSessionState(config, workspacePath, sessionId);
+  if (state.conversationTitle === resolved.value && state.conversationTitleSource === resolved.source) return;
+  if (state.conversationTitleSource !== void 0 && state.conversationTitleSource !== "prompt" && resolved.source === "prompt") return;
+  try {
+    await withOperationTimeout(
+      client.conversations.update(conversationId, {
+        summary: resolved.value
+      }),
+      Math.min(Math.max(config.requestTimeoutMs, 500), 3e3),
+      "Letta Conversation \u6807\u9898\u540C\u6B65\u8D85\u65F6"
+    );
+    await updateSessionState(
+      config,
+      workspacePath,
+      sessionId,
+      (latest) => ({
+        ...latest,
+        conversationTitle: resolved.value,
+        conversationTitleSource: resolved.source
+      }),
+      2e3
+    );
+    log("info", "conversation-title-synced", conversationId);
+  } catch (error) {
+    const detail = error instanceof Error ? errorDetail(error) : String(error);
+    log("warn", "conversation-title-sync-failed", detail);
+  }
 }
 function messageContentText(message) {
   if (typeof message.content === "string") return message.content.trim();
@@ -1439,6 +1548,8 @@ async function handleSessionStart(config, input) {
         ...state.agentId !== void 0 ? { agentId: state.agentId } : {},
         ...state.agentModel !== void 0 ? { agentModel: state.agentModel } : {},
         ...state.conversationId !== void 0 ? { conversationId: state.conversationId } : {},
+        ...state.conversationTitle !== void 0 ? { conversationTitle: state.conversationTitle } : {},
+        ...state.conversationTitleSource !== void 0 ? { conversationTitleSource: state.conversationTitleSource } : {},
         ...state.lastSeenConversationMessageId !== void 0 ? {
           lastSeenConversationMessageId: state.lastSeenConversationMessageId
         } : {},
@@ -1466,7 +1577,7 @@ async function handlePrepareSession(config, input, log, clientFactory = createAg
     const opened = await openMappedAgentSession(
       config,
       workspacePath,
-      sessionId,
+      input,
       log,
       clientFactory
     );
@@ -1519,7 +1630,7 @@ async function handleInjectContext(config, input, log = () => {
     const opened = await openMappedAgentSession(
       config,
       workspacePath,
-      sessionId,
+      input,
       log,
       clientFactory
     );
@@ -1608,6 +1719,15 @@ async function handleSyncContext(config, input, log, clientFactory = createAgent
   try {
     const client = await clientFactory(config);
     if (!client.conversations) return "";
+    await syncConversationTitle(
+      config,
+      workspacePath,
+      sessionId,
+      client,
+      state.conversationId,
+      resolveConversationTitle(input),
+      log
+    );
     if (!state.lastSeenConversationMessageId) {
       await updateConversationCursor(
         config,
@@ -1772,6 +1892,15 @@ async function processPendingUpdate(config, pending, log, clientFactory) {
         );
         if (!mapped) throw new Error("\u65E0\u6CD5\u4FDD\u5B58 Letta \u4F1A\u8BDD\u6620\u5C04");
         state = mapped;
+        await syncConversationTitle(
+          config,
+          workspacePath,
+          sessionId,
+          client,
+          openedConversationId,
+          resolveConversationTitle(input),
+          log
+        );
       }
       if (!agentId || !conversationId) {
         throw new Error("Letta \u4F1A\u8BDD\u6620\u5C04\u4E0D\u5B8C\u6574");
@@ -1911,9 +2040,9 @@ async function handleUpdateMemory(config, input, log, clientFactory = createAgen
 
 // src/config.ts
 import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync4, readFileSync as readFileSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join4, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync2 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { isAbsolute as isAbsolute3, join as join5, resolve as resolve3 } from "node:path";
 var DEFAULT_SERVER_URL = "http://127.0.0.1:4500";
 var DEFAULT_MODEL = "auto";
 function firstNonEmpty(...values) {
@@ -1971,16 +2100,16 @@ function normalizeModel(value) {
 }
 function sharedConfigPath(env) {
   const configured = firstNonEmpty(env.LETTA_MEM_CONFIG_PATH);
-  if (!configured) return join4(homedir2(), ".letta-mem", "config.json");
-  if (configured === "~") return homedir2();
+  if (!configured) return join5(homedir3(), ".letta-mem", "config.json");
+  if (configured === "~") return homedir3();
   if (configured.startsWith("~/") || configured.startsWith("~\\")) {
-    return join4(homedir2(), configured.slice(2));
+    return join5(homedir3(), configured.slice(2));
   }
   return isAbsolute3(configured) ? configured : resolve3(configured);
 }
 function readSharedConfig(env) {
   const path = sharedConfigPath(env);
-  if (!existsSync4(path)) return {};
+  if (!existsSync5(path)) return {};
   const value = JSON.parse(readFileSync2(path, "utf8"));
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("letta-mem \u5171\u4EAB\u914D\u7F6E\u5FC5\u987B\u662F JSON \u5BF9\u8C61");
@@ -2021,7 +2150,7 @@ function readRuntimeConfig(env = process.env) {
     env.CLAUDE_PLUGIN_DATA,
     env.PLUGIN_DATA,
     env.LETTA_MEM_DATA_DIR
-  ) ?? join4(homedir2(), ".letta-mem", "data", "development");
+  ) ?? join5(homedir3(), ".letta-mem", "data", "development");
   return {
     serverUrl,
     ...authToken ? { authToken } : {},

@@ -137,6 +137,14 @@ export function loadSessionState(
       ...(typeof value.conversationId === "string"
         ? { conversationId: value.conversationId }
         : {}),
+      ...(typeof value.conversationTitle === "string"
+        ? { conversationTitle: value.conversationTitle }
+        : {}),
+      ...(value.conversationTitleSource === "hook"
+          || value.conversationTitleSource === "codex"
+          || value.conversationTitleSource === "prompt"
+        ? { conversationTitleSource: value.conversationTitleSource }
+        : {}),
       ...(typeof value.lastInjectedContextRevision === "string"
         ? { lastInjectedContextRevision: value.lastInjectedContextRevision }
         : {}),
@@ -234,7 +242,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
-    definitionVersion: 5,
+    definitionVersion: 6,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }
