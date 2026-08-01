@@ -40,8 +40,11 @@ const PLUGIN_SDK_ENTRY = join(
 const LOG_PATH = join(DATA_DIR, "logs", "letta-mem.log");
 const ACTIONS = new Set([
   "session-state",
+  "prepare-session-background",
+  "prepare-session-worker",
   "prepare-runtime",
   "inject-context",
+  "sync-context",
   "update-memory",
   "prepare-runtime-background",
   "update-memory-background",
@@ -430,19 +433,27 @@ async function runHook(action, input, sdkEntry) {
   return result.stdout;
 }
 
-function startBackgroundDrain() {
+function startBackgroundAction(action, input = Buffer.from("")) {
   try {
-    const child = spawn(process.execPath, [__filename, "drain-background"], {
+    const child = spawn(process.execPath, [__filename, action], {
       cwd: process.cwd(),
       env: { ...process.env },
       detached: true,
-      stdio: "ignore",
+      stdio: ["pipe", "ignore", "ignore"],
       windowsHide: true,
     });
+    child.stdin.on("error", () => {
+      // 后台进程提前退出时忽略管道错误。
+    });
+    child.stdin.end(input);
     child.unref();
   } catch (error) {
     log("background-start-failed", error);
   }
+}
+
+function startBackgroundDrain() {
+  startBackgroundAction("drain-background");
 }
 
 async function drainPending() {
@@ -458,8 +469,9 @@ async function main() {
   if (/^(?:1|true)$/i.test(process.env.LETTA_MEM_DISABLED || "")) return;
   const input = await readStdin();
 
-  if (action === "inject-context") {
-    const output = await runHook(action, input, false);
+  if (action === "inject-context" || action === "sync-context") {
+    const sdkEntry = await ensureRuntime();
+    const output = await runHook(action, input, sdkEntry);
     if (output && Buffer.byteLength(output, "utf8") <= 10_000) {
       process.stdout.write(output);
     } else if (output) {
@@ -470,6 +482,19 @@ async function main() {
 
   if (action === "session-state") {
     await runHook("session-start", input, null);
+    return;
+  }
+
+  if (action === "prepare-session-background") {
+    startBackgroundAction("prepare-session-worker", input);
+    return;
+  }
+
+  if (action === "prepare-session-worker") {
+    const sdkEntry = await ensureRuntime();
+    if (!sdkEntry) return;
+    await runHook("prepare-session", input, sdkEntry);
+    await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
     return;
   }
 

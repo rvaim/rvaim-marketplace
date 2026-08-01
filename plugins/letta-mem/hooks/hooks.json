@@ -12,9 +12,9 @@
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-runtime-background",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-session-background",
             "timeout": 2,
-            "statusMessage": "正在准备 Letta 记忆"
+            "statusMessage": "正在准备 Letta 会话"
           }
         ]
       }
@@ -25,8 +25,20 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" inject-context",
-            "timeout": 2,
-            "statusMessage": "正在读取 Letta 记忆"
+            "timeout": 40,
+            "statusMessage": "正在向 Letta Agent 获取相关记忆"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" sync-context",
+            "timeout": 10,
+            "statusMessage": "正在同步 Letta 后台上下文"
           }
         ]
       }

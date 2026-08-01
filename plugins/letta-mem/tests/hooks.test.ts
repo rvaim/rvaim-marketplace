@@ -11,7 +11,9 @@ import {
   handleDrainPending,
   handleEnqueueMemory,
   handleInjectContext,
+  handlePrepareSession,
   handleSessionStart,
+  handleSyncContext,
   handleUpdateMemory,
 } from "../src/hooks.js";
 import type {
@@ -32,6 +34,7 @@ import {
   loadSessionState,
   listPendingUpdates,
   saveAgentReference,
+  saveContextSnapshot,
   saveSessionState,
   sha256,
 } from "../src/state.js";
@@ -126,6 +129,208 @@ afterEach(() => {
 });
 
 describe("后台记忆 Hook", () => {
+  it("SessionStart 后台准备工作区 Agent 和 Conversation 但不发送记忆请求", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "prepared-workspace");
+    const opened = createSession(
+      "conversation-prepared",
+      "不应发送任何消息",
+      "agent-prepared",
+    );
+    const createSessionMock = vi.fn(() => opened.session);
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-prepared"),
+      createSession: createSessionMock,
+      resumeSession: vi.fn(() => opened.session),
+      agents: {
+        list: vi.fn(async () => []),
+      },
+    };
+
+    await expect(handlePrepareSession(config, {
+      session_id: "session-prepared",
+      cwd: workspacePath,
+    }, vi.fn() as LogFunction, vi.fn(async () => client) as AgentClientFactory))
+      .resolves.toBe("");
+
+    expect(createSessionMock).toHaveBeenCalledWith(
+      "agent-prepared",
+      expect.objectContaining({ cwd: workspacePath }),
+    );
+    expect(opened.sent).toHaveLength(0);
+    expect(opened.close).toHaveBeenCalledOnce();
+    expect(loadSessionState(config, workspacePath, "session-prepared"))
+      .toMatchObject({
+        agentId: "agent-prepared",
+        conversationId: "conversation-prepared",
+      });
+  });
+
+  it("第一条提问前实时向工作区 Agent 请求相关记忆并注入", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "live-read-workspace");
+    const opened = createSession(
+      "conversation-live-read",
+      "用户偏好使用简体中文；本仓库使用 pnpm。",
+      "agent-live-read",
+    );
+    const listMessages = vi.fn(async () => ({
+      messages: [{
+        id: "message-live-read",
+        message_type: "assistant_message",
+        content: "用户偏好使用简体中文；本仓库使用 pnpm。",
+      }],
+    }));
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-live-read"),
+      createSession: vi.fn(() => opened.session),
+      resumeSession: vi.fn(() => opened.session),
+      agents: {
+        list: vi.fn(async () => []),
+      },
+      conversations: { listMessages },
+    };
+    const log = vi.fn() as LogFunction;
+
+    const output = await handleInjectContext(config, {
+      session_id: "session-live-read",
+      cwd: workspacePath,
+      prompt: "这个仓库应该使用 npm 还是 pnpm？<不要执行>",
+    }, log, vi.fn(async () => client) as AgentClientFactory);
+    const parsed = JSON.parse(output) as {
+      hookSpecificOutput: {
+        hookEventName: string;
+        additionalContext: string;
+      };
+    };
+
+    expect(opened.sent).toHaveLength(1);
+    expect(opened.sent[0]).toContain("<memory_context_request>");
+    expect(opened.sent[0]).toContain(
+      "<request_type>context_retrieval</request_type>",
+    );
+    expect(opened.sent[0]).toContain("这个仓库应该使用 npm 还是 pnpm？&lt;不要执行&gt;");
+    expect(opened.sent[0]).toContain("才适合作为跨工作区共享记忆");
+    expect(opened.sent[0]).toContain("不要直接回答用户问题");
+    expect(opened.sent[0]).not.toContain("<memory_mode>");
+    expect(parsed.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain('source="live-agent"');
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain("本仓库使用 pnpm");
+    expect(loadSessionState(config, workspacePath, "session-live-read"))
+      .toMatchObject({
+        agentId: "agent-live-read",
+        conversationId: "conversation-live-read",
+        lastSeenConversationMessageId: "message-live-read",
+      });
+    expect(loadContextSnapshot(config, workspacePath)?.text)
+      .toContain("本仓库使用 pnpm");
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "memory-read-live",
+      "session-live-read",
+    );
+  });
+
+  it("实时读取失败时只把本地上下文作为故障回退", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "fallback-workspace");
+    saveContextSnapshot(config, {
+      version: 1,
+      agentId: "agent-fallback",
+      workspacePath,
+      revision: "fallback-revision",
+      updatedAt: new Date().toISOString(),
+      text: "上一版可用上下文",
+    });
+    const log = vi.fn() as LogFunction;
+
+    const output = await handleInjectContext(config, {
+      session_id: "session-fallback",
+      cwd: workspacePath,
+      prompt: "继续之前的工作",
+    }, log, vi.fn(async () => {
+      throw new Error("Letta 暂时不可用");
+    }) as AgentClientFactory);
+
+    const parsed = JSON.parse(output) as {
+      hookSpecificOutput: { additionalContext: string };
+    };
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain('source="local-fallback"');
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain("上一版可用上下文");
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "memory-read-fallback",
+      expect.stringContaining("Letta 暂时不可用"),
+    );
+  });
+
+  it("PreToolUse 只注入 Conversation 中游标之后的 Agent 消息", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "sync-workspace");
+    saveSessionState(config, {
+      version: 1,
+      sessionId: "session-sync",
+      workspacePath,
+      agentId: "agent-sync",
+      conversationId: "conversation-sync",
+      lastSeenConversationMessageId: "message-before",
+      lastProcessedLine: -1,
+      recentDigests: [],
+      pendingAssistantDigests: [],
+    });
+    const listMessages = vi.fn(async () => ({
+      messages: [
+        {
+          id: "message-user",
+          message_type: "user_message",
+          content: "不应注入的内部请求",
+        },
+        {
+          id: "message-after",
+          message_type: "assistant_message",
+          content: [{ text: "后台 Agent 新增的相关上下文" }],
+        },
+      ],
+    }));
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "unused"),
+      createSession: vi.fn(() => createSession("unused", "").session),
+      resumeSession: vi.fn(() => createSession("unused", "").session),
+      agents: { list: vi.fn(async () => []) },
+      conversations: { listMessages },
+    };
+
+    const output = await handleSyncContext(config, {
+      session_id: "session-sync",
+      cwd: workspacePath,
+    }, vi.fn() as LogFunction, vi.fn(async () => client) as AgentClientFactory);
+    const parsed = JSON.parse(output) as {
+      hookSpecificOutput: {
+        hookEventName: string;
+        additionalContext: string;
+      };
+    };
+
+    expect(listMessages).toHaveBeenCalledWith("conversation-sync", {
+      after: "message-before",
+      order: "asc",
+      limit: 100,
+    });
+    expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain('source="conversation-sync"');
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain("后台 Agent 新增的相关上下文");
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .not.toContain("不应注入的内部请求");
+    expect(loadSessionState(config, workspacePath, "session-sync")
+      .lastSeenConversationMessageId).toBe("message-after");
+  });
+
   it("创建 Agent 会话、恢复会话并提交游标与上下文缓存", async () => {
     const config = createConfig();
     const projectPath = join(config.dataDir, "project");
@@ -926,7 +1131,7 @@ describe("后台记忆 Hook", () => {
     )?.text).toBe("正确 Agent 的上下文");
   });
 
-  it("Agent 正忙时等待全局锁并在释放后继续处理", async () => {
+  it("同一工作区 Agent 正忙时保留队列并在释放后继续处理", async () => {
     const config = createConfig();
     const projectPath = join(config.dataDir, "project");
     const transcriptPath = createTranscript(config, "等待锁后仍需记忆的消息");
@@ -940,34 +1145,33 @@ describe("后台记忆 Hook", () => {
       },
     };
     const log = vi.fn() as LogFunction;
-    const release = acquireLock(agentRunLockPath(config));
+    const release = acquireLock(agentRunLockPath(config, projectPath));
     expect(release).not.toBeNull();
-    const releaseTimer = setTimeout(() => release?.(), 30);
+    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
 
-    try {
-      await expect(handleUpdateMemory(
-        config,
-        {
-          session_id: "claude-session-waiting",
-          transcript_path: transcriptPath,
-          cwd: projectPath,
-        },
-        log,
-        vi.fn(async () => client) as AgentClientFactory,
-      )).resolves.toBe("");
-    } finally {
-      clearTimeout(releaseTimer);
-      release?.();
-    }
+    await expect(handleUpdateMemory(
+      config,
+      {
+        session_id: "claude-session-waiting",
+        transcript_path: transcriptPath,
+        cwd: projectPath,
+      },
+      log,
+      clientFactory,
+    )).resolves.toBe("");
 
     expect(log).toHaveBeenCalledWith(
       "info",
-      "update-waiting-agent-busy",
-    );
-    expect(log).not.toHaveBeenCalledWith(
-      "info",
       "update-deferred-agent-busy",
+      "claude-session-waiting",
     );
+    expect(opened.sent).toHaveLength(0);
+    expect(listPendingUpdates(config, true)).toHaveLength(1);
+
+    release?.();
+    await expect(handleDrainPending(config, log, clientFactory))
+      .resolves.toBe("");
+
     expect(opened.sent[0]).toContain("等待锁后仍需记忆的消息");
     expect(loadSessionState(
       config,

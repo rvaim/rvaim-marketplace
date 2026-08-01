@@ -94,8 +94,15 @@ export function sessionLockPath(
   );
 }
 
-export function agentRunLockPath(config: RuntimeConfig): string {
-  return join(namespaceDir(config), "locks", "agent-run.lock");
+export function agentRunLockPath(
+  config: RuntimeConfig,
+  scopeKey: string = "global",
+): string {
+  return join(
+    namespaceDir(config),
+    "locks",
+    `agent-run-${hash(scopeKey)}.lock`,
+  );
 }
 
 export function agentLockPath(config: RuntimeConfig): string {
@@ -132,6 +139,12 @@ export function loadSessionState(
         : {}),
       ...(typeof value.lastInjectedContextRevision === "string"
         ? { lastInjectedContextRevision: value.lastInjectedContextRevision }
+        : {}),
+      ...(typeof value.lastSeenConversationMessageId === "string"
+        ? {
+            lastSeenConversationMessageId:
+              value.lastSeenConversationMessageId,
+          }
         : {}),
       lastProcessedLine: value.lastProcessedLine,
       recentDigests: value.recentDigests.filter(
@@ -221,7 +234,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
-    definitionVersion: 4,
+    definitionVersion: 5,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }

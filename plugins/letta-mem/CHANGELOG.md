@@ -1,5 +1,15 @@
 # 变更日志
 
+## 2.5.0
+
+- `UserPromptSubmit` 不再把插件本地 `contexts` 快照作为正常读取来源；现在会把当前问题、工作区路径和作用域约束实时交给对应 Letta Agent，由 Agent 使用其当前拥有的原生记忆能力返回相关上下文。
+- `SessionStart` 新增后台会话预热，提前解析工作区 Agent 并创建或恢复当前编码会话的 Letta Conversation，使第一条用户问题也能读取记忆。
+- 新增 `PreToolUse` Conversation 增量同步，通过消息游标注入后台稍后完成的 Agent 上下文，并避免重复注入历史消息。
+- 将提示词明确分成 `context_retrieval` 与 `session_update`：前者只把当前问题作为不可信的相关性查询条件，不直接回答；后者处理完整转录并由 Agent 自行决定记忆价值、共享或工作区作用域及实际保存位置。
+- 本地上下文快照降级为 Letta 不可用、超时或同工作区 Agent 正忙时的有限故障回退，并在注入元数据中区分 `live-agent`、`conversation-sync` 与 `local-fallback`。
+- Agent 运行锁改为按工作区作用域隔离；同一个 Agent 的实时读取与后台写入保持有序，不同工作区不再共用一把全局运行锁。
+- 新增实时读取、空结果、超时、回退和 Conversation 同步日志，并补充首轮读取、预热、游标去重、故障回退与作用域边界测试。
+
 ## 2.4.4
 
 - 修复工作区 Agent 的执行目录被 SDK 服务进程当前目录污染的问题；创建 Agent、新建 Session 和恢复 Session 时都会显式传入对应工作区的规范化绝对路径作为 `cwd`。

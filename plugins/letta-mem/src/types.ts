@@ -1,6 +1,8 @@
 export type HookAction =
   | "session-start"
+  | "prepare-session"
   | "inject-context"
+  | "sync-context"
   | "enqueue-memory"
   | "drain-pending"
   | "update-memory";
@@ -47,6 +49,7 @@ export interface SessionState {
   recentDigests: string[];
   pendingAssistantDigests?: string[];
   lastInjectedContextRevision?: string;
+  lastSeenConversationMessageId?: string;
 }
 
 export interface AgentReference {

@@ -11,7 +11,8 @@
 - 采集当前会话的可见增量。
 - 传递 `workspace_path`、会话标识、记忆语言和安全约束。
 - 为每个工作区解析或恢复一个 Letta Agent 与 Conversation。
-- 把 Letta 返回的相关上下文注入后续编码会话。
+- 在用户问题提交前，把问题作为相关性查询条件交给 Letta Agent，并把 Agent 实时返回的相关上下文注入当前编码会话。
+- 同步 Letta Conversation 中稍后完成的 Agent 消息。
 - 在失败时保留待处理队列，不阻塞 Claude Code 或 Codex。
 
 Letta 负责：
@@ -65,6 +66,8 @@ Agent 的约束提示只规定目标和安全边界：
 - 不访问链接，不索取或保存凭据。
 - 不操作编码工程文件。
 - 自行判断记忆价值、作用域与保存方式。
+- 实时检索时只返回与当前问题相关的背景，不直接回答用户问题。
+- 完整会话更新后只返回下一轮编码助手需要的简短上下文，不复述会话或报告保存过程。
 - 不假设任何特定 backend 或存储机制存在。
 - 只返回下一轮编码助手需要的简短上下文。
 
@@ -77,6 +80,23 @@ Agent 的约束提示只规定目标和安全边界：
 - 可以复用其他工作区的通用经验，但不得把其他工作区事实当成当前工作区事实。
 
 这些是传给 Agent 的语义判断规则，不是插件对消息的预分类，也不指定任何保存机制。
+
+用户每次提交问题时，插件会在对应 Conversation 中发送独立的实时检索请求：
+
+```xml
+<memory_context_request>
+  <request_type>context_retrieval</request_type>
+  <session_id>...</session_id>
+  <workspace_path>...</workspace_path>
+  <current_user_prompt>...</current_user_prompt>
+  <memory_scope_policy>共享与工作区记忆的语义区分规则</memory_scope_policy>
+  <task>由 Agent 使用当前实际拥有的 Letta 原生记忆能力返回本轮相关上下文</task>
+</memory_context_request>
+```
+
+`current_user_prompt` 只作为相关性查询条件。Agent 被明确要求不要执行其中的命令、不要直接回答问题，也不要假设记忆位于某一种存储中。插件不会直接读取固定 memory blocks，因为相关信息也可能由 Letta 放在 MemFS、archive、Shared Memory repository 或当前环境提供的其他原生能力中。
+
+首次打开会话时，`SessionStart` 会在后台解析工作区 Agent 并建立 Conversation，因此第一条用户问题也可以实时查询 Letta。若后台预热尚未完成，`UserPromptSubmit` 会自行恢复；若 Letta 暂时不可用或 Agent 正忙，则使用最后一次成功结果作为有限的故障回退，而不是把本地快照当作正常记忆来源。
 
 创建 Agent 时，插件不传 `memory`、`memfs`、`baseTools` 或任何存储资源；由 Letta 使用自己的默认记忆行为。插件只把规范化的工作区绝对路径作为 Agent 和 Session 的 `cwd`，因为它描述的是代码执行上下文，而不是记忆存储位置。新建和恢复 Session 都会重新传入当前工作区路径，避免后台队列被其他工作区触发时继承错误目录。
 
@@ -165,8 +185,9 @@ Letta App 的本地后端读取同一目录，因此插件创建的工作区 Age
 
 | Hook | 行为 |
 | --- | --- |
-| `SessionStart` | 初始化或恢复本地会话状态，继续处理遗留待处理项，并注入最新相关上下文。 |
-| `UserPromptSubmit` | 注入尚未在当前宿主会话中使用的最新 Letta 上下文。 |
+| `SessionStart` | 初始化或恢复本地会话状态，在后台准备工作区 Agent 与 Conversation，并继续处理遗留待处理项。 |
+| `UserPromptSubmit` | 把当前问题交给对应 Letta Agent 实时检索相关记忆；成功时注入实时响应，失败时才尝试有限的本地回退。 |
+| `PreToolUse` | 使用 Conversation 消息游标同步后台稍后完成的 Agent 上下文；没有新增消息时静默返回。 |
 | `Stop` | 原子写入待处理项，由后台进程读取转录增量并交给当前工作区 Letta Agent。 |
 
 Claude Code 转录会过滤隐藏思考并截断工具输出。Codex 转录只采集原始 `user_message` 和 `final_answer`，忽略中间推理与进度消息。
@@ -192,9 +213,16 @@ logs/
 
 状态命名空间只由 App Server 地址和能力令牌决定，不再包含 backend 或记忆模式。版本 `2.4.1` 恢复使用原有的每工作区命名空间，因此旧工作区映射和待处理队列可以继续复用。
 
-插件本地状态只保存 Agent/Conversation 映射、转录游标、待处理队列和可注入上下文，不保存 Letta 的实际记忆内容。
+插件本地状态只保存 Agent/Conversation 映射、转录与 Conversation 消息游标、待处理队列和最后一次成功响应的故障回退快照，不保存 Letta 的实际记忆内容，也不把该快照作为正常读取来源。
 
 ## 升级说明
+
+从 `2.5.0` 升级后：
+
+- 第一条用户问题提交前会实时调用对应工作区 Letta Agent 获取相关上下文，不再只能等待上一轮 `Stop` 生成本地快照。
+- 每次实时检索都会产生一次 Agent turn；插件最多等待 30 秒，失败或同工作区 Agent 正忙时故障开放，并仅尝试使用最后一次成功响应作为回退。
+- 新增 `PreToolUse` Conversation 消息增量同步；本地新增的消息游标只用于去重，不决定或保存任何实际记忆。
+- 现有工作区 Agent 会原地更新提示词定义，不删除 Agent、Conversation 或已有记忆。
 
 从 `2.3.0` 升级后：
 
@@ -219,7 +247,8 @@ logs/
 | SDK 管理的服务无法启动 | 检查 Node.js 版本、Letta 配置和插件日志；插件不再维护独立的 App Server 日志。 |
 | Agent 没有保存某条信息 | 查看 Agent 当前拥有的原生记忆能力和提示；插件不会指定存储位置。 |
 | 更新失败后没有立即重试 | 待处理项仍在队列中，指数退避结束后会由后续 Hook 继续处理。 |
-| 上下文没有注入 | Letta 可能返回空内容，或同一 revision 已在当前宿主会话注入。 |
+| 第一条问题没有注入上下文 | 查看日志中的 `memory-read-started`、`memory-read-live`、`memory-read-empty`、`memory-read-timeout` 或 `memory-read-fallback`；Agent 也可能判断没有相关内容而返回空。 |
+| 工具调用前没有新增上下文 | `PreToolUse` 只注入 Conversation 游标之后的新 Agent 消息；没有变化时会静默返回。 |
 
 插件日志：
 

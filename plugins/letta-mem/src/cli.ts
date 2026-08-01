@@ -2,7 +2,9 @@ import {
   handleDrainPending,
   handleEnqueueMemory,
   handleInjectContext,
+  handlePrepareSession,
   handleSessionStart,
+  handleSyncContext,
   handleUpdateMemory,
 } from "./hooks.js";
 import { readRuntimeConfig } from "./config.js";
@@ -26,7 +28,9 @@ async function readInput(): Promise<HookInput> {
 function parseAction(value: string | undefined): HookAction | null {
   if (
     value === "session-start"
+    || value === "prepare-session"
     || value === "inject-context"
+    || value === "sync-context"
     || value === "enqueue-memory"
     || value === "drain-pending"
     || value === "update-memory"
@@ -47,8 +51,12 @@ async function main(): Promise<void> {
 
     if (action === "session-start") {
       output = await handleSessionStart(config, input);
+    } else if (action === "prepare-session") {
+      output = await handlePrepareSession(config, input, log);
     } else if (action === "inject-context") {
-      output = await handleInjectContext(config, input);
+      output = await handleInjectContext(config, input, log);
+    } else if (action === "sync-context") {
+      output = await handleSyncContext(config, input, log);
     } else if (action === "enqueue-memory") {
       output = await handleEnqueueMemory(config, input, log);
     } else if (action === "drain-pending") {

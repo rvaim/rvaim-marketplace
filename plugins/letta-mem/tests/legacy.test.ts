@@ -35,7 +35,8 @@ describe("新版 Letta 边界", () => {
 
     expect(claudeManifest).not.toHaveProperty("userConfig");
     expect(codexManifest).not.toHaveProperty("hooks");
-    expect(hooks).toContain("prepare-runtime-background");
+    expect(hooks).toContain("prepare-session-background");
+    expect(hooks).toContain("PreToolUse");
     expect(hooks).toContain("update-memory-background");
     expect(readFileSync(join(pluginRoot, "bin", "bootstrap.cjs"), "utf8"))
       .not.toContain("ensure-server");
