@@ -37,6 +37,8 @@ describe("新版 Letta 边界", () => {
     expect(codexManifest).not.toHaveProperty("hooks");
     expect(hooks).toContain("prepare-runtime-background");
     expect(hooks).toContain("update-memory-background");
+    expect(readFileSync(join(pluginRoot, "bin", "bootstrap.cjs"), "utf8"))
+      .toContain("ensure-server");
   });
 
   it("直接依赖仅使用新版 Agent SDK", () => {

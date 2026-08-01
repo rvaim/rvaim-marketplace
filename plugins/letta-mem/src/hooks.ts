@@ -192,6 +192,7 @@ async function openSessionWithRecovery(
   scopeKey: string,
   initialAgentId: string,
   conversationId: string | undefined,
+  workspacePath: string,
   resolveCurrentAgentId: () => Promise<string>,
   log: LogFunction,
 ): Promise<{
@@ -205,6 +206,7 @@ async function openSessionWithRecovery(
       client,
       initialAgentId,
       conversationId,
+      workspacePath,
     );
     return { agentId: initialAgentId, ...opened };
   } catch (error) {
@@ -214,7 +216,12 @@ async function openSessionWithRecovery(
 
   if (conversationId) {
     try {
-      const opened = await openAgentSession(client, initialAgentId, undefined);
+      const opened = await openAgentSession(
+        client,
+        initialAgentId,
+        undefined,
+        workspacePath,
+      );
       log("warn", "conversation-recreated", conversationId);
       return { agentId: initialAgentId, ...opened };
     } catch (error) {
@@ -231,7 +238,12 @@ async function openSessionWithRecovery(
     throw lastError instanceof Error ? lastError : new Error(lastError);
   }
   const recoveredAgentId = await resolveCurrentAgentId();
-  const opened = await openAgentSession(client, recoveredAgentId, undefined);
+  const opened = await openAgentSession(
+    client,
+    recoveredAgentId,
+    undefined,
+    workspacePath,
+  );
   log("warn", "agent-reference-recreated", initialAgentId);
   return { agentId: recoveredAgentId, ...opened };
 }
@@ -410,6 +422,7 @@ async function processPendingUpdate(
           const resolvedSharedAgentId = await resolveSharedAgentId(
             config,
             client,
+            workspacePath,
             log,
           );
           const sharedStateModel = state.sharedAgentModel ?? "auto";
@@ -425,7 +438,8 @@ async function processPendingUpdate(
             sharedAgentScopeKey(),
             resolvedSharedAgentId,
             resumableSharedConversation,
-            () => resolveSharedAgentId(config, client, log),
+            workspacePath,
+            () => resolveSharedAgentId(config, client, workspacePath, log),
             log,
           );
           sharedAgentSession = openedShared.session;
@@ -465,6 +479,7 @@ async function processPendingUpdate(
           agentScopeKey(config, workspacePath),
           resolvedAgentId,
           resumableConversation,
+          workspacePath,
           () => resolveAgentId(config, client, workspacePath, log),
           log,
         );

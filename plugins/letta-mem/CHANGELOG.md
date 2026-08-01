@@ -1,5 +1,19 @@
 # 变更日志
 
+## 2.2.1
+
+- 创建工作区、共享或混合 Agent 时，把当前工作区的规范化绝对路径作为 Agent SDK `cwd`；新建和恢复 Conversation 时也会重新传入，确保 Letta 运行时工作目录始终对应本次调用的工作区。
+- Agent 复用改为只依赖 Letta 服务器上的插件标签与记忆作用域标签，不再要求 Agent 名称匹配；用户在 Letta App 中重命名 Agent 后仍会继续使用原有记忆。
+
+## 2.2.0
+
+- 默认自动启动与 Agent SDK 配套的本地 Letta App Server，不再要求用户全局安装 `@letta-ai/letta-code` 或长期保持手动终端进程。
+- 启动前优先探测并复用已经运行的 App Server；Claude Code 与 Codex 并发启动时使用共享锁避免重复拉起。
+- 自动启动只适用于无能力令牌的本机回环 `http` 地址；远程、自托管、加密或带鉴权的服务仍只连接，不创建本地进程。
+- 新增 `autoStartServer` 配置并默认开启，可通过 `LETTA_MEM_AUTO_START_SERVER` 临时覆盖。
+- 本地服务使用插件运行时中与 `@letta-ai/letta-agent-sdk@0.6.0` 配套的 `@letta-ai/letta-code@0.30.0`，并显式选择本地后端以复用 Letta App 的本地 Agent、记忆和模型供应商配置。
+- App Server 启动、超时、入口缺失或端口冲突全部故障开放，待处理记忆继续留在持久队列中。
+
 ## 2.1.0
 
 - 新增 `sharedMemory` 配置并默认开启；关闭时只维护每工作区独立记忆。

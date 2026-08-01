@@ -448,6 +448,7 @@ function startBackgroundDrain() {
 async function drainPending() {
   const sdkEntry = await ensureRuntime();
   if (sdkEntry) {
+    await runHook("ensure-server", Buffer.from("{}"), sdkEntry);
     await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
   }
 }

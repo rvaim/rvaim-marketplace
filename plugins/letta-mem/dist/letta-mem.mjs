@@ -2,8 +2,8 @@
 
 // src/hooks.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { homedir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join3, resolve as resolve2 } from "node:path";
+import { homedir as homedir2 } from "node:os";
+import { isAbsolute as isAbsolute3, join as join4, resolve as resolve3 } from "node:path";
 
 // src/context.ts
 import { realpathSync } from "node:fs";
@@ -360,7 +360,7 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function delay(milliseconds) {
-  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+  return new Promise((resolve5) => setTimeout(resolve5, milliseconds));
 }
 async function updateSessionState(config, workspacePath, sessionId, updater, waitMs = 0) {
   const deadline = Date.now() + waitMs;
@@ -466,8 +466,8 @@ async function claimCachedContext(config, sessionId, workspacePath) {
 }
 
 // src/letta.ts
-import { basename, isAbsolute } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, isAbsolute as isAbsolute2 } from "node:path";
+import { pathToFileURL as pathToFileURL2 } from "node:url";
 
 // src/memory-language.ts
 var MEMORY_LANGUAGE_POLICY = `- \u6BCF\u6761\u65B0\u5EFA\u6216\u5B9E\u8D28\u4FEE\u6539\u7684\u8BB0\u5FC6\uFF0C\u5FC5\u987B\u4F7F\u7528\u4EA7\u751F\u8BE5\u4E8B\u5B9E\u7684\u7528\u6237\u6D88\u606F\u6240\u4F7F\u7528\u7684\u81EA\u7136\u8BED\u8A00\u3002
@@ -476,6 +476,298 @@ var MEMORY_LANGUAGE_POLICY = `- \u6BCF\u6761\u65B0\u5EFA\u6216\u5B9E\u8D28\u4FEE
 - \u540C\u4E00\u6761\u7528\u6237\u6D88\u606F\u6DF7\u5408\u591A\u79CD\u8BED\u8A00\u65F6\uFF0C\u4F7F\u7528\u5176\u4E3B\u8981\u53D9\u8FF0\u8BED\u8A00\uFF1B\u4EE3\u7801\u6807\u8BC6\u7B26\u3001\u5E93\u540D\u3001API \u540D\u3001\u6587\u4EF6\u8DEF\u5F84\u3001\u547D\u4EE4\u548C\u5FC5\u8981\u539F\u6587\u4FDD\u6301\u539F\u6837\u3002
 - \u540C\u4E00\u5DE5\u4F5C\u533A\u53EF\u4EE5\u5305\u542B\u4E0D\u540C\u8BED\u8A00\u7684\u8BB0\u5FC6\uFF1B\u4E0D\u5F97\u56E0\u4E3A\u672C\u8F6E\u8BED\u8A00\u53D8\u5316\u800C\u6279\u91CF\u7FFB\u8BD1\u65E0\u5173\u7684\u65E2\u6709\u8BB0\u5FC6\u3002
 - \u672C\u6279\u6B21\u6CA1\u6709\u7528\u6237\u6D88\u606F\u6216\u65E0\u6CD5\u53EF\u9760\u5224\u65AD\u65F6\uFF0C\u4FDD\u7559\u76F8\u5173\u8BB0\u5FC6\u7684\u73B0\u6709\u8BED\u8A00\uFF0C\u4E0D\u5F97\u6839\u636E\u52A9\u624B\u3001\u7CFB\u7EDF\u6216\u5DE5\u5177\u6587\u5B57\u63A8\u65AD\u3002`;
+
+// src/app-server.ts
+import { createHash as createHash2 } from "node:crypto";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import {
+  chmodSync as chmodSync2,
+  closeSync as closeSync2,
+  existsSync as existsSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  renameSync as renameSync2,
+  statSync as statSync2
+} from "node:fs";
+import { isAbsolute, join as join2, resolve as resolve2 } from "node:path";
+import { pathToFileURL } from "node:url";
+import { spawn } from "node:child_process";
+var STARTUP_TIMEOUT_MS = 15e3;
+var READY_PROBE_TIMEOUT_MS = 750;
+var READY_POLL_INTERVAL_MS = 100;
+var MAX_SERVER_LOG_BYTES = 1e6;
+var SUPPORTED_APP_SERVER_PROTOCOL = 1;
+function delay2(milliseconds) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
+}
+function automaticListenUrl(config) {
+  if (!config.autoStartServer || config.authToken) return null;
+  const parsed = new URL(config.serverUrl);
+  const hostname = parsed.hostname.toLowerCase();
+  const loopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  if (parsed.protocol !== "http:" || !loopback || !parsed.port) return null;
+  return `ws://${parsed.host}`;
+}
+async function probeReady(serverUrl, timeoutMs) {
+  try {
+    const response = await fetch(`${serverUrl}/app-server-info`, {
+      method: "GET",
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (response.status !== 200) return false;
+    const info = await response.json();
+    return info.type === "app_server_info_response" && typeof info.request_id === "string" && info.request_id.length > 0 && info.success === true && (info.backend === "local" || info.backend === "api") && typeof info.letta_code_version === "string" && info.protocol_version === SUPPORTED_APP_SERVER_PROTOCOL && info.capabilities?.agent_management === true && info.capabilities.conversation_management === true && info.capabilities.memory_management === true && info.capabilities.runtime_start === true && info.capabilities.split_channels === false;
+  } catch {
+    return false;
+  }
+}
+function resolveLettaCodeEntry() {
+  const configured = process.env.LETTA_MEM_LETTA_CODE_ENTRY?.trim();
+  if (configured) {
+    const entry = isAbsolute(configured) ? configured : resolve2(configured);
+    return existsSync2(entry) ? entry : null;
+  }
+  const requireBases = [];
+  const sdkEntry = process.env.LETTA_MEM_SDK_ENTRY?.trim();
+  if (sdkEntry && isAbsolute(sdkEntry)) {
+    requireBases.push(pathToFileURL(sdkEntry).href);
+  }
+  requireBases.push(import.meta.url);
+  for (const base of requireBases) {
+    try {
+      const entry = createRequire(base).resolve("@letta-ai/letta-code");
+      if (existsSync2(entry)) return entry;
+    } catch {
+    }
+  }
+  return null;
+}
+function serverRuntimeRoot() {
+  return join2(homedir(), ".letta-mem", "server");
+}
+function serverLockPath(serverUrl) {
+  const digest = createHash2("sha256").update(serverUrl).digest("hex").slice(0, 24);
+  return join2(serverRuntimeRoot(), "locks", `app-server-${digest}.lock`);
+}
+function serverLogPath() {
+  return join2(serverRuntimeRoot(), "logs", "app-server.log");
+}
+function prepareServerLog() {
+  const path = serverLogPath();
+  const directory = join2(serverRuntimeRoot(), "logs");
+  mkdirSync2(directory, { recursive: true, mode: 448 });
+  chmodSync2(directory, 448);
+  try {
+    if (existsSync2(path) && statSync2(path).size >= MAX_SERVER_LOG_BYTES) {
+      renameSync2(path, `${path}.1`);
+      chmodSync2(`${path}.1`, 384);
+    }
+  } catch {
+  }
+  return path;
+}
+function launch(entry, listenUrl) {
+  const logPath = prepareServerLog();
+  const descriptor = openSync2(logPath, "a", 384);
+  let child;
+  try {
+    const excludedEnvironmentKeys = /* @__PURE__ */ new Set([
+      "LETTA_APP_SERVER_TOKEN",
+      "LETTA_MEM_SDK_ENTRY",
+      "LETTA_MEM_LETTA_CODE_ENTRY"
+    ]);
+    const environment = Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([key]) => !excludedEnvironmentKeys.has(key)
+      )
+    );
+    child = spawn(
+      process.execPath,
+      [
+        entry,
+        "--backend",
+        "local",
+        "server",
+        "--listen",
+        listenUrl
+      ],
+      {
+        cwd: homedir(),
+        detached: true,
+        env: environment,
+        shell: false,
+        stdio: ["ignore", descriptor, descriptor],
+        windowsHide: true
+      }
+    );
+  } finally {
+    closeSync2(descriptor);
+  }
+  chmodSync2(logPath, 384);
+  const exited = new Promise((resolvePromise) => {
+    child.once("error", (error) => {
+      resolvePromise(`\u65E0\u6CD5\u521B\u5EFA\u8FDB\u7A0B\uFF1A${error.message}`);
+    });
+    child.once("exit", (code, signal) => {
+      resolvePromise(
+        `\u8FDB\u7A0B\u63D0\u524D\u9000\u51FA\uFF1Acode=${String(code)} signal=${String(signal)}`
+      );
+    });
+  });
+  child.unref();
+  return {
+    ...child.pid === void 0 ? {} : { pid: child.pid },
+    exited
+  };
+}
+var DEFAULT_DEPENDENCIES = {
+  probeReady,
+  resolveLettaCodeEntry,
+  launch,
+  acquireLock,
+  delay: delay2,
+  startupTimeoutMs: STARTUP_TIMEOUT_MS
+};
+async function waitUntilReady(serverUrl, dependencies, launched) {
+  const deadline = Date.now() + dependencies.startupTimeoutMs;
+  let exitDetail;
+  launched?.exited.then((detail) => {
+    exitDetail = detail;
+  }).catch((error) => {
+    exitDetail = String(error);
+  });
+  while (Date.now() < deadline) {
+    if (await dependencies.probeReady(
+      serverUrl,
+      READY_PROBE_TIMEOUT_MS
+    )) {
+      return { ready: true };
+    }
+    if (exitDetail) return { ready: false, exitDetail };
+    await dependencies.delay(READY_POLL_INTERVAL_MS);
+  }
+  return { ready: false, ...exitDetail ? { exitDetail } : {} };
+}
+async function ensureLocalAppServer(config, log, overrides = {}) {
+  const listenUrl = automaticListenUrl(config);
+  if (!listenUrl) return "skipped";
+  const dependencies = { ...DEFAULT_DEPENDENCIES, ...overrides };
+  try {
+    if (await dependencies.probeReady(
+      config.serverUrl,
+      READY_PROBE_TIMEOUT_MS
+    )) {
+      return "ready";
+    }
+    const release = dependencies.acquireLock(serverLockPath(config.serverUrl));
+    if (!release) {
+      const waited = await waitUntilReady(
+        config.serverUrl,
+        dependencies,
+        null
+      );
+      if (waited.ready) return "ready";
+      log("warn", "app-server-start-busy-timeout", config.serverUrl);
+      return "failed";
+    }
+    try {
+      if (await dependencies.probeReady(
+        config.serverUrl,
+        READY_PROBE_TIMEOUT_MS
+      )) {
+        return "ready";
+      }
+      const entry = dependencies.resolveLettaCodeEntry();
+      if (!entry) {
+        log("warn", "app-server-entry-missing");
+        return "failed";
+      }
+      const launched = dependencies.launch(entry, listenUrl);
+      log(
+        "info",
+        "app-server-starting",
+        `${listenUrl}${launched.pid ? ` pid=${launched.pid}` : ""}`
+      );
+      const waited = await waitUntilReady(
+        config.serverUrl,
+        dependencies,
+        launched
+      );
+      if (waited.ready) {
+        log("info", "app-server-started", listenUrl);
+        return "started";
+      }
+      log(
+        "warn",
+        "app-server-start-failed",
+        waited.exitDetail ?? `\u7B49\u5F85 ${dependencies.startupTimeoutMs}ms \u540E\u4ECD\u672A\u5C31\u7EEA`
+      );
+      return "failed";
+    } finally {
+      release();
+    }
+  } catch (error) {
+    log(
+      "warn",
+      "app-server-start-failed",
+      error instanceof Error ? error.message : String(error)
+    );
+    return "failed";
+  }
+}
+
+// src/logger.ts
+import {
+  appendFileSync,
+  chmodSync as chmodSync3,
+  existsSync as existsSync3,
+  mkdirSync as mkdirSync3,
+  renameSync as renameSync3,
+  statSync as statSync3
+} from "node:fs";
+import { dirname as dirname2, join as join3 } from "node:path";
+var MAX_LOG_BYTES = 1e6;
+function sanitize(value, secrets) {
+  let sanitized = value;
+  for (const secret of secrets) {
+    if (secret) sanitized = sanitized.split(secret).join("[\u5DF2\u9690\u85CF]");
+  }
+  return sanitized.replace(/[\r\n]+/g, " ").replace(/Bearer\s+\S+/gi, "Bearer [\u5DF2\u9690\u85CF]").replace(/(_authToken\s*[=:]\s*)\S+/gi, "$1[\u5DF2\u9690\u85CF]").slice(0, 800);
+}
+function rotateIfNeeded(logPath) {
+  try {
+    if (existsSync3(logPath) && statSync3(logPath).size >= MAX_LOG_BYTES) {
+      renameSync3(logPath, `${logPath}.1`);
+      chmodSync3(`${logPath}.1`, 384);
+    }
+  } catch {
+  }
+}
+function createLogger(config) {
+  const logPath = join3(config.dataDir, "logs", "letta-mem.log");
+  const secrets = config.authToken ? [config.authToken] : [];
+  return (level, event, detail = "") => {
+    try {
+      mkdirSync3(dirname2(logPath), { recursive: true, mode: 448 });
+      chmodSync3(dirname2(logPath), 448);
+      rotateIfNeeded(logPath);
+      const suffix = detail ? ` ${sanitize(detail, secrets)}` : "";
+      appendFileSync(
+        logPath,
+        `${(/* @__PURE__ */ new Date()).toISOString()} ${level.toUpperCase()} ${sanitize(event, secrets)}${suffix}
+`,
+        { encoding: "utf8", mode: 384 }
+      );
+      chmodSync3(logPath, 384);
+    } catch {
+    }
+  };
+}
+function errorDetail(error) {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
+}
 
 // src/letta.ts
 var BASE_AGENT_TAGS = [
@@ -494,13 +786,16 @@ async function approveMemoryTool(toolName, _toolInput) {
     interrupt: false
   };
 }
-var SESSION_OPTIONS = {
-  allowedTools: [...MEMORY_TOOLS],
-  permissionMode: "strict",
-  skillSources: [],
-  maxApprovalRecoveryAttempts: 0,
-  canUseTool: approveMemoryTool
-};
+function sessionOptions(workspacePath) {
+  return {
+    cwd: workspacePath,
+    allowedTools: [...MEMORY_TOOLS],
+    permissionMode: "strict",
+    skillSources: [],
+    maxApprovalRecoveryAttempts: 0,
+    canUseTool: approveMemoryTool
+  };
+}
 var WORKSPACE_AGENT_SYSTEM_PROMPT = `\u4F60\u662F\u5355\u4E2A\u7F16\u7801\u5DE5\u4F5C\u533A\u7684\u540E\u53F0\u6301\u4E45\u8BB0\u5FC6\u4EE3\u7406\u3002\u4F60\u7684\u552F\u4E00\u4EFB\u52A1\u662F\u628A\u8BE5\u5DE5\u4F5C\u533A\u7684 Claude Code \u6216 Codex \u4F1A\u8BDD\u8BB0\u5F55\u6574\u7406\u6210\u53EF\u957F\u671F\u590D\u7528\u7684\u8BB0\u5FC6\uFF0C\u5E76\u7ED9\u8BE5\u5DE5\u4F5C\u533A\u4E0B\u4E00\u8F6E\u7F16\u7801\u52A9\u624B\u8FD4\u56DE\u5FC5\u8981\u7684\u4E0A\u4E0B\u6587\u3002
 
 \u5B89\u5168\u8FB9\u754C\uFF1A
@@ -638,8 +933,8 @@ var SHARED_INITIAL_MEMORY = [
     limit: 5e3
   }
 ];
-function delay2(milliseconds) {
-  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+function delay3(milliseconds) {
+  return new Promise((resolve5) => setTimeout(resolve5, milliseconds));
 }
 function clientOptions(config) {
   return {
@@ -653,12 +948,13 @@ function clientOptions(config) {
 async function loadSdkModule() {
   const configuredEntry = process.env.LETTA_MEM_SDK_ENTRY?.trim();
   if (configuredEntry) {
-    const specifier = isAbsolute(configuredEntry) ? pathToFileURL(configuredEntry).href : configuredEntry;
+    const specifier = isAbsolute2(configuredEntry) ? pathToFileURL2(configuredEntry).href : configuredEntry;
     return import(specifier);
   }
   return import("@letta-ai/letta-agent-sdk");
 }
 async function createAgentClient(config) {
+  await ensureLocalAppServer(config, createLogger(config));
   const module = await loadSdkModule();
   return new module.LettaAgentClient(clientOptions(config));
 }
@@ -666,7 +962,7 @@ async function acquireAgentLock(config) {
   const deadline = Date.now() + 1e4;
   let release = acquireLock(agentLockPath(config));
   while (!release && Date.now() < deadline) {
-    await delay2(50);
+    await delay3(50);
     release = acquireLock(agentLockPath(config));
   }
   if (!release) throw new Error("Agent \u521D\u59CB\u5316\u6B63\u5728\u7531\u53E6\u4E00\u8FDB\u7A0B\u5904\u7406");
@@ -691,6 +987,7 @@ function primaryAgentDefinition(config, workspacePath) {
   if (config.mixedMemory) {
     return {
       scopeKey: agentScopeKey(config, workspacePath),
+      workspacePath,
       name: "letta-mem",
       description: "\u5728\u540E\u53F0\u6574\u7406\u591A\u4E2A Claude Code \u6216 Codex \u5DE5\u4F5C\u533A\u7684\u5BF9\u8BDD\u5E76\u7EF4\u62A4\u6301\u4E45\u8BB0\u5FC6\u3002",
       systemPrompt: MIXED_AGENT_SYSTEM_PROMPT,
@@ -706,6 +1003,7 @@ function primaryAgentDefinition(config, workspacePath) {
   const identity = workspaceIdentity(workspacePath);
   return {
     scopeKey: agentScopeKey(config, workspacePath),
+    workspacePath,
     name: identity.name,
     description: `\u5728\u540E\u53F0\u6574\u7406 Claude Code \u6216 Codex \u5DE5\u4F5C\u533A ${identity.label} \u7684\u5BF9\u8BDD\u5E76\u7EF4\u62A4\u72EC\u7ACB\u6301\u4E45\u8BB0\u5FC6\u3002`,
     systemPrompt: WORKSPACE_AGENT_SYSTEM_PROMPT,
@@ -721,9 +1019,10 @@ function primaryAgentDefinition(config, workspacePath) {
     logPrefix: "agent"
   };
 }
-function sharedAgentDefinition() {
+function sharedAgentDefinition(workspacePath) {
   return {
     scopeKey: SHARED_MEMORY_SCOPE_KEY,
+    workspacePath,
     name: "letta-mem \xB7 shared",
     description: "\u5728\u540E\u53F0\u5224\u65AD\u5E76\u7EF4\u62A4 Claude Code \u4E0E Codex \u8DE8\u5DE5\u4F5C\u533A\u5171\u4EAB\u8BB0\u5FC6\u3002",
     systemPrompt: SHARED_AGENT_SYSTEM_PROMPT,
@@ -738,13 +1037,14 @@ function sharedAgentDefinition() {
 }
 async function findReusableAgent(client, definition) {
   const existing = await client.agents.list({
-    name: definition.name,
     tags: definition.discoveryTags,
     matchAllTags: true,
     limit: 10,
     order: "desc"
   });
-  return existing.find((agent) => agent.name === definition.name);
+  return existing.find((agent) => definition.discoveryTags.every(
+    (tag) => agent.tags?.includes(tag) === true
+  ));
 }
 function isMissingAgent(error) {
   const message = error instanceof Error ? error.message : error;
@@ -811,6 +1111,7 @@ async function resolveDefinedAgentId(config, client, definition, log) {
         name: definition.name,
         description: definition.description,
         systemPrompt: definition.systemPrompt,
+        cwd: definition.workspacePath,
         memory: definition.memory,
         memfs: true,
         baseTools: [],
@@ -818,7 +1119,7 @@ async function resolveDefinedAgentId(config, client, definition, log) {
         ...config.model === "auto" ? {} : { model: config.model }
       });
     } catch (error) {
-      await delay2(250);
+      await delay3(250);
       const recovered = await findReusableAgent(client, definition);
       if (!recovered) throw error;
       if (!await prepareReusableAgent(config, client, recovered)) throw error;
@@ -841,16 +1142,17 @@ async function resolveAgentId(config, client, workspacePath, log) {
     log
   );
 }
-async function resolveSharedAgentId(config, client, log) {
+async function resolveSharedAgentId(config, client, workspacePath, log) {
   return resolveDefinedAgentId(
     config,
     client,
-    sharedAgentDefinition(),
+    sharedAgentDefinition(workspacePath),
     log
   );
 }
-async function openAgentSession(client, agentId, conversationId) {
-  const session = conversationId ? client.resumeSession(conversationId, SESSION_OPTIONS) : client.createSession(agentId, SESSION_OPTIONS);
+async function openAgentSession(client, agentId, conversationId, workspacePath) {
+  const options = sessionOptions(workspacePath);
+  const session = conversationId ? client.resumeSession(conversationId, options) : client.createSession(agentId, options);
   try {
     const bootstrap = await session.bootstrapState({ limit: 1, order: "desc" });
     if (bootstrap.agentId !== agentId) {
@@ -887,75 +1189,23 @@ async function sendAgentUpdate(session, message) {
   return guidance.join("").trim();
 }
 
-// src/logger.ts
-import {
-  appendFileSync,
-  chmodSync as chmodSync2,
-  existsSync as existsSync2,
-  mkdirSync as mkdirSync2,
-  renameSync as renameSync2,
-  statSync as statSync2
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
-var MAX_LOG_BYTES = 1e6;
-function sanitize(value, secrets) {
-  let sanitized = value;
-  for (const secret of secrets) {
-    if (secret) sanitized = sanitized.split(secret).join("[\u5DF2\u9690\u85CF]");
-  }
-  return sanitized.replace(/[\r\n]+/g, " ").replace(/Bearer\s+\S+/gi, "Bearer [\u5DF2\u9690\u85CF]").replace(/(_authToken\s*[=:]\s*)\S+/gi, "$1[\u5DF2\u9690\u85CF]").slice(0, 800);
-}
-function rotateIfNeeded(logPath) {
-  try {
-    if (existsSync2(logPath) && statSync2(logPath).size >= MAX_LOG_BYTES) {
-      renameSync2(logPath, `${logPath}.1`);
-      chmodSync2(`${logPath}.1`, 384);
-    }
-  } catch {
-  }
-}
-function createLogger(config) {
-  const logPath = join2(config.dataDir, "logs", "letta-mem.log");
-  const secrets = config.authToken ? [config.authToken] : [];
-  return (level, event, detail = "") => {
-    try {
-      mkdirSync2(dirname2(logPath), { recursive: true, mode: 448 });
-      chmodSync2(dirname2(logPath), 448);
-      rotateIfNeeded(logPath);
-      const suffix = detail ? ` ${sanitize(detail, secrets)}` : "";
-      appendFileSync(
-        logPath,
-        `${(/* @__PURE__ */ new Date()).toISOString()} ${level.toUpperCase()} ${sanitize(event, secrets)}${suffix}
-`,
-        { encoding: "utf8", mode: 384 }
-      );
-      chmodSync2(logPath, 384);
-    } catch {
-    }
-  };
-}
-function errorDetail(error) {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
-  return String(error);
-}
-
 // src/transcript.ts
 import {
-  closeSync as closeSync2,
+  closeSync as closeSync3,
   createReadStream,
-  existsSync as existsSync3,
+  existsSync as existsSync4,
   fstatSync,
-  openSync as openSync2
+  openSync as openSync3
 } from "node:fs";
 import { createInterface } from "node:readline";
 async function transcriptTailLineIndex(transcriptPath) {
-  if (!transcriptPath || !existsSync3(transcriptPath)) return -1;
+  if (!transcriptPath || !existsSync4(transcriptPath)) return -1;
   let descriptor;
   try {
-    descriptor = openSync2(transcriptPath, "r");
+    descriptor = openSync3(transcriptPath, "r");
     const byteSize = fstatSync(descriptor).size;
     if (byteSize === 0) {
-      closeSync2(descriptor);
+      closeSync3(descriptor);
       descriptor = void 0;
       return -1;
     }
@@ -981,7 +1231,7 @@ async function transcriptTailLineIndex(transcriptPath) {
   } catch {
     if (descriptor !== void 0) {
       try {
-        closeSync2(descriptor);
+        closeSync3(descriptor);
       } catch {
       }
     }
@@ -1149,7 +1399,7 @@ async function readTranscriptIncrement(transcriptPath, startLine, recentDigests2
   let lineIndex = -1;
   let tailIncomplete = false;
   const boundedEnd = endLineIndex ?? Number.POSITIVE_INFINITY;
-  if (transcriptPath && existsSync3(transcriptPath) && boundedEnd >= 0) {
+  if (transcriptPath && existsSync4(transcriptPath) && boundedEnd >= 0) {
     const lines = createInterface({
       input: createReadStream(transcriptPath),
       crlfDelay: Infinity
@@ -1279,12 +1529,12 @@ function validSessionId(input) {
 function normalizeTranscriptPath(value, cwd) {
   const trimmed = value?.trim();
   if (!trimmed) return void 0;
-  if (trimmed === "~") return homedir();
+  if (trimmed === "~") return homedir2();
   if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
-    return join3(homedir(), trimmed.slice(2));
+    return join4(homedir2(), trimmed.slice(2));
   }
-  if (isAbsolute2(trimmed)) return resolve2(trimmed);
-  return resolve2(cwd?.trim() || process.cwd(), trimmed);
+  if (isAbsolute3(trimmed)) return resolve3(trimmed);
+  return resolve3(cwd?.trim() || process.cwd(), trimmed);
 }
 function isRetryBlocked(config) {
   const state = loadFailureState(config);
@@ -1362,8 +1612,8 @@ function combinedGuidance(workspaceGuidance, sharedGuidance, maxChars) {
   const sharedContext = sharedGuidance.slice(0, sharedLimit);
   return `${workspaceLabel}${workspaceContext}${sharedLabel}${sharedContext}`;
 }
-function delay3(milliseconds) {
-  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+function delay4(milliseconds) {
+  return new Promise((resolve5) => setTimeout(resolve5, milliseconds));
 }
 async function waitForAgentRunLock(config) {
   const waitMs = Math.min(
@@ -1372,7 +1622,7 @@ async function waitForAgentRunLock(config) {
   );
   const deadline = Date.now() + waitMs;
   while (Date.now() < deadline) {
-    await delay3(25);
+    await delay4(25);
     const release = acquireLock(agentRunLockPath(config));
     if (release) return release;
   }
@@ -1382,13 +1632,14 @@ function isMissingLettaResource(error) {
   const message = error instanceof Error ? error.message : error;
   return /not found|does not exist|unknown (?:agent|conversation)|failed to retrieve conversation|conversation does not belong to expected agent/i.test(message);
 }
-async function openSessionWithRecovery(config, client, scopeKey, initialAgentId, conversationId, resolveCurrentAgentId, log) {
+async function openSessionWithRecovery(config, client, scopeKey, initialAgentId, conversationId, workspacePath, resolveCurrentAgentId, log) {
   let lastError = "Letta \u4F1A\u8BDD\u6062\u590D\u5931\u8D25";
   try {
     const opened2 = await openAgentSession(
       client,
       initialAgentId,
-      conversationId
+      conversationId,
+      workspacePath
     );
     return { agentId: initialAgentId, ...opened2 };
   } catch (error) {
@@ -1397,7 +1648,12 @@ async function openSessionWithRecovery(config, client, scopeKey, initialAgentId,
   }
   if (conversationId) {
     try {
-      const opened2 = await openAgentSession(client, initialAgentId, void 0);
+      const opened2 = await openAgentSession(
+        client,
+        initialAgentId,
+        void 0,
+        workspacePath
+      );
       log("warn", "conversation-recreated", conversationId);
       return { agentId: initialAgentId, ...opened2 };
     } catch (error) {
@@ -1413,7 +1669,12 @@ async function openSessionWithRecovery(config, client, scopeKey, initialAgentId,
     throw lastError instanceof Error ? lastError : new Error(lastError);
   }
   const recoveredAgentId = await resolveCurrentAgentId();
-  const opened = await openAgentSession(client, recoveredAgentId, void 0);
+  const opened = await openAgentSession(
+    client,
+    recoveredAgentId,
+    void 0,
+    workspacePath
+  );
   log("warn", "agent-reference-recreated", initialAgentId);
   return { agentId: recoveredAgentId, ...opened };
 }
@@ -1545,6 +1806,7 @@ async function processPendingUpdate(config, pending, log, clientFactory) {
           const resolvedSharedAgentId = await resolveSharedAgentId(
             config,
             client,
+            workspacePath,
             log
           );
           const sharedStateModel = state.sharedAgentModel ?? "auto";
@@ -1555,7 +1817,8 @@ async function processPendingUpdate(config, pending, log, clientFactory) {
             sharedAgentScopeKey(),
             resolvedSharedAgentId,
             resumableSharedConversation,
-            () => resolveSharedAgentId(config, client, log),
+            workspacePath,
+            () => resolveSharedAgentId(config, client, workspacePath, log),
             log
           );
           sharedAgentSession = openedShared.session;
@@ -1590,6 +1853,7 @@ async function processPendingUpdate(config, pending, log, clientFactory) {
           agentScopeKey(config, workspacePath),
           resolvedAgentId,
           resumableConversation,
+          workspacePath,
           () => resolveAgentId(config, client, workspacePath, log),
           log
         );
@@ -1779,10 +2043,10 @@ async function handleUpdateMemory(config, input, log, clientFactory = createAgen
 }
 
 // src/config.ts
-import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync4, readFileSync as readFileSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join4, resolve as resolve3 } from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import { existsSync as existsSync5, readFileSync as readFileSync2 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { isAbsolute as isAbsolute4, join as join5, resolve as resolve4 } from "node:path";
 var DEFAULT_SERVER_URL = "http://127.0.0.1:4500";
 var DEFAULT_MODEL = "auto";
 function firstNonEmpty(...values) {
@@ -1818,7 +2082,7 @@ function namespaceFor(serverUrl, authToken = "", mixedMemory = false) {
   const authScope = authToken ? `token:${authToken}` : "token:none";
   const memoryScope = mixedMemory ? "mixed-memory-v1" : "per-workspace-v1";
   const source = `${memoryScope}:app-server:${serverUrl}:${authScope}`;
-  return createHash2("sha256").update(source).digest("hex").slice(0, 20);
+  return createHash3("sha256").update(source).digest("hex").slice(0, 20);
 }
 function isEnabled(value) {
   return value === "1" || value?.toLowerCase() === "true";
@@ -1841,22 +2105,25 @@ function normalizeModel(value) {
 }
 function sharedConfigPath(env) {
   const configured = firstNonEmpty(env.LETTA_MEM_CONFIG_PATH);
-  if (!configured) return join4(homedir2(), ".letta-mem", "config.json");
-  if (configured === "~") return homedir2();
+  if (!configured) return join5(homedir3(), ".letta-mem", "config.json");
+  if (configured === "~") return homedir3();
   if (configured.startsWith("~/") || configured.startsWith("~\\")) {
-    return join4(homedir2(), configured.slice(2));
+    return join5(homedir3(), configured.slice(2));
   }
-  return isAbsolute3(configured) ? configured : resolve3(configured);
+  return isAbsolute4(configured) ? configured : resolve4(configured);
 }
 function readSharedConfig(env) {
   const path = sharedConfigPath(env);
-  if (!existsSync4(path)) return {};
+  if (!existsSync5(path)) return {};
   const value = JSON.parse(readFileSync2(path, "utf8"));
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("letta-mem \u5171\u4EAB\u914D\u7F6E\u5FC5\u987B\u662F JSON \u5BF9\u8C61");
   }
   if (value.serverUrl !== void 0 && typeof value.serverUrl !== "string") {
     throw new Error("\u5171\u4EAB\u914D\u7F6E serverUrl \u5FC5\u987B\u662F\u5B57\u7B26\u4E32");
+  }
+  if (value.autoStartServer !== void 0 && typeof value.autoStartServer !== "boolean") {
+    throw new Error("\u5171\u4EAB\u914D\u7F6E autoStartServer \u5FC5\u987B\u662F\u5E03\u5C14\u503C");
   }
   if (value.model !== void 0 && typeof value.model !== "string") {
     throw new Error("\u5171\u4EAB\u914D\u7F6E model \u5FC5\u987B\u662F\u5B57\u7B26\u4E32");
@@ -1877,6 +2144,14 @@ function readRuntimeConfig(env = process.env) {
   ) ?? DEFAULT_SERVER_URL);
   const authToken = firstNonEmpty(
     env.LETTA_APP_SERVER_TOKEN
+  );
+  const autoStartServer = parseBooleanOption(
+    firstNonEmpty(
+      env.LETTA_MEM_AUTO_START_SERVER,
+      shared.autoStartServer === void 0 ? void 0 : String(shared.autoStartServer)
+    ),
+    true,
+    "App Server \u81EA\u52A8\u542F\u52A8"
   );
   const model = normalizeModel(firstNonEmpty(
     env.LETTA_MEM_MODEL,
@@ -1902,10 +2177,11 @@ function readRuntimeConfig(env = process.env) {
     env.CLAUDE_PLUGIN_DATA,
     env.PLUGIN_DATA,
     env.LETTA_MEM_DATA_DIR
-  ) ?? join4(homedir2(), ".letta-mem", "data", "development");
+  ) ?? join5(homedir3(), ".letta-mem", "data", "development");
   return {
     serverUrl,
     ...authToken ? { authToken } : {},
+    autoStartServer,
     model,
     mixedMemory,
     sharedMemory,
@@ -1942,7 +2218,7 @@ async function readInput() {
   return parsed && typeof parsed === "object" ? parsed : {};
 }
 function parseAction(value) {
-  if (value === "session-start" || value === "inject-context" || value === "enqueue-memory" || value === "drain-pending" || value === "update-memory") {
+  if (value === "session-start" || value === "ensure-server" || value === "inject-context" || value === "enqueue-memory" || value === "drain-pending" || value === "update-memory") {
     return value;
   }
   return null;
@@ -1955,7 +2231,9 @@ async function main() {
     const config = readRuntimeConfig();
     const log = createLogger(config);
     const input = await readInput();
-    if (action === "session-start") {
+    if (action === "ensure-server") {
+      await ensureLocalAppServer(config, log);
+    } else if (action === "session-start") {
       output = await handleSessionStart(config, input);
     } else if (action === "inject-context") {
       output = await handleInjectContext(config, input);

@@ -49,6 +49,7 @@ function createConfig(): RuntimeConfig {
   temporaryDirectories.push(dataDir);
   return {
     serverUrl: "ws://127.0.0.1:4500",
+    autoStartServer: false,
     model: "auto",
     mixedMemory: false,
     sharedMemory: false,
@@ -173,6 +174,7 @@ describe("后台记忆 Hook", () => {
     );
     expect(createAgent).toHaveBeenCalledOnce();
     expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: projectPath,
       memfs: true,
       baseTools: [],
     }));
@@ -187,6 +189,7 @@ describe("后台记忆 Hook", () => {
     expect(createAgentSession).toHaveBeenCalledWith(
       "agent-1",
       expect.objectContaining({
+        cwd: projectPath,
         allowedTools: ["memory", "memory_apply_patch"],
         permissionMode: "strict",
         skillSources: [],
@@ -234,7 +237,10 @@ describe("后台记忆 Hook", () => {
     );
     expect(resumeAgentSession).toHaveBeenCalledWith(
       "conversation-1",
-      expect.objectContaining({ permissionMode: "strict" }),
+      expect.objectContaining({
+        cwd: projectPath,
+        permissionMode: "strict",
+      }),
     );
     expect(resumedState.lastProcessedLine).toBe(1);
     expect(resumedState.recentDigests).toHaveLength(2);
@@ -298,10 +304,21 @@ describe("后台记忆 Hook", () => {
       expect.stringContaining("shared-workspace"),
     ]);
     expect(createAgent).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      cwd: workspacePath,
       name: "letta-mem · shared",
       tags: expect.arrayContaining(["letta-mem-memory-scope:shared-v1"]),
       systemPrompt: expect.stringContaining("自行判断哪些信息真正适合跨工作区复用"),
     }));
+    expect(createAgentSession).toHaveBeenNthCalledWith(
+      1,
+      "agent-shared",
+      expect.objectContaining({ cwd: workspacePath }),
+    );
+    expect(createAgentSession).toHaveBeenNthCalledWith(
+      2,
+      "agent-workspace",
+      expect.objectContaining({ cwd: workspacePath }),
+    );
     expect(shared.sent[0]).toContain("<shared_memory_update>");
     expect(workspace.sent[0]).toContain("<shared_memory_context>");
     expect(workspace.sent[0]).toContain("禁止使用 &lt;any&gt;");
@@ -343,6 +360,9 @@ describe("后台记忆 Hook", () => {
       };
       return storedAgent.id;
     });
+    const renameStoredAgent = (): void => {
+      if (storedAgent) storedAgent.name = "用户重命名后的共享记忆";
+    };
     const client: AgentClient = {
       createAgent,
       createSession: vi.fn(() => createSession("unused", "").session),
@@ -353,13 +373,30 @@ describe("后台记忆 Hook", () => {
     };
     const log = vi.fn() as LogFunction;
 
-    const firstAgentId = await resolveSharedAgentId(firstConfig, client, log);
-    const secondAgentId = await resolveSharedAgentId(secondConfig, client, log);
+    const firstAgentId = await resolveSharedAgentId(
+      firstConfig,
+      client,
+      "/workspace/first",
+      log,
+    );
+    renameStoredAgent();
+    const secondAgentId = await resolveSharedAgentId(
+      secondConfig,
+      client,
+      "/workspace/second",
+      log,
+    );
 
     expect(firstAgentId).toBe("agent-shared-cross-host");
     expect(secondAgentId).toBe("agent-shared-cross-host");
     expect(createAgent).toHaveBeenCalledOnce();
     expect(client.agents.list).toHaveBeenCalledTimes(2);
+    expect(client.agents.list).toHaveBeenLastCalledWith({
+      tags: ["letta-mem", "letta-mem-memory-scope:shared-v1"],
+      matchAllTags: true,
+      limit: 10,
+      order: "desc",
+    });
     expect(log).toHaveBeenCalledWith(
       "info",
       "shared-agent-reused",
@@ -394,7 +431,12 @@ describe("后台记忆 Hook", () => {
     };
     const log = vi.fn() as LogFunction;
 
-    await expect(resolveSharedAgentId(config, client, log))
+    await expect(resolveSharedAgentId(
+      config,
+      client,
+      "/workspace/model-update",
+      log,
+    ))
       .resolves.toBe("agent-shared-existing");
 
     expect(update).toHaveBeenCalledWith("agent-shared-existing", {
@@ -541,6 +583,76 @@ describe("后台记忆 Hook", () => {
       .toBe("agent-workspace");
   });
 
+  it("工作区 Agent 被重命名后仍按作用域标签复用", async () => {
+    const firstConfig = createConfig();
+    const secondConfig = createConfig();
+    const workspacePath = "/workspace/stable-project";
+    let storedAgent: {
+      id: string;
+      name: string;
+      tags: string[];
+      model: string;
+    } | undefined;
+    const createAgent = vi.fn(async (
+      options: Parameters<AgentClient["createAgent"]>[0],
+    ) => {
+      storedAgent = {
+        id: "agent-workspace-cross-host",
+        name: options.name,
+        tags: options.tags,
+        model: "auto",
+      };
+      return storedAgent.id;
+    });
+    const renameStoredAgent = (): void => {
+      if (storedAgent) storedAgent.name = "用户在 Letta App 中修改的名称";
+    };
+    const client: AgentClient = {
+      createAgent,
+      createSession: vi.fn(() => createSession("unused", "").session),
+      resumeSession: vi.fn(() => createSession("unused", "").session),
+      agents: {
+        list: vi.fn(async () => storedAgent ? [storedAgent] : []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    const firstAgentId = await resolveAgentId(
+      firstConfig,
+      client,
+      workspacePath,
+      log,
+    );
+    renameStoredAgent();
+    const secondAgentId = await resolveAgentId(
+      secondConfig,
+      client,
+      workspacePath,
+      log,
+    );
+
+    expect(firstAgentId).toBe("agent-workspace-cross-host");
+    expect(secondAgentId).toBe("agent-workspace-cross-host");
+    expect(createAgent).toHaveBeenCalledOnce();
+    expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: workspacePath,
+    }));
+    expect(client.agents.list).toHaveBeenLastCalledWith({
+      tags: [
+        "letta-mem",
+        `letta-mem-workspace:${sha256(workspacePath).slice(0, 24)}`,
+      ],
+      matchAllTags: true,
+      limit: 10,
+      order: "desc",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "agent-reused",
+      "agent-workspace-cross-host",
+    );
+  });
+
   it("混合记忆模式让不同工作区共享名为 letta-mem 的 Agent", async () => {
     const config = {
       ...createConfig(),
@@ -595,6 +707,7 @@ describe("后台记忆 Hook", () => {
 
     expect(createAgent).toHaveBeenCalledOnce();
     expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: firstWorkspace,
       name: "letta-mem",
       model: "deepseek/deepseek-v4-flash",
       tags: expect.arrayContaining(["letta-mem-memory-mode:mixed"]),
@@ -603,6 +716,16 @@ describe("后台记忆 Hook", () => {
     expect(createAgentSession).toHaveBeenCalledTimes(2);
     expect(createAgentSession.mock.calls.map((call) => call[0]))
       .toEqual(["agent-mixed", "agent-mixed"]);
+    expect(createAgentSession).toHaveBeenNthCalledWith(
+      1,
+      "agent-mixed",
+      expect.objectContaining({ cwd: firstWorkspace }),
+    );
+    expect(createAgentSession).toHaveBeenNthCalledWith(
+      2,
+      "agent-mixed",
+      expect.objectContaining({ cwd: secondWorkspace }),
+    );
     expect(openedSessions[0]?.sent[0]).toContain("<memory_mode>mixed</memory_mode>");
     expect(openedSessions[0]?.sent[0])
       .toContain("<shared_memory_enabled>true</shared_memory_enabled>");
@@ -639,6 +762,9 @@ describe("后台记忆 Hook", () => {
       };
       return storedAgent.id;
     });
+    const renameStoredAgent = (): void => {
+      if (storedAgent) storedAgent.name = "用户重命名后的混合记忆";
+    };
     const client: AgentClient = {
       createAgent,
       createSession: vi.fn(() => createSession("unused", "").session),
@@ -655,6 +781,7 @@ describe("后台记忆 Hook", () => {
       "/workspace/shared",
       log,
     );
+    renameStoredAgent();
     const secondAgentId = await resolveAgentId(
       secondConfig,
       client,
@@ -666,6 +793,12 @@ describe("后台记忆 Hook", () => {
     expect(secondAgentId).toBe("agent-cross-host");
     expect(createAgent).toHaveBeenCalledOnce();
     expect(client.agents.list).toHaveBeenCalledTimes(2);
+    expect(client.agents.list).toHaveBeenLastCalledWith({
+      tags: ["letta-mem", "letta-mem-memory-mode:mixed"],
+      matchAllTags: true,
+      limit: 10,
+      order: "desc",
+    });
     expect(log).toHaveBeenCalledWith(
       "info",
       "agent-reused",
@@ -865,7 +998,11 @@ describe("后台记忆 Hook", () => {
       .mockResolvedValueOnce([{
         id: "agent-recovered",
         name: `letta-mem · project · ${sha256(projectPath).slice(0, 8)}`,
-        tags: ["letta-mem", "claude-code-memory"],
+        tags: [
+          "letta-mem",
+          "claude-code-memory",
+          `letta-mem-workspace:${sha256(projectPath).slice(0, 24)}`,
+        ],
       }]);
     const client: AgentClient = {
       createAgent: vi.fn(async () => {

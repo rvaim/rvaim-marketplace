@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "letta-mem",
-  "version": "2.1.0",
+  "version": "2.2.1",
   "description": "通过本机或自托管新版 Letta，为 Claude Code 提供工作区与自主共享持久记忆。",
   "author": {
     "name": "rvaim",

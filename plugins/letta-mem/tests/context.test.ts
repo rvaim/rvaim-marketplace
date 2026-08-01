@@ -19,6 +19,7 @@ function createConfig(): RuntimeConfig {
   temporaryDirectories.push(dataDir);
   return {
     serverUrl: "ws://127.0.0.1:4500",
+    autoStartServer: false,
     model: "auto",
     mixedMemory: false,
     sharedMemory: false,

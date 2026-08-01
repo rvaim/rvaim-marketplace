@@ -9,6 +9,8 @@ import {
   sha256,
 } from "./state.js";
 import { MEMORY_LANGUAGE_POLICY } from "./memory-language.js";
+import { ensureLocalAppServer } from "./app-server.js";
+import { createLogger } from "./logger.js";
 import type {
   LogFunction,
   RuntimeConfig,
@@ -16,7 +18,6 @@ import type {
 
 interface AgentRecord {
   id: string;
-  name?: string | null;
   tags?: string[] | null;
   model?: string | null;
 }
@@ -47,6 +48,7 @@ export interface AgentClient {
     name: string;
     description: string;
     systemPrompt: string;
+    cwd: string;
     memory: Array<{
       label: string;
       value: string;
@@ -62,7 +64,6 @@ export interface AgentClient {
   resumeSession(conversationId: string, options: SessionOptions): AgentSession;
   agents: {
     list(options: {
-      name: string;
       tags: string[];
       matchAllTags: boolean;
       limit: number;
@@ -76,6 +77,7 @@ export interface AgentClient {
 }
 
 interface SessionOptions {
+  cwd: string;
   allowedTools: string[];
   permissionMode: "strict";
   skillSources: string[];
@@ -127,13 +129,16 @@ async function approveMemoryTool(
   };
 }
 
-const SESSION_OPTIONS: SessionOptions = {
-  allowedTools: [...MEMORY_TOOLS],
-  permissionMode: "strict",
-  skillSources: [],
-  maxApprovalRecoveryAttempts: 0,
-  canUseTool: approveMemoryTool,
-};
+function sessionOptions(workspacePath: string): SessionOptions {
+  return {
+    cwd: workspacePath,
+    allowedTools: [...MEMORY_TOOLS],
+    permissionMode: "strict",
+    skillSources: [],
+    maxApprovalRecoveryAttempts: 0,
+    canUseTool: approveMemoryTool,
+  };
+}
 
 const WORKSPACE_AGENT_SYSTEM_PROMPT = `你是单个编码工作区的后台持久记忆代理。你的唯一任务是把该工作区的 Claude Code 或 Codex 会话记录整理成可长期复用的记忆，并给该工作区下一轮编码助手返回必要的上下文。
 
@@ -305,6 +310,7 @@ async function loadSdkModule(): Promise<AgentSdkModule> {
 export async function createAgentClient(
   config: RuntimeConfig,
 ): Promise<AgentClient> {
+  await ensureLocalAppServer(config, createLogger(config));
   const module = await loadSdkModule();
   return new module.LettaAgentClient(clientOptions(config));
 }
@@ -350,6 +356,7 @@ export function sharedAgentScopeKey(): string {
 
 interface AgentDefinition {
   scopeKey: string;
+  workspacePath: string;
   name: string;
   description: string;
   systemPrompt: string;
@@ -371,6 +378,7 @@ function primaryAgentDefinition(
   if (config.mixedMemory) {
     return {
       scopeKey: agentScopeKey(config, workspacePath),
+      workspacePath,
       name: "letta-mem",
       description: "在后台整理多个 Claude Code 或 Codex 工作区的对话并维护持久记忆。",
       systemPrompt: MIXED_AGENT_SYSTEM_PROMPT,
@@ -386,6 +394,7 @@ function primaryAgentDefinition(
   const identity = workspaceIdentity(workspacePath);
   return {
     scopeKey: agentScopeKey(config, workspacePath),
+    workspacePath,
     name: identity.name,
     description: `在后台整理 Claude Code 或 Codex 工作区 ${identity.label} 的对话并维护独立持久记忆。`,
     systemPrompt: WORKSPACE_AGENT_SYSTEM_PROMPT,
@@ -402,9 +411,10 @@ function primaryAgentDefinition(
   };
 }
 
-function sharedAgentDefinition(): AgentDefinition {
+function sharedAgentDefinition(workspacePath: string): AgentDefinition {
   return {
     scopeKey: SHARED_MEMORY_SCOPE_KEY,
+    workspacePath,
     name: "letta-mem · shared",
     description: "在后台判断并维护 Claude Code 与 Codex 跨工作区共享记忆。",
     systemPrompt: SHARED_AGENT_SYSTEM_PROMPT,
@@ -423,13 +433,14 @@ async function findReusableAgent(
   definition: AgentDefinition,
 ): Promise<AgentRecord | undefined> {
   const existing = await client.agents.list({
-    name: definition.name,
     tags: definition.discoveryTags,
     matchAllTags: true,
     limit: 10,
     order: "desc",
   });
-  return existing.find((agent) => agent.name === definition.name);
+  return existing.find((agent) => definition.discoveryTags.every(
+    (tag) => agent.tags?.includes(tag) === true,
+  ));
 }
 
 function isMissingAgent(error: Error | string): boolean {
@@ -518,6 +529,7 @@ async function resolveDefinedAgentId(
         name: definition.name,
         description: definition.description,
         systemPrompt: definition.systemPrompt,
+        cwd: definition.workspacePath,
         memory: definition.memory,
         memfs: true,
         baseTools: [],
@@ -559,12 +571,13 @@ export async function resolveAgentId(
 export async function resolveSharedAgentId(
   config: RuntimeConfig,
   client: AgentClient,
+  workspacePath: string,
   log: LogFunction,
 ): Promise<string> {
   return resolveDefinedAgentId(
     config,
     client,
-    sharedAgentDefinition(),
+    sharedAgentDefinition(workspacePath),
     log,
   );
 }
@@ -573,10 +586,12 @@ export async function openAgentSession(
   client: AgentClient,
   agentId: string,
   conversationId: string | undefined,
+  workspacePath: string,
 ): Promise<{ session: AgentSession; conversationId: string }> {
+  const options = sessionOptions(workspacePath);
   const session = conversationId
-    ? client.resumeSession(conversationId, SESSION_OPTIONS)
-    : client.createSession(agentId, SESSION_OPTIONS);
+    ? client.resumeSession(conversationId, options)
+    : client.createSession(agentId, options);
   try {
     const bootstrap = await session.bootstrapState({ limit: 1, order: "desc" });
     if (bootstrap.agentId !== agentId) {

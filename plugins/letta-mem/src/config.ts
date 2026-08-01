@@ -9,6 +9,7 @@ const DEFAULT_MODEL = "auto";
 
 interface SharedConfigFile {
   serverUrl?: string;
+  autoStartServer?: boolean;
   model?: string;
   mixedMemory?: boolean;
   sharedMemory?: boolean;
@@ -103,6 +104,12 @@ function readSharedConfig(env: NodeJS.ProcessEnv): SharedConfigFile {
   if (value.serverUrl !== undefined && typeof value.serverUrl !== "string") {
     throw new Error("共享配置 serverUrl 必须是字符串");
   }
+  if (
+    value.autoStartServer !== undefined
+    && typeof value.autoStartServer !== "boolean"
+  ) {
+    throw new Error("共享配置 autoStartServer 必须是布尔值");
+  }
   if (value.model !== undefined && typeof value.model !== "string") {
     throw new Error("共享配置 model 必须是字符串");
   }
@@ -131,6 +138,16 @@ export function readRuntimeConfig(
   ) ?? DEFAULT_SERVER_URL);
   const authToken = firstNonEmpty(
     env.LETTA_APP_SERVER_TOKEN,
+  );
+  const autoStartServer = parseBooleanOption(
+    firstNonEmpty(
+      env.LETTA_MEM_AUTO_START_SERVER,
+      shared.autoStartServer === undefined
+        ? undefined
+        : String(shared.autoStartServer),
+    ),
+    true,
+    "App Server 自动启动",
   );
   const model = normalizeModel(firstNonEmpty(
     env.LETTA_MEM_MODEL,
@@ -162,6 +179,7 @@ export function readRuntimeConfig(
   return {
     serverUrl,
     ...(authToken ? { authToken } : {}),
+    autoStartServer,
     model,
     mixedMemory,
     sharedMemory,

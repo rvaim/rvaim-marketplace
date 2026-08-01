@@ -1,5 +1,6 @@
 export type HookAction =
   | "session-start"
+  | "ensure-server"
   | "inject-context"
   | "enqueue-memory"
   | "drain-pending"
@@ -19,6 +20,7 @@ export interface HookInput {
 export interface RuntimeConfig {
   serverUrl: string;
   authToken?: string;
+  autoStartServer: boolean;
   model: string;
   mixedMemory: boolean;
   sharedMemory: boolean;
