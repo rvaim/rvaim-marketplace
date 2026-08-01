@@ -52,7 +52,11 @@ interface AppServerLaunch {
 export interface AppServerDependencies {
   probeReady: (serverUrl: string, timeoutMs: number) => Promise<boolean>;
   resolveLettaCodeEntry: () => string | null;
-  launch: (entry: string, listenUrl: string) => AppServerLaunch;
+  launch: (
+    entry: string,
+    listenUrl: string,
+    backend: RuntimeConfig["serverBackend"],
+  ) => AppServerLaunch;
   acquireLock: (path: string) => (() => void) | null;
   delay: (milliseconds: number) => Promise<void>;
   startupTimeoutMs: number;
@@ -158,7 +162,11 @@ function prepareServerLog(): string {
   return path;
 }
 
-function launch(entry: string, listenUrl: string): AppServerLaunch {
+function launch(
+  entry: string,
+  listenUrl: string,
+  backend: RuntimeConfig["serverBackend"],
+): AppServerLaunch {
   const logPath = prepareServerLog();
   const descriptor = openSync(logPath, "a", 0o600);
   let child: ReturnType<typeof spawn>;
@@ -178,7 +186,7 @@ function launch(entry: string, listenUrl: string): AppServerLaunch {
       [
         entry,
         "--backend",
-        "local",
+        backend,
         "server",
         "--listen",
         listenUrl,
@@ -291,7 +299,11 @@ export async function ensureLocalAppServer(
         return "failed";
       }
 
-      const launched = dependencies.launch(entry, listenUrl);
+      const launched = dependencies.launch(
+        entry,
+        listenUrl,
+        config.serverBackend,
+      );
       log(
         "info",
         "app-server-starting",

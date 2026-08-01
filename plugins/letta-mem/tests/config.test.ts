@@ -38,6 +38,7 @@ describe("运行配置", () => {
 
     expect(config.serverUrl).toBe("http://127.0.0.1:4500");
     expect(config.autoStartServer).toBe(true);
+    expect(config.serverBackend).toBe("api");
     expect(config.model).toBe("auto");
     expect(config.mixedMemory).toBe(false);
     expect(config.sharedMemory).toBe(true);
@@ -145,6 +146,22 @@ describe("运行配置", () => {
     expect(() => readRuntimeConfig(env({
       LETTA_MEM_AUTO_START_SERVER: "yes",
     }))).toThrow("App Server 自动启动配置必须是");
+  });
+
+  it("原生 Shared Memory 拒绝 local backend", () => {
+    expect(() => readRuntimeConfig(env({
+      LETTA_MEM_SERVER_BACKEND: "local",
+    }))).toThrow("原生 Shared Memory repository 需要 api backend");
+  });
+
+  it("关闭共享记忆后可以使用 local backend", () => {
+    const config = readRuntimeConfig(env({
+      LETTA_MEM_SERVER_BACKEND: "local",
+      LETTA_MEM_SHARED_MEMORY: "false",
+    }));
+
+    expect(config.serverBackend).toBe("local");
+    expect(config.sharedMemory).toBe(false);
   });
 
   it("拒绝共享配置中类型错误的 autoStartServer", () => {

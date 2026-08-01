@@ -6,10 +6,12 @@ import type { RuntimeConfig } from "./types.js";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:4500";
 const DEFAULT_MODEL = "auto";
+const DEFAULT_SERVER_BACKEND = "api";
 
 interface SharedConfigFile {
   serverUrl?: string;
   autoStartServer?: boolean;
+  serverBackend?: "api" | "local";
   model?: string;
   mixedMemory?: boolean;
   sharedMemory?: boolean;
@@ -51,10 +53,11 @@ function namespaceFor(
   serverUrl: string,
   authToken: string = "",
   mixedMemory = false,
+  serverBackend: "api" | "local" = DEFAULT_SERVER_BACKEND,
 ): string {
   const authScope = authToken ? `token:${authToken}` : "token:none";
   const memoryScope = mixedMemory ? "mixed-memory-v1" : "per-workspace-v1";
-  const source = `${memoryScope}:app-server:${serverUrl}:${authScope}`;
+  const source = `${memoryScope}:app-server:${serverBackend}:${serverUrl}:${authScope}`;
   return createHash("sha256").update(source).digest("hex").slice(0, 20);
 }
 
@@ -84,6 +87,12 @@ function normalizeModel(value: string | undefined): string {
   return normalized;
 }
 
+function normalizeServerBackend(value: string | undefined): "api" | "local" {
+  const normalized = value?.trim().toLowerCase() || DEFAULT_SERVER_BACKEND;
+  if (normalized === "api" || normalized === "local") return normalized;
+  throw new Error("App Server backend 必须是 api 或 local");
+}
+
 function sharedConfigPath(env: NodeJS.ProcessEnv): string {
   const configured = firstNonEmpty(env.LETTA_MEM_CONFIG_PATH);
   if (!configured) return join(homedir(), ".letta-mem", "config.json");
@@ -109,6 +118,13 @@ function readSharedConfig(env: NodeJS.ProcessEnv): SharedConfigFile {
     && typeof value.autoStartServer !== "boolean"
   ) {
     throw new Error("共享配置 autoStartServer 必须是布尔值");
+  }
+  if (
+    value.serverBackend !== undefined
+    && value.serverBackend !== "api"
+    && value.serverBackend !== "local"
+  ) {
+    throw new Error("共享配置 serverBackend 必须是 api 或 local");
   }
   if (value.model !== undefined && typeof value.model !== "string") {
     throw new Error("共享配置 model 必须是字符串");
@@ -149,6 +165,10 @@ export function readRuntimeConfig(
     true,
     "App Server 自动启动",
   );
+  const serverBackend = normalizeServerBackend(firstNonEmpty(
+    env.LETTA_MEM_SERVER_BACKEND,
+    shared.serverBackend,
+  ));
   const model = normalizeModel(firstNonEmpty(
     env.LETTA_MEM_MODEL,
     shared.model,
@@ -169,6 +189,11 @@ export function readRuntimeConfig(
     true,
     "共享记忆",
   );
+  if (sharedMemory && serverBackend === "local") {
+    throw new Error(
+      "Letta Code 原生 Shared Memory repository 需要 api backend；请使用 serverBackend=api，或关闭 sharedMemory",
+    );
+  }
   const dataDir = firstNonEmpty(
     env.CLAUDE_PLUGIN_DATA,
     env.PLUGIN_DATA,
@@ -180,11 +205,12 @@ export function readRuntimeConfig(
     serverUrl,
     ...(authToken ? { authToken } : {}),
     autoStartServer,
+    serverBackend,
     model,
     mixedMemory,
     sharedMemory,
     dataDir,
-    namespace: namespaceFor(serverUrl, authToken, mixedMemory),
+    namespace: namespaceFor(serverUrl, authToken, mixedMemory, serverBackend),
     requestTimeoutMs: parsePositiveInteger(
       env.LETTA_MEM_REQUEST_TIMEOUT_MS,
       150_000,

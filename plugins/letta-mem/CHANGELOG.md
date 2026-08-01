@@ -1,5 +1,14 @@
 # 变更日志
 
+## 2.3.0
+
+- 移除插件维护的 `letta-mem · shared` Agent、第二条 Conversation、共享上下文转发和本地共享会话映射；每个转录批次现在只发送给当前工作区或混合 Agent 一次。
+- 改用 Letta Code 原生 Shared Memory repository。共享仓库必须由用户或 Letta Code 预先挂载；插件不创建、挂载、删除、复制仓库，也不保存仓库 ID。
+- 由同一个 Letta Agent 根据语义自行决定把长期信息写入自身 MemFS 还是已挂载的 Shared Memory repository；插件不预分类记忆。
+- 共享模式默认使用并校验 `api` backend；`local` backend 仅能在 `sharedMemory=false` 时使用。
+- 共享模式只开放当前 Agent 记忆根目录中的共享仓库文件，以及限定于该仓库的 Git 读取、提交与同步命令；工程目录、其他 Agent 记忆和任意 Shell 命令仍被拒绝。
+- 现有工作区或混合 Agent 会更新到新的单 Agent 提示；旧 `letta-mem · shared` Agent 不再调用，也不会由插件自动删除或迁移，以免擅自改动用户记忆。
+
 ## 2.2.1
 
 - 创建工作区、共享或混合 Agent 时，把当前工作区的规范化绝对路径作为 Agent SDK `cwd`；新建和恢复 Conversation 时也会重新传入，确保 Letta 运行时工作目录始终对应本次调用的工作区。

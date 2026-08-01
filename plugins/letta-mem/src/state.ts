@@ -118,7 +118,25 @@ export function loadSessionState(
     && Array.isArray(value.recentDigests)
   ) {
     return {
-      ...value,
+      version: 1,
+      sessionId,
+      workspacePath,
+      ...(typeof value.agentId === "string"
+        ? { agentId: value.agentId }
+        : {}),
+      ...(typeof value.agentModel === "string"
+        ? { agentModel: value.agentModel }
+        : {}),
+      ...(typeof value.conversationId === "string"
+        ? { conversationId: value.conversationId }
+        : {}),
+      ...(typeof value.lastInjectedContextRevision === "string"
+        ? { lastInjectedContextRevision: value.lastInjectedContextRevision }
+        : {}),
+      lastProcessedLine: value.lastProcessedLine,
+      recentDigests: value.recentDigests.filter(
+        (digest): digest is string => typeof digest === "string",
+      ).slice(-300),
       pendingAssistantDigests: Array.isArray(value.pendingAssistantDigests)
         ? value.pendingAssistantDigests.filter(
           (digest): digest is string => typeof digest === "string",
@@ -163,6 +181,7 @@ interface StoredAgentReference {
   scopeKey?: string;
   workspacePath?: string;
   model?: string;
+  definitionVersion?: number;
   updatedAt: string;
 }
 
@@ -184,6 +203,9 @@ export function loadAgentReference(
     agentId: value.agentId,
     scopeKey,
     model: typeof value.model === "string" ? value.model : "auto",
+    ...(Number.isInteger(value.definitionVersion)
+      ? { definitionVersion: value.definitionVersion }
+      : {}),
     updatedAt: value.updatedAt,
   };
 }
@@ -199,6 +221,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
+    definitionVersion: 2,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }

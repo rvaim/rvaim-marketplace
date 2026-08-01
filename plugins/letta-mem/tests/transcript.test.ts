@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   formatTranscriptForAgent,
-  formatTranscriptForSharedAgent,
   readTranscriptIncrement,
 } from "../src/transcript.js";
 
@@ -84,44 +83,27 @@ describe("转录增量读取", () => {
     expect(formatted).toContain("不得把其他工作区事实当作当前工作区事实");
   });
 
-  it("共享 Agent 自行判断跨工作区记忆并遵守用户语言", () => {
-    const formatted = formatTranscriptForSharedAgent(
-      "shared-session",
+  it("同一个工作区 Agent 自行区分原生共享与工作区记忆", () => {
+    const formatted = formatTranscriptForAgent(
+      "workspace-session",
       "/workspace/<one>",
       [{
         lineIndex: 0,
         role: "user",
-        text: "所有项目都使用严格类型检查。",
-        digest: "shared-user",
-      }],
-    );
-
-    expect(formatted).toContain("<shared_memory_update>");
-    expect(formatted).toContain("/workspace/&lt;one&gt;");
-    expect(formatted).toContain("自行判断每项信息是否适合跨工作区共享");
-    expect(formatted).toContain("项目专属决定");
-    expect(formatted).toContain("判断语言时只参考 role=\"user\" 的消息");
-  });
-
-  it("工作区 Agent 接收共享上下文但不重复保存纯共享记忆", () => {
-    const formatted = formatTranscriptForAgent(
-      "workspace-session",
-      "/workspace/one",
-      [{
-        lineIndex: 0,
-        role: "user",
-        text: "这个仓库使用 pnpm。",
+        text: "所有项目都使用严格类型检查，但这个仓库使用 pnpm。",
         digest: "workspace-user",
       }],
       false,
       true,
-      "全局规则：禁止使用 <any>。",
     );
 
     expect(formatted).toContain("<shared_memory_enabled>true</shared_memory_enabled>");
-    expect(formatted).toContain("<shared_memory_context>");
-    expect(formatted).toContain("禁止使用 &lt;any&gt;");
-    expect(formatted).toContain("不要重复保存纯共享偏好");
+    expect(formatted).toContain("<native_shared_memory_root>使用 Agent info 中 MEMORY_DIR 绝对路径的父目录</native_shared_memory_root>");
+    expect(formatted).toContain("Shared Memory repository");
+    expect(formatted).toContain("当前工作区 Agent 自身的 MemFS");
+    expect(formatted).toContain("插件没有预先分类");
+    expect(formatted).toContain("/workspace/&lt;one&gt;");
+    expect(formatted).not.toContain("<shared_memory_context>");
   });
 
   it("混合 Agent 在共享功能开启时自行区分作用域", () => {
@@ -140,6 +122,7 @@ describe("转录增量读取", () => {
 
     expect(formatted).toContain("<memory_mode>mixed</memory_mode>");
     expect(formatted).toContain("你必须自行判断每项信息的作用域");
+    expect(formatted).toContain("Shared Memory repository");
     expect(formatted).not.toContain("<shared_memory_context>");
   });
 

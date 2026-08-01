@@ -21,6 +21,7 @@ export interface RuntimeConfig {
   serverUrl: string;
   authToken?: string;
   autoStartServer: boolean;
+  serverBackend: "api" | "local";
   model: string;
   mixedMemory: boolean;
   sharedMemory: boolean;
@@ -46,9 +47,6 @@ export interface SessionState {
   agentId?: string;
   agentModel?: string;
   conversationId?: string;
-  sharedAgentId?: string;
-  sharedAgentModel?: string;
-  sharedConversationId?: string;
   lastProcessedLine: number;
   recentDigests: string[];
   pendingAssistantDigests?: string[];
@@ -60,6 +58,7 @@ export interface AgentReference {
   agentId: string;
   scopeKey: string;
   model: string;
+  definitionVersion?: number;
   updatedAt: string;
 }
 

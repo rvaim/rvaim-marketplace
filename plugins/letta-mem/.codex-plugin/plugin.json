@@ -1,7 +1,7 @@
 {
   "name": "letta-mem",
-  "version": "2.2.1",
-  "description": "\u901a\u8fc7\u672c\u673a\u6216\u81ea\u6258\u7ba1\u65b0\u7248 Letta App Server \u4e3a Codex \u63d0\u4f9b\u5de5\u4f5c\u533a\u4e0e\u81ea\u4e3b\u5171\u4eab\u6301\u4e45\u8bb0\u5fc6\u3002",
+  "version": "2.3.0",
+  "description": "通过 Letta Code Agent MemFS 与原生 Shared Memory，为 Codex 提供持久记忆。",
   "author": {
     "name": "rvaim",
     "url": "https://github.com/rvaim"
@@ -19,8 +19,8 @@
   ],
   "interface": {
     "displayName": "Letta Mem",
-    "shortDescription": "\u4f7f\u7528\u672c\u5730 Letta \u4e3a Codex \u7ef4\u62a4\u6301\u4e45\u8bb0\u5fc6",
-    "longDescription": "\u76d1\u542c Codex \u5bf9\u8bdd\uff0c\u5728\u672c\u5730\u6216\u81ea\u6258\u7ba1 Letta \u4e2d\u540e\u53f0\u7ef4\u62a4\u8bb0\u5fc6\uff0c\u5e76\u5728\u540e\u7eed\u5bf9\u8bdd\u4e2d\u6ce8\u5165\u76f8\u5173\u4e0a\u4e0b\u6587\u3002",
+    "shortDescription": "使用 Letta Code 原生能力维护工作区与共享记忆",
+    "longDescription": "监听 Codex 对话，由同一个 Letta Agent 自行区分自身 MemFS 与已挂载的原生 Shared Memory，并在后续对话中注入相关上下文。",
     "developerName": "rvaim",
     "category": "Productivity",
     "capabilities": [
