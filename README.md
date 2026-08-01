@@ -9,7 +9,7 @@ rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace
 | `arkts-harmony` | ArkTS / HarmonyOS 迁移与审查规则，以及文档查询、代码智能、设备自动化 MCP。 |
 | `harmonyos-design` | 华为官方 HarmonyOS 通用设计基础、设计 Token、跨设备界面设计与视觉审查。 |
 | `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 |
-| `letta-mem` | 通过本机或自托管的新版 Letta App Server，为 Claude Code 与 Codex 提供按用户语言维护的工作区或混合持久记忆。 |
+| `letta-mem` | 通过本机或自托管的新版 Letta App Server，为 Claude Code 与 Codex 提供按用户语言维护的工作区、共享或混合持久记忆。 |
 
 ## 目录结构
 

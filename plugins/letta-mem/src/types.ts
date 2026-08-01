@@ -21,6 +21,7 @@ export interface RuntimeConfig {
   authToken?: string;
   model: string;
   mixedMemory: boolean;
+  sharedMemory: boolean;
   dataDir: string;
   namespace: string;
   requestTimeoutMs: number;
@@ -43,6 +44,9 @@ export interface SessionState {
   agentId?: string;
   agentModel?: string;
   conversationId?: string;
+  sharedAgentId?: string;
+  sharedAgentModel?: string;
+  sharedConversationId?: string;
   lastProcessedLine: number;
   recentDigests: string[];
   pendingAssistantDigests?: string[];

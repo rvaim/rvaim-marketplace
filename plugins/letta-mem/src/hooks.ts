@@ -10,7 +10,9 @@ import {
   createAgentClient,
   openAgentSession,
   resolveAgentId,
+  resolveSharedAgentId,
   sendAgentUpdate,
+  sharedAgentScopeKey,
 } from "./letta.js";
 import type {
   AgentClientFactory,
@@ -35,6 +37,7 @@ import {
 } from "./state.js";
 import {
   formatTranscriptForAgent,
+  formatTranscriptForSharedAgent,
   readTranscriptIncrement,
   transcriptTailLineIndex,
 } from "./transcript.js";
@@ -135,6 +138,28 @@ function normalizedGuidance(guidance: string, maxChars: number): string {
   return trimmed;
 }
 
+function combinedGuidance(
+  workspaceGuidance: string,
+  sharedGuidance: string,
+  maxChars: number,
+): string {
+  if (!workspaceGuidance) return sharedGuidance.slice(0, maxChars);
+  if (!sharedGuidance || workspaceGuidance.includes(sharedGuidance)) {
+    return workspaceGuidance.slice(0, maxChars);
+  }
+  const workspaceLabel = "工作区记忆：\n";
+  const sharedLabel = "\n\n共享记忆：\n";
+  const available = Math.max(
+    0,
+    maxChars - workspaceLabel.length - sharedLabel.length,
+  );
+  const workspaceLimit = Math.ceil(available * 0.6);
+  const sharedLimit = available - workspaceLimit;
+  const workspaceContext = workspaceGuidance.slice(0, workspaceLimit);
+  const sharedContext = sharedGuidance.slice(0, sharedLimit);
+  return `${workspaceLabel}${workspaceContext}${sharedLabel}${sharedContext}`;
+}
+
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -164,9 +189,10 @@ function isMissingLettaResource(error: Error | string): boolean {
 async function openSessionWithRecovery(
   config: RuntimeConfig,
   client: Awaited<ReturnType<AgentClientFactory>>,
-  workspacePath: string,
+  scopeKey: string,
   initialAgentId: string,
   conversationId: string | undefined,
+  resolveCurrentAgentId: () => Promise<string>,
   log: LogFunction,
 ): Promise<{
   agentId: string;
@@ -199,17 +225,12 @@ async function openSessionWithRecovery(
 
   if (!clearAgentReference(
     config,
-    agentScopeKey(config, workspacePath),
+    scopeKey,
     initialAgentId,
   )) {
     throw lastError instanceof Error ? lastError : new Error(lastError);
   }
-  const recoveredAgentId = await resolveAgentId(
-    config,
-    client,
-    workspacePath,
-    log,
-  );
+  const recoveredAgentId = await resolveCurrentAgentId();
   const opened = await openAgentSession(client, recoveredAgentId, undefined);
   log("warn", "agent-reference-recreated", initialAgentId);
   return { agentId: recoveredAgentId, ...opened };
@@ -245,6 +266,15 @@ export async function handleSessionStart(
           : {}),
         ...(state.conversationId !== undefined
           ? { conversationId: state.conversationId }
+          : {}),
+        ...(state.sharedAgentId !== undefined
+          ? { sharedAgentId: state.sharedAgentId }
+          : {}),
+        ...(state.sharedAgentModel !== undefined
+          ? { sharedAgentModel: state.sharedAgentModel }
+          : {}),
+        ...(state.sharedConversationId !== undefined
+          ? { sharedConversationId: state.sharedConversationId }
           : {}),
         lastProcessedLine: Math.max(state.lastProcessedLine, forkTail),
         recentDigests: state.recentDigests,
@@ -347,11 +377,15 @@ async function processPendingUpdate(
   const input = pendingInput(pending);
   const sessionId = pending.sessionId;
   const workspacePath = pending.workspacePath;
+  const useDedicatedSharedAgent = config.sharedMemory && !config.mixedMemory;
   let agentSession: AgentSession | undefined;
+  let sharedAgentSession: AgentSession | undefined;
   try {
     let state = loadSessionState(config, workspacePath, sessionId);
     let agentId = state.agentId;
     let conversationId = state.conversationId;
+    let sharedAgentId = state.sharedAgentId;
+    let sharedConversationId = state.sharedConversationId;
 
     while (true) {
       const batch = await readTranscriptIncrement(
@@ -372,6 +406,48 @@ async function processPendingUpdate(
 
       if (!agentSession) {
         const client = await clientFactory(config);
+        if (useDedicatedSharedAgent && !sharedAgentSession) {
+          const resolvedSharedAgentId = await resolveSharedAgentId(
+            config,
+            client,
+            log,
+          );
+          const sharedStateModel = state.sharedAgentModel ?? "auto";
+          const resumableSharedConversation = (
+            state.sharedAgentId === resolvedSharedAgentId
+            && sharedStateModel === config.model
+          )
+            ? state.sharedConversationId
+            : undefined;
+          const openedShared = await openSessionWithRecovery(
+            config,
+            client,
+            sharedAgentScopeKey(),
+            resolvedSharedAgentId,
+            resumableSharedConversation,
+            () => resolveSharedAgentId(config, client, log),
+            log,
+          );
+          sharedAgentSession = openedShared.session;
+          sharedAgentId = openedShared.agentId;
+          sharedConversationId = openedShared.conversationId;
+
+          const sharedMapped = await updateSessionState(
+            config,
+            workspacePath,
+            sessionId,
+            (latest) => ({
+              ...latest,
+              sharedAgentId: openedShared.agentId,
+              sharedAgentModel: config.model,
+              sharedConversationId: openedShared.conversationId,
+            }),
+            2_000,
+          );
+          if (!sharedMapped) throw new Error("无法保存 Letta 共享会话映射");
+          state = sharedMapped;
+        }
+
         const resolvedAgentId = await resolveAgentId(
           config,
           client,
@@ -386,9 +462,10 @@ async function processPendingUpdate(
         const opened = await openSessionWithRecovery(
           config,
           client,
-          workspacePath,
+          agentScopeKey(config, workspacePath),
           resolvedAgentId,
           resumableConversation,
+          () => resolveAgentId(config, client, workspacePath, log),
           log,
         );
         agentSession = opened.session;
@@ -416,30 +493,55 @@ async function processPendingUpdate(
       if (!agentId || !conversationId) {
         throw new Error("Letta 会话映射不完整");
       }
+      if (
+        useDedicatedSharedAgent
+        && (!sharedAgentSession || !sharedAgentId || !sharedConversationId)
+      ) {
+        throw new Error("Letta 共享会话映射不完整");
+      }
       const activeAgentId = agentId;
       const activeConversationId = conversationId;
+      let sharedGuidance = "";
+      if (useDedicatedSharedAgent && sharedAgentSession) {
+        const sharedMessage = formatTranscriptForSharedAgent(
+          sessionId,
+          workspacePath,
+          batch.events,
+        );
+        sharedGuidance = normalizedGuidance(
+          await sendAgentUpdate(sharedAgentSession, sharedMessage),
+          config.maxContextChars,
+        );
+      }
       const message = formatTranscriptForAgent(
         sessionId,
         workspacePath,
         batch.events,
         config.mixedMemory,
+        config.sharedMemory,
+        sharedGuidance,
       );
       const guidance = await sendAgentUpdate(agentSession, message);
       const trimmedGuidance = normalizedGuidance(
         guidance,
         config.maxContextChars,
       );
+      const contextGuidance = combinedGuidance(
+        trimmedGuidance,
+        sharedGuidance,
+        config.maxContextChars,
+      );
 
-      if (trimmedGuidance) {
+      if (contextGuidance) {
         saveContextSnapshot(config, {
           version: 1,
           agentId: activeAgentId,
           workspacePath,
           revision: sha256(
-            `${activeAgentId}\0${workspacePath}\0${trimmedGuidance}`,
+            `${activeAgentId}\0${workspacePath}\0${contextGuidance}`,
           ),
           updatedAt: new Date().toISOString(),
-          text: trimmedGuidance,
+          text: contextGuidance,
         });
       }
 
@@ -452,6 +554,13 @@ async function processPendingUpdate(
           agentId: activeAgentId,
           agentModel: config.model,
           conversationId: activeConversationId,
+          ...(useDedicatedSharedAgent
+            ? {
+              sharedAgentId,
+              sharedAgentModel: config.model,
+              sharedConversationId,
+            }
+            : {}),
           lastProcessedLine: Math.max(
             latest.lastProcessedLine,
             batch.lastLineIndex,
@@ -480,6 +589,12 @@ async function processPendingUpdate(
     } catch (error) {
       const detail = error instanceof Error ? errorDetail(error) : String(error);
       log("warn", "session-close-failed", detail);
+    }
+    try {
+      sharedAgentSession?.close();
+    } catch (error) {
+      const detail = error instanceof Error ? errorDetail(error) : String(error);
+      log("warn", "shared-session-close-failed", detail);
     }
   }
 }

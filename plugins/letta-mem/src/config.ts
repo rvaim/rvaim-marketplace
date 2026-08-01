@@ -11,6 +11,7 @@ interface SharedConfigFile {
   serverUrl?: string;
   model?: string;
   mixedMemory?: boolean;
+  sharedMemory?: boolean;
 }
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
@@ -63,12 +64,13 @@ function isEnabled(value: string | undefined): boolean {
 function parseBooleanOption(
   value: string | undefined,
   fallback: boolean,
+  label: string,
 ): boolean {
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return fallback;
   if (normalized === "true" || normalized === "1") return true;
   if (normalized === "false" || normalized === "0") return false;
-  throw new Error("混合记忆配置必须是 true、false、1 或 0");
+  throw new Error(`${label}配置必须是 true、false、1 或 0`);
 }
 
 function normalizeModel(value: string | undefined): string {
@@ -110,6 +112,12 @@ function readSharedConfig(env: NodeJS.ProcessEnv): SharedConfigFile {
   ) {
     throw new Error("共享配置 mixedMemory 必须是布尔值");
   }
+  if (
+    value.sharedMemory !== undefined
+    && typeof value.sharedMemory !== "boolean"
+  ) {
+    throw new Error("共享配置 sharedMemory 必须是布尔值");
+  }
   return value;
 }
 
@@ -134,6 +142,15 @@ export function readRuntimeConfig(
       shared.mixedMemory === undefined ? undefined : String(shared.mixedMemory),
     ),
     false,
+    "混合记忆",
+  );
+  const sharedMemory = parseBooleanOption(
+    firstNonEmpty(
+      env.LETTA_MEM_SHARED_MEMORY,
+      shared.sharedMemory === undefined ? undefined : String(shared.sharedMemory),
+    ),
+    true,
+    "共享记忆",
   );
   const dataDir = firstNonEmpty(
     env.CLAUDE_PLUGIN_DATA,
@@ -147,6 +164,7 @@ export function readRuntimeConfig(
     ...(authToken ? { authToken } : {}),
     model,
     mixedMemory,
+    sharedMemory,
     dataDir,
     namespace: namespaceFor(serverUrl, authToken, mixedMemory),
     requestTimeoutMs: parsePositiveInteger(

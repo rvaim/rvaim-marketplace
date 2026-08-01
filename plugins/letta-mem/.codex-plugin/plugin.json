@@ -1,7 +1,7 @@
 {
   "name": "letta-mem",
-  "version": "2.0.0+codex.20260801083421",
-  "description": "\u901a\u8fc7\u672c\u673a\u6216\u81ea\u6258\u7ba1\u65b0\u7248 Letta App Server \u4e3a Codex \u5de5\u4f5c\u533a\u63d0\u4f9b\u6301\u4e45\u8bb0\u5fc6\u3002",
+  "version": "2.1.0",
+  "description": "\u901a\u8fc7\u672c\u673a\u6216\u81ea\u6258\u7ba1\u65b0\u7248 Letta App Server \u4e3a Codex \u63d0\u4f9b\u5de5\u4f5c\u533a\u4e0e\u81ea\u4e3b\u5171\u4eab\u6301\u4e45\u8bb0\u5fc6\u3002",
   "author": {
     "name": "rvaim",
     "url": "https://github.com/rvaim"
@@ -13,6 +13,7 @@
     "letta",
     "codex",
     "memory",
+    "shared-memory",
     "agent",
     "self-hosted"
   ],

@@ -21,6 +21,7 @@ function createConfig(): RuntimeConfig {
     serverUrl: "ws://127.0.0.1:4500",
     model: "auto",
     mixedMemory: false,
+    sharedMemory: false,
     dataDir,
     namespace: "context-tests",
     requestTimeoutMs: 1_000,

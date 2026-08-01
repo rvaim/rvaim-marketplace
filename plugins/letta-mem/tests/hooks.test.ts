@@ -22,6 +22,8 @@ import type {
 import {
   agentScopeKey,
   resolveAgentId,
+  resolveSharedAgentId,
+  sharedAgentScopeKey,
 } from "../src/letta.js";
 import {
   acquireLock,
@@ -49,6 +51,7 @@ function createConfig(): RuntimeConfig {
     serverUrl: "ws://127.0.0.1:4500",
     model: "auto",
     mixedMemory: false,
+    sharedMemory: false,
     dataDir,
     namespace: "hook-tests",
     requestTimeoutMs: 1_000,
@@ -241,6 +244,170 @@ describe("后台记忆 Hook", () => {
     expect(loadContextSnapshot(config, projectPath)?.text).toBe("第二版相关上下文");
   });
 
+  it("共享记忆默认流程先由共享 Agent 判断再交给工作区 Agent", async () => {
+    const config = { ...createConfig(), sharedMemory: true };
+    const workspacePath = join(config.dataDir, "shared-workspace");
+    const transcriptPath = createTranscript(
+      config,
+      "所有项目都禁用 any，但这个仓库使用 pnpm。",
+    );
+    const shared = createSession(
+      "conversation-shared",
+      "跨工作区规范：禁止使用 <any>。",
+      "agent-shared",
+    );
+    const workspace = createSession(
+      "conversation-workspace",
+      "当前工作区使用 pnpm，并遵守禁用 any 的共享规范。",
+      "agent-workspace",
+    );
+    const creationOrder: string[] = [];
+    const createAgent = vi.fn(async (
+      options: Parameters<AgentClient["createAgent"]>[0],
+    ) => {
+      creationOrder.push(options.name);
+      return options.name === "letta-mem · shared"
+        ? "agent-shared"
+        : "agent-workspace";
+    });
+    const createAgentSession = vi.fn((agentId: string) => (
+      agentId === "agent-shared" ? shared.session : workspace.session
+    ));
+    const client: AgentClient = {
+      createAgent,
+      createSession: createAgentSession,
+      resumeSession: vi.fn((conversationId: string) => (
+        conversationId === "conversation-shared"
+          ? shared.session
+          : workspace.session
+      )),
+      agents: {
+        list: vi.fn(async () => []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await expect(handleUpdateMemory(config, {
+      session_id: "shared-session",
+      transcript_path: transcriptPath,
+      cwd: workspacePath,
+    }, log, vi.fn(async () => client) as AgentClientFactory)).resolves.toBe("");
+
+    expect(creationOrder).toEqual([
+      "letta-mem · shared",
+      expect.stringContaining("shared-workspace"),
+    ]);
+    expect(createAgent).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      name: "letta-mem · shared",
+      tags: expect.arrayContaining(["letta-mem-memory-scope:shared-v1"]),
+      systemPrompt: expect.stringContaining("自行判断哪些信息真正适合跨工作区复用"),
+    }));
+    expect(shared.sent[0]).toContain("<shared_memory_update>");
+    expect(workspace.sent[0]).toContain("<shared_memory_context>");
+    expect(workspace.sent[0]).toContain("禁止使用 &lt;any&gt;");
+    expect(shared.close).toHaveBeenCalledOnce();
+    expect(workspace.close).toHaveBeenCalledOnce();
+    expect(loadSessionState(config, workspacePath, "shared-session"))
+      .toMatchObject({
+        agentId: "agent-workspace",
+        conversationId: "conversation-workspace",
+        sharedAgentId: "agent-shared",
+        sharedConversationId: "conversation-shared",
+        lastProcessedLine: 0,
+      });
+    expect(loadAgentReference(config, sharedAgentScopeKey()))
+      .toMatchObject({ agentId: "agent-shared" });
+    expect(loadContextSnapshot(config, workspacePath)?.text)
+      .toContain("当前工作区使用 pnpm，并遵守禁用 any 的共享规范。");
+    expect(loadContextSnapshot(config, workspacePath)?.text)
+      .toContain("跨工作区规范：禁止使用 <any>。");
+  });
+
+  it("Claude Code 与 Codex 的独立数据目录复用服务器端共享 Agent", async () => {
+    const firstConfig = { ...createConfig(), sharedMemory: true };
+    const secondConfig = { ...createConfig(), sharedMemory: true };
+    let storedAgent: {
+      id: string;
+      name: string;
+      tags: string[];
+      model: string;
+    } | undefined;
+    const createAgent = vi.fn(async (
+      options: Parameters<AgentClient["createAgent"]>[0],
+    ) => {
+      storedAgent = {
+        id: "agent-shared-cross-host",
+        name: options.name,
+        tags: options.tags,
+        model: "deepseek/deepseek-v4-flash",
+      };
+      return storedAgent.id;
+    });
+    const client: AgentClient = {
+      createAgent,
+      createSession: vi.fn(() => createSession("unused", "").session),
+      resumeSession: vi.fn(() => createSession("unused", "").session),
+      agents: {
+        list: vi.fn(async () => storedAgent ? [storedAgent] : []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    const firstAgentId = await resolveSharedAgentId(firstConfig, client, log);
+    const secondAgentId = await resolveSharedAgentId(secondConfig, client, log);
+
+    expect(firstAgentId).toBe("agent-shared-cross-host");
+    expect(secondAgentId).toBe("agent-shared-cross-host");
+    expect(createAgent).toHaveBeenCalledOnce();
+    expect(client.agents.list).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "shared-agent-reused",
+      "agent-shared-cross-host",
+    );
+  });
+
+  it("模型变化时更新共享 Agent 而不新建共享记忆", async () => {
+    const config = {
+      ...createConfig(),
+      model: "deepseek/deepseek-v4-flash",
+      sharedMemory: true,
+    };
+    saveAgentReference(
+      config,
+      sharedAgentScopeKey(),
+      "agent-shared-existing",
+      "auto",
+    );
+    const update = vi.fn(async () => ({
+      id: "agent-shared-existing",
+      model: "deepseek/deepseek-v4-flash",
+    }));
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-shared-unused"),
+      createSession: vi.fn(() => createSession("unused", "").session),
+      resumeSession: vi.fn(() => createSession("unused", "").session),
+      agents: {
+        list: vi.fn(async () => []),
+        update,
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await expect(resolveSharedAgentId(config, client, log))
+      .resolves.toBe("agent-shared-existing");
+
+    expect(update).toHaveBeenCalledWith("agent-shared-existing", {
+      model: "deepseek/deepseek-v4-flash",
+    });
+    expect(client.createAgent).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "shared-agent-model-updated",
+      "agent-shared-existing:deepseek/deepseek-v4-flash",
+    );
+  });
+
   it("相同 Claude 会话 ID 在不同工作区中创建不同 Agent", async () => {
     const config = createConfig();
     const firstWorkspace = join(config.dataDir, "first-workspace");
@@ -379,6 +546,7 @@ describe("后台记忆 Hook", () => {
       ...createConfig(),
       model: "deepseek/deepseek-v4-flash",
       mixedMemory: true,
+      sharedMemory: true,
     };
     const firstWorkspace = join(config.dataDir, "mixed-first");
     const secondWorkspace = join(config.dataDir, "mixed-second");
@@ -430,12 +598,17 @@ describe("后台记忆 Hook", () => {
       name: "letta-mem",
       model: "deepseek/deepseek-v4-flash",
       tags: expect.arrayContaining(["letta-mem-memory-mode:mixed"]),
-      systemPrompt: expect.stringContaining("多个编码工作区共享"),
+      systemPrompt: expect.stringContaining("自行判断共享与独立作用域"),
     }));
     expect(createAgentSession).toHaveBeenCalledTimes(2);
     expect(createAgentSession.mock.calls.map((call) => call[0]))
       .toEqual(["agent-mixed", "agent-mixed"]);
     expect(openedSessions[0]?.sent[0]).toContain("<memory_mode>mixed</memory_mode>");
+    expect(openedSessions[0]?.sent[0])
+      .toContain("<shared_memory_enabled>true</shared_memory_enabled>");
+    expect(openedSessions[0]?.sent[0])
+      .toContain("你必须自行判断每项信息的作用域");
+    expect(openedSessions[0]?.sent[0]).not.toContain("<shared_memory_context>");
     expect(openedSessions[0]?.sent[0]).toContain(firstWorkspace);
     expect(openedSessions[1]?.sent[0]).toContain(secondWorkspace);
     expect(loadContextSnapshot(config, firstWorkspace)?.text).toBe("混合上下文-1");
@@ -603,6 +776,79 @@ describe("后台记忆 Hook", () => {
     ).resolves.toBe("");
     expect(clientFactory).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith("info", "update-deferred-backoff");
+  });
+
+  it("共享 Agent 处理失败时保留待处理项且不影响宿主", async () => {
+    const config = { ...createConfig(), sharedMemory: true };
+    const workspacePath = join(config.dataDir, "shared-failure-workspace");
+    const transcriptPath = createTranscript(config, "需要判断作用域的记忆");
+    const sharedClose = vi.fn();
+    const sharedFailure: AgentSession = {
+      async send() {},
+      async *stream() {
+        yield {
+          type: "result",
+          success: false,
+          error: "模拟共享 Agent 失败",
+        };
+      },
+      async bootstrapState() {
+        return {
+          agentId: "agent-shared-failure",
+          conversationId: "conversation-shared-failure",
+        };
+      },
+      close: sharedClose,
+    };
+    const workspace = createSession(
+      "conversation-workspace-unused",
+      "不应写入",
+      "agent-workspace-unused",
+    );
+    const client: AgentClient = {
+      createAgent: vi.fn(async (options) => (
+        options.name === "letta-mem · shared"
+          ? "agent-shared-failure"
+          : "agent-workspace-unused"
+      )),
+      createSession: vi.fn((agentId: string) => (
+        agentId === "agent-shared-failure"
+          ? sharedFailure
+          : workspace.session
+      )),
+      resumeSession: vi.fn(() => workspace.session),
+      agents: {
+        list: vi.fn(async () => []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await expect(handleUpdateMemory(
+      config,
+      {
+        session_id: "shared-failure-session",
+        transcript_path: transcriptPath,
+        cwd: workspacePath,
+      },
+      log,
+      vi.fn(async () => client) as AgentClientFactory,
+    )).resolves.toBe("");
+
+    expect(workspace.sent).toHaveLength(0);
+    expect(sharedClose).toHaveBeenCalledOnce();
+    expect(workspace.close).toHaveBeenCalledOnce();
+    expect(loadSessionState(
+      config,
+      workspacePath,
+      "shared-failure-session",
+    ).lastProcessedLine).toBe(-1);
+    expect(listPendingUpdates(config, true)).toHaveLength(1);
+    expect(loadFailureState(config)?.failures).toBe(1);
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "memory-update-failed",
+      expect.stringContaining("模拟共享 Agent 失败"),
+    );
   });
 
   it("Agent 已创建但 MemFS 后置初始化报错时会恢复该 Agent", async () => {
@@ -1042,6 +1288,43 @@ describe("后台记忆 Hook", () => {
       "claude-session-fork",
     ).lastProcessedLine)
       .toBe(2);
+  });
+
+  it("compact 时保留工作区与共享 Agent 的会话映射", async () => {
+    const config = { ...createConfig(), sharedMemory: true };
+    const workspacePath = join(config.dataDir, "compact-shared-workspace");
+    saveSessionState(config, {
+      version: 1,
+      sessionId: "compact-shared-session",
+      workspacePath,
+      agentId: "agent-workspace",
+      agentModel: "auto",
+      conversationId: "conversation-workspace",
+      sharedAgentId: "agent-shared",
+      sharedAgentModel: "auto",
+      sharedConversationId: "conversation-shared",
+      lastProcessedLine: 4,
+      recentDigests: ["digest-one"],
+      pendingAssistantDigests: [],
+    });
+
+    await handleSessionStart(config, {
+      session_id: "compact-shared-session",
+      cwd: workspacePath,
+      source: "compact",
+    });
+
+    expect(loadSessionState(
+      config,
+      workspacePath,
+      "compact-shared-session",
+    )).toMatchObject({
+      agentId: "agent-workspace",
+      conversationId: "conversation-workspace",
+      sharedAgentId: "agent-shared",
+      sharedConversationId: "conversation-shared",
+      lastProcessedLine: 4,
+    });
   });
 
   it("入队时将相对 transcript 路径规范为绝对路径", async () => {

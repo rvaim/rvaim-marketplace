@@ -57,7 +57,7 @@
     },
     {
       "name": "letta-mem",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "source": {
         "source": "local",
         "path": "./plugins/letta-mem"
@@ -69,7 +69,7 @@
       "category": "Productivity",
       "interface": {
         "displayName": "Letta Mem",
-        "shortDescription": "使用本地 Letta 为 Claude Code 与 Codex 维护持久记忆。"
+        "shortDescription": "使用本地 Letta 为 Claude Code 与 Codex 维护工作区与共享记忆。"
       }
     }
   ]

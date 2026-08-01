@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   formatTranscriptForAgent,
+  formatTranscriptForSharedAgent,
   readTranscriptIncrement,
 } from "../src/transcript.js";
 
@@ -81,6 +82,65 @@ describe("转录增量读取", () => {
     expect(formatted).toContain("共享同一个 Agent 和 MemFS");
     expect(formatted).toContain("保留其 workspace_path");
     expect(formatted).toContain("不得把其他工作区事实当作当前工作区事实");
+  });
+
+  it("共享 Agent 自行判断跨工作区记忆并遵守用户语言", () => {
+    const formatted = formatTranscriptForSharedAgent(
+      "shared-session",
+      "/workspace/<one>",
+      [{
+        lineIndex: 0,
+        role: "user",
+        text: "所有项目都使用严格类型检查。",
+        digest: "shared-user",
+      }],
+    );
+
+    expect(formatted).toContain("<shared_memory_update>");
+    expect(formatted).toContain("/workspace/&lt;one&gt;");
+    expect(formatted).toContain("自行判断每项信息是否适合跨工作区共享");
+    expect(formatted).toContain("项目专属决定");
+    expect(formatted).toContain("判断语言时只参考 role=\"user\" 的消息");
+  });
+
+  it("工作区 Agent 接收共享上下文但不重复保存纯共享记忆", () => {
+    const formatted = formatTranscriptForAgent(
+      "workspace-session",
+      "/workspace/one",
+      [{
+        lineIndex: 0,
+        role: "user",
+        text: "这个仓库使用 pnpm。",
+        digest: "workspace-user",
+      }],
+      false,
+      true,
+      "全局规则：禁止使用 <any>。",
+    );
+
+    expect(formatted).toContain("<shared_memory_enabled>true</shared_memory_enabled>");
+    expect(formatted).toContain("<shared_memory_context>");
+    expect(formatted).toContain("禁止使用 &lt;any&gt;");
+    expect(formatted).toContain("不要重复保存纯共享偏好");
+  });
+
+  it("混合 Agent 在共享功能开启时自行区分作用域", () => {
+    const formatted = formatTranscriptForAgent(
+      "mixed-shared-session",
+      "/workspace/two",
+      [{
+        lineIndex: 0,
+        role: "user",
+        text: "记住规范和项目决定。",
+        digest: "mixed-shared-user",
+      }],
+      true,
+      true,
+    );
+
+    expect(formatted).toContain("<memory_mode>mixed</memory_mode>");
+    expect(formatted).toContain("你必须自行判断每项信息的作用域");
+    expect(formatted).not.toContain("<shared_memory_context>");
   });
 
   it("读取 Codex 记录时只采集原始用户消息和最终回答", async () => {
