@@ -1,0 +1,65 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
+              "session-state"
+            ],
+            "timeout": 2,
+            "statusMessage": "正在恢复 Letta 记忆状态"
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
+              "prepare-runtime"
+            ],
+            "async": true,
+            "timeout": 300,
+            "statusMessage": "正在准备 Letta 记忆"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
+              "inject-context"
+            ],
+            "timeout": 2,
+            "statusMessage": "正在读取 Letta 记忆"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
+              "update-memory"
+            ],
+            "async": true,
+            "timeout": 360,
+            "statusMessage": "正在后台更新 Letta 记忆"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "letta-mem",
+  "version": "1.1.1",
+  "description": "为每个 Claude Code 工作区创建独立的新版 Letta Agent，按用户语言异步维护记忆并注入相关上下文。",
+  "author": {
+    "name": "rvaim",
+    "url": "https://github.com/rvaim"
+  },
+  "homepage": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/letta-mem/README.md",
+  "repository": "https://github.com/rvaim/rvaim-marketplace",
+  "license": "MIT",
+  "keywords": [
+    "letta",
+    "claude-code",
+    "memory",
+    "agent",
+    "self-hosted"
+  ],
+  "userConfig": {
+    "letta_server_url": {
+      "type": "string",
+      "title": "Letta App Server 地址",
+      "description": "用户自行运行的本机或自托管新版 Letta App Server 地址。",
+      "default": "http://127.0.0.1:4500"
+    },
+    "letta_auth_token": {
+      "type": "string",
+      "title": "App Server 访问令牌",
+      "description": "仅当自托管 App Server 启用了 capability token 时填写。",
+      "sensitive": true
+    }
+  }
+}
