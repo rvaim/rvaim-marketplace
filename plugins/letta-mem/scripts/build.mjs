@@ -7,7 +7,10 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22.19",
-  external: ["@letta-ai/letta-agent-sdk"],
+  external: [
+    "@letta-ai/letta-agent-sdk",
+    "@letta-ai/letta-code/app-server-client",
+  ],
   minify: false,
   sourcemap: false,
   banner: {

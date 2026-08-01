@@ -41,7 +41,7 @@ describe("新版 Letta 边界", () => {
       .toContain("ensure-server");
   });
 
-  it("只直接依赖新版 Agent SDK，由 SDK 提供配套 Letta Code", () => {
+  it("直接依赖使用新版 Agent SDK 与配套 Letta Code", () => {
     const packageJson = JSON.parse(
       readFileSync(join(pluginRoot, "package.json"), "utf8"),
     ) as {
@@ -54,7 +54,7 @@ describe("新版 Letta 边界", () => {
     });
 
     expect(directDependencies).toContain("@letta-ai/letta-agent-sdk");
-    expect(directDependencies).not.toContain("@letta-ai/letta-code");
+    expect(directDependencies).toContain("@letta-ai/letta-code");
     expect(directDependencies).not.toContain("@letta-ai/letta-code-sdk");
     expect(directDependencies).not.toContain("@letta-ai/letta-client");
     expect(directDependencies).not.toContain("letta-client");

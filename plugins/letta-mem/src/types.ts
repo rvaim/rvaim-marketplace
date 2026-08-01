@@ -21,7 +21,10 @@ export interface RuntimeConfig {
   serverUrl: string;
   authToken?: string;
   autoStartServer: boolean;
+  serverBackend: "api" | "local";
   model: string;
+  mixedMemory: boolean;
+  sharedMemory: boolean;
   dataDir: string;
   namespace: string;
   requestTimeoutMs: number;

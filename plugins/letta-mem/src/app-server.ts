@@ -55,6 +55,7 @@ export interface AppServerDependencies {
   launch: (
     entry: string,
     listenUrl: string,
+    backend: RuntimeConfig["serverBackend"],
   ) => AppServerLaunch;
   acquireLock: (path: string) => (() => void) | null;
   delay: (milliseconds: number) => Promise<void>;
@@ -164,6 +165,7 @@ function prepareServerLog(): string {
 function launch(
   entry: string,
   listenUrl: string,
+  backend: RuntimeConfig["serverBackend"],
 ): AppServerLaunch {
   const logPath = prepareServerLog();
   const descriptor = openSync(logPath, "a", 0o600);
@@ -183,6 +185,8 @@ function launch(
       process.execPath,
       [
         entry,
+        "--backend",
+        backend,
         "server",
         "--listen",
         listenUrl,
@@ -298,6 +302,7 @@ export async function ensureLocalAppServer(
       const launched = dependencies.launch(
         entry,
         listenUrl,
+        config.serverBackend,
       );
       log(
         "info",

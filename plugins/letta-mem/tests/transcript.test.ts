@@ -59,13 +59,31 @@ describe("转录增量读取", () => {
     expect(formatted).toContain("用户用简体中文表达的事实用简体中文保存");
     expect(formatted).toContain("用户用英文表达的事实用英文保存");
     expect(formatted).toContain("不得跟随助手、系统、工具输出");
-    expect(formatted).not.toContain("<memory_mode>");
-    expect(formatted).not.toContain("<shared_memory_enabled>");
+    expect(formatted).toContain("<memory_mode>workspace</memory_mode>");
     expect(formatted).toContain("请记住这个架构决定。");
     expect(formatted).toContain("Keep this preference in English.");
   });
 
-  it("只传递目标与约束，由 Letta 自行选择记忆方式", () => {
+  it("混合记忆任务会保留工作区来源并允许复用相关经验", () => {
+    const formatted = formatTranscriptForAgent(
+      "mixed-session",
+      "/workspace/one",
+      [{
+        lineIndex: 0,
+        role: "user",
+        text: "记住这个决定。",
+        digest: "mixed-user",
+      }],
+      true,
+    );
+
+    expect(formatted).toContain("<memory_mode>mixed</memory_mode>");
+    expect(formatted).toContain("共享同一个 Agent 和 MemFS");
+    expect(formatted).toContain("保留其 workspace_path");
+    expect(formatted).toContain("不得把其他工作区事实当作当前工作区事实");
+  });
+
+  it("同一个工作区 Agent 自行区分原生共享与工作区记忆", () => {
     const formatted = formatTranscriptForAgent(
       "workspace-session",
       "/workspace/<one>",
@@ -75,18 +93,37 @@ describe("转录增量读取", () => {
         text: "所有项目都使用严格类型检查，但这个仓库使用 pnpm。",
         digest: "workspace-user",
       }],
+      false,
+      true,
     );
 
+    expect(formatted).toContain("<shared_memory_enabled>true</shared_memory_enabled>");
+    expect(formatted).toContain("<native_shared_memory_root>使用 Agent info 中 MEMORY_DIR 绝对路径的父目录</native_shared_memory_root>");
+    expect(formatted).toContain("Shared Memory repository");
+    expect(formatted).toContain("当前工作区 Agent 自身的 MemFS");
+    expect(formatted).toContain("插件没有预先分类");
     expect(formatted).toContain("/workspace/&lt;one&gt;");
-    expect(formatted).toContain("自行决定每项信息的适用范围、组织方式与保存位置");
-    expect(formatted).toContain("某些信息可能跨工作区适用");
-    expect(formatted).toContain("某些信息可能仅属于当前工作区");
-    expect(formatted).toContain("调用方不会预分类");
-    expect(formatted).toContain("不指定、创建或维护任何存储机制");
-    expect(formatted).not.toContain("<memory_mode>");
-    expect(formatted).not.toContain("<shared_memory_enabled>");
-    expect(formatted).not.toContain("<native_shared_memory_root>");
-    expect(formatted).not.toContain("Shared Memory repository");
+    expect(formatted).not.toContain("<shared_memory_context>");
+  });
+
+  it("混合 Agent 在共享功能开启时自行区分作用域", () => {
+    const formatted = formatTranscriptForAgent(
+      "mixed-shared-session",
+      "/workspace/two",
+      [{
+        lineIndex: 0,
+        role: "user",
+        text: "记住规范和项目决定。",
+        digest: "mixed-shared-user",
+      }],
+      true,
+      true,
+    );
+
+    expect(formatted).toContain("<memory_mode>mixed</memory_mode>");
+    expect(formatted).toContain("你必须自行判断每项信息的作用域");
+    expect(formatted).toContain("Shared Memory repository");
+    expect(formatted).not.toContain("<shared_memory_context>");
   });
 
   it("读取 Codex 记录时只采集原始用户消息和最终回答", async () => {
