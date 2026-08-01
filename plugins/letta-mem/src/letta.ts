@@ -55,6 +55,7 @@ export interface AgentClient {
     systemPrompt: string;
     tags: string[];
     model?: string;
+    cwd: string;
   }): Promise<string>;
   createSession(agentId: string, options: SessionOptions): AgentSession;
   resumeSession(conversationId: string, options: SessionOptions): AgentSession;
@@ -78,6 +79,7 @@ export interface AgentClient {
 }
 
 interface SessionOptions {
+  cwd: string;
   permissionMode: "unrestricted";
   maxApprovalRecoveryAttempts: number;
 }
@@ -108,8 +110,9 @@ const BASE_AGENT_TAGS = [
   "claude-code-memory",
   "coding-assistant-memory",
 ];
-function sessionOptions(): SessionOptions {
+function sessionOptions(workspacePath: string): SessionOptions {
   return {
+    cwd: workspacePath,
     permissionMode: "unrestricted",
     maxApprovalRecoveryAttempts: 0,
   };
@@ -373,6 +376,7 @@ async function resolveDefinedAgentId(
         description: definition.description,
         systemPrompt: definition.systemPrompt,
         tags: definition.tags,
+        cwd: definition.workspacePath,
         ...(config.model === "auto" ? {} : { model: config.model }),
       });
     } catch (error) {
@@ -413,9 +417,9 @@ export async function openAgentSession(
   client: AgentClient,
   agentId: string,
   conversationId: string | undefined,
-  _workspacePath: string,
+  workspacePath: string,
 ): Promise<{ session: AgentSession; conversationId: string }> {
-  const options = sessionOptions();
+  const options = sessionOptions(workspacePath);
   const session = conversationId
     ? client.resumeSession(conversationId, options)
     : client.createSession(agentId, options);

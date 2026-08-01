@@ -78,7 +78,9 @@ Agent 的约束提示只规定目标和安全边界：
 
 这些是传给 Agent 的语义判断规则，不是插件对消息的预分类，也不指定任何保存机制。
 
-创建 Agent 时，插件不传 `memory`、`memfs`、`cwd`、`baseTools` 或存储资源；由 Letta 使用自己的默认行为。后台 Session 使用 `unrestricted` 权限模式，但不提供自定义 `allowedTools`、`skillSources` 或 `canUseTool`，因此插件不会拦截或代替 Letta 的原生工具与 skills 决策。安全与作用域边界通过 Agent 提示词提供。
+创建 Agent 时，插件不传 `memory`、`memfs`、`baseTools` 或任何存储资源；由 Letta 使用自己的默认记忆行为。插件只把规范化的工作区绝对路径作为 Agent 和 Session 的 `cwd`，因为它描述的是代码执行上下文，而不是记忆存储位置。新建和恢复 Session 都会重新传入当前工作区路径，避免后台队列被其他工作区触发时继承错误目录。
+
+后台 Session 使用 `unrestricted` 权限模式，但不提供自定义 `allowedTools`、`skillSources` 或 `canUseTool`，因此插件不会拦截或代替 Letta 的原生工具与 skills 决策。安全与作用域边界通过 Agent 提示词提供。Letta App 底栏显示的手动会话目录由 Letta Desktop 自己维护；插件传入的 `cwd` 保证插件发起的 Agent Session 在对应工作区执行，不会修改 Letta Desktop 的内部目录映射文件。
 
 ## Letta 连接与 Letta App
 

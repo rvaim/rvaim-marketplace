@@ -175,11 +175,12 @@ describe("后台记忆 Hook", () => {
       .toContain("证据不足或无法确定适用范围时，默认限定为当前工作区");
     expect(createdAgentOptions).not.toHaveProperty("memory");
     expect(createdAgentOptions).not.toHaveProperty("memfs");
-    expect(createdAgentOptions).not.toHaveProperty("cwd");
+    expect(createdAgentOptions?.cwd).toBe(projectPath);
     expect(createdAgentOptions).not.toHaveProperty("baseTools");
     expect(createAgentSession).toHaveBeenCalledWith(
       "agent-1",
       {
+        cwd: projectPath,
         permissionMode: "unrestricted",
         maxApprovalRecoveryAttempts: 0,
       },
@@ -188,7 +189,7 @@ describe("后台记忆 Hook", () => {
     expect(createdSessionOptions).not.toHaveProperty("allowedTools");
     expect(createdSessionOptions).not.toHaveProperty("skillSources");
     expect(createdSessionOptions).not.toHaveProperty("canUseTool");
-    expect(createdSessionOptions).not.toHaveProperty("cwd");
+    expect(createdSessionOptions?.cwd).toBe(projectPath);
     expect(firstState).toMatchObject({
       agentId: "agent-1",
       conversationId: "conversation-1",
@@ -223,6 +224,7 @@ describe("后台记忆 Hook", () => {
     expect(resumeAgentSession).toHaveBeenCalledWith(
       "conversation-1",
       {
+        cwd: projectPath,
         permissionMode: "unrestricted",
         maxApprovalRecoveryAttempts: 0,
       },
@@ -279,6 +281,7 @@ describe("后台记忆 Hook", () => {
     }));
     const options = vi.mocked(client.createSession).mock.calls[0]?.[1];
     expect(options).toEqual({
+      cwd: workspacePath,
       permissionMode: "unrestricted",
       maxApprovalRecoveryAttempts: 0,
     });
@@ -341,6 +344,18 @@ describe("后台记忆 Hook", () => {
     expect(secondOptions?.name).toContain("second-workspace");
     expect(firstOptions?.name).not.toBe(secondOptions?.name);
     expect(firstOptions?.tags).not.toEqual(secondOptions?.tags);
+    expect(firstOptions?.cwd).toBe(firstWorkspace);
+    expect(secondOptions?.cwd).toBe(secondWorkspace);
+    expect(createAgentSession).toHaveBeenNthCalledWith(
+      1,
+      "agent-1",
+      expect.objectContaining({ cwd: firstWorkspace }),
+    );
+    expect(createAgentSession).toHaveBeenNthCalledWith(
+      2,
+      "agent-2",
+      expect.objectContaining({ cwd: secondWorkspace }),
+    );
     expect(loadSessionState(
       config,
       firstWorkspace,
@@ -470,7 +485,7 @@ describe("后台记忆 Hook", () => {
     expect(firstAgentId).toBe("agent-workspace-cross-host");
     expect(secondAgentId).toBe("agent-workspace-cross-host");
     expect(createAgent).toHaveBeenCalledOnce();
-    expect(createAgent.mock.calls[0]?.[0]).not.toHaveProperty("cwd");
+    expect(createAgent.mock.calls[0]?.[0]?.cwd).toBe(workspacePath);
     expect(client.agents.list).toHaveBeenLastCalledWith({
       tags: [
         "letta-mem",

@@ -1,16 +1,34 @@
 ---
 name: arkts-ts-rules
-description: 鸿蒙 ArkTS / TypeScript 迁移、语法适配、性能优化与代码审查规则。处理 .ets、.ts、.tsx 文件，或遇到 HarmonyOS、ArkUI、DevEco、OpenHarmony 场景时自动使用。
+description: HarmonyOS 应用开发专用的 ArkTS 规则，包括 TypeScript 到 ArkTS 迁移、语法适配、性能优化与代码审查。仅在代码属于 HarmonyOS、OpenHarmony、ArkUI 或 DevEco 工程，文件为 .ets，或用户明确要求迁移到或兼容 ArkTS 时使用；普通 Web、Node.js、React、Vue 及其他非鸿蒙项目中的 .ts、.tsx 文件不要使用。
 ---
 
 # ArkTS / TypeScript 规则
 
-你是鸿蒙 ArkTS / TypeScript 迁移与代码审查助手。处理 `.ets`、`.ts`、`.tsx` 文件时，需要主动套用本 skill 中的规则，尤其是以下场景：
+你是鸿蒙 ArkTS / TypeScript 迁移与代码审查助手。只有当前任务属于 HarmonyOS 应用开发时，才套用本 skill 中的规则。
+
+## 适用边界
+
+满足以下任一条件时使用：
+
+- 正在处理 `.ets` 文件。
+- 当前文件位于包含 `build-profile.json5` 或 `oh-package.json5` 的 HarmonyOS / OpenHarmony 工程中，且任务涉及 ArkTS、ArkUI 或鸿蒙应用代码。
+- 用户明确要求把 TypeScript 迁移为 ArkTS，或要求检查 ArkTS 兼容性。
+- 用户明确提及 HarmonyOS、OpenHarmony、ArkUI、DevEco 或 ArkTS，并要求编写、审查、修复或优化应用代码。
+
+以下场景不要使用：
+
+- 仅因为文件扩展名是 `.ts` 或 `.tsx`。
+- 普通 Web、Node.js、React、Vue、Angular、Electron、React Native 或其他非鸿蒙项目中的 TypeScript 开发。
+- 用户只要求通用 TypeScript 审查、重构、修复或性能优化，没有任何鸿蒙或 ArkTS 上下文。
+- 当前仓库安装了本插件，但正在修改的代码不属于鸿蒙应用。
+
+典型适用场景包括：
 
 - TypeScript 代码迁移到 ArkTS。
 - ArkUI / OpenHarmony / DevEco 工程中的编译报错。
 - ArkTS 语法限制、严格类型检查、运行时性能问题。
-- 用户要求审查、重构、修复、迁移 TS 或 ArkTS 文件。
+- 用户要求审查、重构、修复或迁移鸿蒙工程中的 TS / ArkTS 文件。
 
 ## 资料目录
 
@@ -34,7 +52,7 @@ skills/arkts-ts-rules/references/SOURCE_MANIFEST.md
 
 ## 使用策略
 
-1. 先判断当前任务是否涉及 ArkTS / TypeScript / HarmonyOS / ArkUI / DevEco / OpenHarmony。
+1. 先按“适用边界”确认任务属于 HarmonyOS 应用开发；普通 TypeScript 任务立即停止使用本 skill。
 2. 如果涉及语法迁移、编译错误、ArkTS 约束、性能优化，先读取 `rule-index.md` 定位相关条目。
 3. 对具体规则、例子、改法不要凭记忆编造；需要精确判断时读取 `original-docs/` 中对应原文。
 4. 需要精确定位定义、引用、悬浮信息、文件符号或调用层级时，优先使用插件提供的 `deveco-arkts-lsp` MCP；工具不可用时再使用代码搜索。

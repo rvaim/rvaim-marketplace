@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "arkts-harmony",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "source": {
         "source": "local",
         "path": "./plugins/arkts-harmony"
@@ -18,7 +18,7 @@
       "category": "Development",
       "interface": {
         "displayName": "ArkTS / HarmonyOS 开发规则",
-        "shortDescription": "ArkTS 迁移规则，以及文档查询、代码智能与设备自动化 MCP。"
+        "shortDescription": "HarmonyOS 专用 ArkTS 规则，以及文档、代码智能与设备自动化 MCP。"
       }
     },
     {
@@ -57,7 +57,7 @@
     },
     {
       "name": "letta-mem",
-      "version": "2.4.3",
+      "version": "2.4.4",
       "source": {
         "source": "local",
         "path": "./plugins/letta-mem"

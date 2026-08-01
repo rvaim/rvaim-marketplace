@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const harmonyProjectMarkers = ['build-profile.json5', 'oh-package.json5'];
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -55,6 +56,18 @@ function getCandidatePaths(input) {
   return Array.from(paths).filter(Boolean);
 }
 
+function belongsToHarmonyProject(filePath) {
+  let currentDir = path.dirname(filePath);
+  while (true) {
+    if (harmonyProjectMarkers.some(marker => fs.existsSync(path.join(currentDir, marker)))) {
+      return true;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) return false;
+    currentDir = parentDir;
+  }
+}
+
 const checks = [
   { id: 'arkts-no-var', level: 'error', regex: /\bvar\s+[A-Za-z_$]/, message: 'ArkTS 不支持 var，改用 let 或 const。' },
   { id: 'arkts-no-any-unknown', level: 'error', regex: /:\s*(any|unknown)\b|\bas\s+(any|unknown)\b/, message: 'ArkTS 不支持 any/unknown，改为具体类型、Record、Object 或 ESObject 边界类型。' },
@@ -77,6 +90,7 @@ function scanFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (!['.ets', '.ts', '.tsx'].includes(ext)) return [];
   if (!fs.existsSync(filePath)) return [];
+  if (ext !== '.ets' && !belongsToHarmonyProject(filePath)) return [];
   const content = fs.readFileSync(filePath, 'utf8');
   const findings = [];
   for (const check of checks) {
@@ -111,7 +125,7 @@ function scanFile(filePath) {
 
   const root = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, '..');
   const lines = [];
-  lines.push('ArkTS/TS PostToolUse 自动检查发现可能问题。请结合 skill `arkts-ts-rules` 和完整资料确认后再改。');
+  lines.push('HarmonyOS ArkTS PostToolUse 自动检查发现可能问题。请结合 skill `arkts-ts-rules` 和完整资料确认后再改。');
   lines.push(`完整资料目录：${root}/skills/arkts-ts-rules/references/original-docs/`);
   for (const report of reports) {
     lines.push(`\n文件：${report.file}`);

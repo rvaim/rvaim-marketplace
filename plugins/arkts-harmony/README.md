@@ -1,6 +1,6 @@
 # arkts-harmony 插件
 
-这是 `rvaim-marketplace` 中的鸿蒙 ArkTS / TypeScript 双平台插件，兼容 Claude Code 和 Codex。
+这是 `rvaim-marketplace` 中面向 HarmonyOS 应用开发的 ArkTS / TypeScript 双平台插件，兼容 Claude Code 和 Codex。
 
 ## 提供能力
 
@@ -12,7 +12,7 @@
 - ArkTS LSP MCP：查找定义、引用、悬浮信息、文件符号和调用层级
 - DevEco Mobile MCP：连接 HarmonyOS 设备并执行应用安装、启动、交互和截图
 - HarmonyOS MCP：驱动 DevEco 工具链完成构建、安装、UI 自动化和日志检查；其中模拟器管理同样默认禁用
-- 修改 `.ets`、`.ts`、`.tsx` 文件后的轻量自动检查 hooks
+- 修改 `.ets` 文件或 HarmonyOS 工程内 `.ts`、`.tsx` 文件后的轻量自动检查 hooks
 - 完整保留四份原始 Markdown 资料
 - 中文规则索引与资料清单
 
@@ -55,7 +55,7 @@ arkts-high-performance-programming.md
 
 ## 自动检查
 
-Claude Code 使用 `Write`、`Edit`、`MultiEdit` 修改 `.ets`、`.ts`、`.tsx` 文件后，会触发：
+Claude Code 使用 `Write`、`Edit`、`MultiEdit` 修改文件后会调用检查 hook，但脚本只扫描 `.ets` 文件，以及位于含 `build-profile.json5` 或 `oh-package.json5` 工程中的 `.ts`、`.tsx` 文件：
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/bin/arkts-ts-post-edit.mjs
@@ -74,7 +74,7 @@ Codex 测试 hooks 前需要确认：
 codex_hooks = true
 ```
 
-脚本只做轻量扫描，不会替代编译器或完整代码审查。
+普通 Web、Node.js、React、Vue 等非鸿蒙项目的 `.ts`、`.tsx` 文件不会进入 ArkTS 检查。脚本只做轻量扫描，不会替代编译器或完整代码审查。
 
 ## MCP 服务
 

@@ -507,8 +507,9 @@ var BASE_AGENT_TAGS = [
   "claude-code-memory",
   "coding-assistant-memory"
 ];
-function sessionOptions() {
+function sessionOptions(workspacePath) {
   return {
+    cwd: workspacePath,
     permissionMode: "unrestricted",
     maxApprovalRecoveryAttempts: 0
   };
@@ -703,6 +704,7 @@ async function resolveDefinedAgentId(config, client, definition, log) {
         description: definition.description,
         systemPrompt: definition.systemPrompt,
         tags: definition.tags,
+        cwd: definition.workspacePath,
         ...config.model === "auto" ? {} : { model: config.model }
       });
     } catch (error) {
@@ -731,8 +733,8 @@ async function resolveAgentId(config, client, workspacePath, log) {
     log
   );
 }
-async function openAgentSession(client, agentId, conversationId, _workspacePath) {
-  const options = sessionOptions();
+async function openAgentSession(client, agentId, conversationId, workspacePath) {
+  const options = sessionOptions(workspacePath);
   const session = conversationId ? client.resumeSession(conversationId, options) : client.createSession(agentId, options);
   try {
     const bootstrap = await session.bootstrapState({ limit: 1, order: "desc" });
