@@ -74,6 +74,7 @@ describe("新版 Letta 边界", () => {
       /\bcloud\b/i,
       /\b(?:api|app)\.letta\.com\b/i,
       /\b(?:LETTA|OPENAI|ANTHROPIC|DEEPSEEK|GEMINI|MISTRAL|GROQ)_API_KEY\b/,
+      /pinGlobalAgent\s*:\s*false/,
     ];
 
     for (const pattern of forbidden) {

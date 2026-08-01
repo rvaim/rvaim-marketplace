@@ -93,7 +93,6 @@ type AgentClientOptions = {
   url: string;
   authToken?: string;
   requestTimeoutMs: number;
-  pinGlobalAgent: false;
 };
 
 export type AgentClientFactory = (
@@ -146,7 +145,6 @@ function clientOptions(config: RuntimeConfig): AgentClientOptions {
     url: config.serverUrl,
     ...(config.authToken ? { authToken: config.authToken } : {}),
     requestTimeoutMs: config.requestTimeoutMs,
-    pinGlobalAgent: false,
   };
 }
 

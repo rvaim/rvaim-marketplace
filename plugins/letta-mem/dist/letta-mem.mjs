@@ -837,8 +837,7 @@ function clientOptions(config) {
     backend: "remote",
     url: config.serverUrl,
     ...config.authToken ? { authToken: config.authToken } : {},
-    requestTimeoutMs: config.requestTimeoutMs,
-    pinGlobalAgent: false
+    requestTimeoutMs: config.requestTimeoutMs
   };
 }
 async function loadSdkModule() {
