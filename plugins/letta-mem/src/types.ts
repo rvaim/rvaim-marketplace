@@ -1,6 +1,5 @@
 export type HookAction =
   | "session-start"
-  | "ensure-server"
   | "inject-context"
   | "enqueue-memory"
   | "drain-pending"

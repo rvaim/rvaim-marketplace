@@ -80,30 +80,25 @@ Agent 的约束提示只规定目标和安全边界：
 
 创建 Agent 时，插件不传 `memory`、`memfs`、`cwd`、`baseTools` 或存储资源；由 Letta 使用自己的默认行为。后台 Session 使用 `unrestricted` 权限模式，但不提供自定义 `allowedTools`、`skillSources` 或 `canUseTool`，因此插件不会拦截或代替 Letta 的原生工具与 skills 决策。安全与作用域边界通过 Agent 提示词提供。
 
-## backend 与 Letta App
+## Letta 连接与 Letta App
 
-插件通过 Letta App Server 交互，但不选择其 backend。
-
-默认连接地址：
+默认情况下，插件不再自行执行 `letta server`，而是把 App Server 的启动、端口和生命周期直接交给 Letta Agent SDK。插件不传 `backend` 或 `harnessBackend`；SDK 使用自己的默认本地客户端，并读写 Letta 的标准本地数据目录：
 
 ```text
-http://127.0.0.1:4500
+~/.letta/lc-local-backend
 ```
 
-如果该地址没有可用服务，且满足本机自动启动条件，插件会启动随 Agent SDK 安装的 Letta Code App Server。启动命令不包含 `--backend`，backend 由 Letta Code 自己的配置、登录状态和运行环境决定。
+Letta App 的本地后端读取同一目录，因此插件创建的工作区 Agent、Conversation 和记忆会出现在 Letta App 的本地环境中。SDK 使用临时回环端口，不再与 Letta App 的动态端口或其他进程争用固定的 `4500` 端口。
 
-这意味着：
+如果用户显式配置 `serverUrl` 并关闭 `autoStartServer`，插件只连接该用户管理的 App Server。该服务实际使用本地、API、云端还是自托管存储，仍由 Letta 及服务自身决定；插件只传递 Agent 定义、会话和记忆语义约束。
 
-- Letta 使用本地 backend 时，Agent 与记忆保存在本地 Letta 数据中，不一定出现在云端 Letta App。
-- Letta 使用 API 或云端 backend 时，Agent 是否出现在 Letta App、哪些记忆可见以及如何同步，均由 Letta 决定。
-- 连接自托管 App Server 时，插件直接使用该服务，不推断其存储实现。
-- 切换 backend 是 Letta 配置操作，不是 letta-mem 的记忆配置。
+连接方式只是插件如何到达 Letta Agent，不参与 Agent 对共享记忆与工作区记忆的判断，也不指定具体记忆存储机制。
 
 ## 要求
 
 - Node.js `>= 22.19.0`，并且配套 `npm` 位于宿主进程的 `PATH`。
 - Claude Code 或支持插件 Hook 的 Codex。
-- Letta App Server 可连接，或允许插件自动启动随 SDK 安装的 Letta Code。
+- 允许 Letta Agent SDK 启动临时本地 App Server，或提供一个可连接的用户管理 App Server。
 - 所选模型和 backend 所需的登录、密钥或本地供应商配置已经由 Letta 完成。
 
 插件不读取模型供应商密钥，也不直接调用模型供应商 API。
@@ -135,8 +130,6 @@ http://127.0.0.1:4500
 
 ```json
 {
-  "serverUrl": "http://127.0.0.1:4500",
-  "autoStartServer": true,
   "model": "auto"
 }
 ```
@@ -145,8 +138,8 @@ http://127.0.0.1:4500
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `serverUrl` | `http://127.0.0.1:4500` | Letta App Server 地址，接受 `http`、`https`、`ws` 或 `wss`。 |
-| `autoStartServer` | `true` | 本机回环明文地址不可用时，是否启动配套 Letta Code App Server。 |
+| `serverUrl` | `http://127.0.0.1:4500` | 用户管理的 Letta App Server 地址，接受 `http`、`https`、`ws` 或 `wss`；默认 SDK 管理模式下仅作为兼容标识，不要求该端口存在服务。 |
+| `autoStartServer` | `true` | 对本机回环地址使用 SDK 管理的临时 App Server；设为 `false` 时只连接 `serverUrl`。 |
 | `model` | `auto` | `auto` 表示不覆盖 Letta 的模型选择；显式句柄会更新工作区 Agent。 |
 
 环境变量优先级高于配置文件：
@@ -195,16 +188,6 @@ logs/
 └── letta-mem.log.1
 ```
 
-自动启动服务的锁和日志位于：
-
-```text
-~/.letta-mem/server/
-├── locks/
-└── logs/
-    ├── app-server.log
-    └── app-server.log.1
-```
-
 状态命名空间只由 App Server 地址和能力令牌决定，不再包含 backend 或记忆模式。版本 `2.4.1` 恢复使用原有的每工作区命名空间，因此旧工作区映射和待处理队列可以继续复用。
 
 插件本地状态只保存 Agent/Conversation 映射、转录游标、待处理队列和可注入上下文，不保存 Letta 的实际记忆内容。
@@ -223,13 +206,15 @@ logs/
 - 现有工作区 Agent 的约束提示会更新；已有记忆由 Letta 保留。
 - 旧 `letta-mem · shared` 和混合 Agent 不会自动删除，以避免破坏用户数据，但插件不会再使用它们。
 
+从 `2.4.2` 升级后，默认连接会从插件自行启动的固定端口服务迁移到 Letta Agent SDK 管理的本地 App Server。旧 Agent 映射若指向另一后端中不存在的 Agent，会被 Letta 返回的不存在错误自动清理并重新创建；待处理队列会继续重放。
+
 ## 故障排查
 
 | 现象 | 检查 |
 | --- | --- |
-| Letta App 中没有工作区 Agent | 确认 Letta 当前选择的 backend；本地 Agent 不会自动出现在云端 App。 |
+| Letta App 中没有工作区 Agent | 确认插件日志没有更新失败，并在 Letta App 的本地环境查看；默认模式与 Letta App 共用 `~/.letta/lc-local-backend`。 |
 | 日志出现 WebSocket 连接失败 | 检查 `serverUrl`、端口和 App Server 状态。 |
-| 自动服务无法启动 | 查看 `~/.letta-mem/server/logs/app-server.log`。 |
+| SDK 管理的服务无法启动 | 检查 Node.js 版本、Letta 配置和插件日志；插件不再维护独立的 App Server 日志。 |
 | Agent 没有保存某条信息 | 查看 Agent 当前拥有的原生记忆能力和提示；插件不会指定存储位置。 |
 | 更新失败后没有立即重试 | 待处理项仍在队列中，指数退避结束后会由后续 Hook 继续处理。 |
 | 上下文没有注入 | Letta 可能返回空内容，或同一 revision 已在当前宿主会话注入。 |

@@ -38,7 +38,7 @@ describe("新版 Letta 边界", () => {
     expect(hooks).toContain("prepare-runtime-background");
     expect(hooks).toContain("update-memory-background");
     expect(readFileSync(join(pluginRoot, "bin", "bootstrap.cjs"), "utf8"))
-      .toContain("ensure-server");
+      .not.toContain("ensure-server");
   });
 
   it("只直接依赖新版 Agent SDK，由 SDK 提供配套 Letta Code", () => {
@@ -75,6 +75,7 @@ describe("新版 Letta 边界", () => {
       /\b(?:api|app)\.letta\.com\b/i,
       /\b(?:LETTA|OPENAI|ANTHROPIC|DEEPSEEK|GEMINI|MISTRAL|GROQ)_API_KEY\b/,
       /pinGlobalAgent\s*:\s*false/,
+      /ensureLocalAppServer/,
     ];
 
     for (const pattern of forbidden) {

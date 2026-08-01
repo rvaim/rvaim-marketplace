@@ -57,7 +57,7 @@
     },
     {
       "name": "letta-mem",
-      "version": "2.4.2",
+      "version": "2.4.3",
       "source": {
         "source": "local",
         "path": "./plugins/letta-mem"

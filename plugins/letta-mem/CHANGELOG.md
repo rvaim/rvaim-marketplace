@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2.4.3
+
+- 修复默认连接错误进入 `APIBackend`、因缺少 `LETTA_API_KEY` 导致工作区 Agent 和记忆无法创建的问题。
+- 移除插件自行执行的固定端口 `letta server`；默认把 App Server 的启动、临时端口和生命周期交给 Letta Agent SDK，复用 Letta App 的标准本地数据目录 `~/.letta/lc-local-backend`。
+- 默认连接不再向 SDK 传 `backend` 或 `harnessBackend`，由 SDK 使用自身默认客户端行为；显式关闭 `autoStartServer` 时仍可连接用户管理的 App Server，其实际存储后端由 Letta 决定。
+- 保留原状态命名空间与待处理队列；连接恢复后会重新处理此前失败的记忆更新。
+
 ## 2.4.2
 
 - 移除 `pinGlobalAgent: false`，新建工作区 Agent 恢复使用 Letta SDK 的默认全局登记行为，可在 Letta App 的 Agent 列表中显示。

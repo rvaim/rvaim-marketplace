@@ -6,7 +6,6 @@ import {
   handleUpdateMemory,
 } from "./hooks.js";
 import { readRuntimeConfig } from "./config.js";
-import { ensureLocalAppServer } from "./app-server.js";
 import { createLogger, errorDetail } from "./logger.js";
 import type { HookAction, HookInput } from "./types.js";
 
@@ -27,7 +26,6 @@ async function readInput(): Promise<HookInput> {
 function parseAction(value: string | undefined): HookAction | null {
   if (
     value === "session-start"
-    || value === "ensure-server"
     || value === "inject-context"
     || value === "enqueue-memory"
     || value === "drain-pending"
@@ -47,9 +45,7 @@ async function main(): Promise<void> {
     const log = createLogger(config);
     const input = await readInput();
 
-    if (action === "ensure-server") {
-      await ensureLocalAppServer(config, log);
-    } else if (action === "session-start") {
+    if (action === "session-start") {
       output = await handleSessionStart(config, input);
     } else if (action === "inject-context") {
       output = await handleInjectContext(config, input);
