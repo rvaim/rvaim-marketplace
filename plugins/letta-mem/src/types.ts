@@ -19,6 +19,8 @@ export interface HookInput {
 export interface RuntimeConfig {
   serverUrl: string;
   authToken?: string;
+  model: string;
+  mixedMemory: boolean;
   dataDir: string;
   namespace: string;
   requestTimeoutMs: number;
@@ -39,6 +41,7 @@ export interface SessionState {
   sessionId: string;
   workspacePath: string;
   agentId?: string;
+  agentModel?: string;
   conversationId?: string;
   lastProcessedLine: number;
   recentDigests: string[];
@@ -49,7 +52,8 @@ export interface SessionState {
 export interface AgentReference {
   version: 1;
   agentId: string;
-  workspacePath: string;
+  scopeKey: string;
+  model: string;
   updatedAt: string;
 }
 

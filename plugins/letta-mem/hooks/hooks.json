@@ -6,23 +6,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
-              "session-state"
-            ],
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" session-state",
             "timeout": 2,
             "statusMessage": "正在恢复 Letta 记忆状态"
           },
           {
             "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
-              "prepare-runtime"
-            ],
-            "async": true,
-            "timeout": 300,
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-runtime-background",
+            "timeout": 2,
             "statusMessage": "正在准备 Letta 记忆"
           }
         ]
@@ -33,11 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
-              "inject-context"
-            ],
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" inject-context",
             "timeout": 2,
             "statusMessage": "正在读取 Letta 记忆"
           }
@@ -49,13 +36,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs",
-              "update-memory"
-            ],
-            "async": true,
-            "timeout": 360,
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" update-memory-background",
+            "timeout": 10,
             "statusMessage": "正在后台更新 Letta 记忆"
           }
         ]

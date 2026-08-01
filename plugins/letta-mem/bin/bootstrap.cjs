@@ -25,8 +25,9 @@ const { spawn } = require("node:child_process");
 
 const PLUGIN_ROOT = resolve(__dirname, "..");
 const DATA_DIR = process.env.CLAUDE_PLUGIN_DATA
+  || process.env.PLUGIN_DATA
   || process.env.LETTA_MEM_DATA_DIR
-  || join(homedir(), ".claude", "plugins", "data", "letta-mem-development");
+  || join(homedir(), ".letta-mem", "data", "development");
 const RUNTIME_ROOT = join(DATA_DIR, "runtime");
 const PLUGIN_SDK_ENTRY = join(
   PLUGIN_ROOT,
@@ -42,6 +43,9 @@ const ACTIONS = new Set([
   "prepare-runtime",
   "inject-context",
   "update-memory",
+  "prepare-runtime-background",
+  "update-memory-background",
+  "drain-background",
 ]);
 const LOCK_STALE_MS = 15 * 60 * 1_000;
 const LOCK_HEARTBEAT_MS = 30 * 1_000;
@@ -49,7 +53,6 @@ const LOCK_HEARTBEAT_MS = 30 * 1_000;
 function sanitize(value) {
   let sanitized = String(value);
   for (const secret of [
-    process.env.CLAUDE_PLUGIN_OPTION_LETTA_AUTH_TOKEN,
     process.env.LETTA_APP_SERVER_TOKEN,
   ]) {
     if (secret) sanitized = sanitized.split(secret).join("[已隐藏]");
@@ -85,7 +88,7 @@ function log(event, detail = "") {
     );
     chmodSync(LOG_PATH, 0o600);
   } catch {
-    // 引导日志失败不能影响 Claude Code。
+    // 引导日志失败不能影响编码宿主。
   }
 }
 
@@ -312,7 +315,7 @@ async function ensureRuntime() {
     return null;
   }
 
-  // 新版 Claude Code 会为 marketplace 插件准备依赖，优先复用以避免重复安装。
+  // 宿主可能已为 marketplace 插件准备依赖，优先复用以避免重复安装。
   if (pluginRuntimeReady() && await sdkEntryUsable(PLUGIN_SDK_ENTRY)) {
     return PLUGIN_SDK_ENTRY;
   }
@@ -364,7 +367,6 @@ async function ensureRuntime() {
       ...process.env,
       npm_config_loglevel: "error",
     };
-    delete npmEnvironment.CLAUDE_PLUGIN_OPTION_LETTA_AUTH_TOKEN;
     delete npmEnvironment.LETTA_APP_SERVER_TOKEN;
     const result = await runCommand(
       npmCommand,
@@ -428,6 +430,28 @@ async function runHook(action, input, sdkEntry) {
   return result.stdout;
 }
 
+function startBackgroundDrain() {
+  try {
+    const child = spawn(process.execPath, [__filename, "drain-background"], {
+      cwd: process.cwd(),
+      env: { ...process.env },
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+  } catch (error) {
+    log("background-start-failed", error);
+  }
+}
+
+async function drainPending() {
+  const sdkEntry = await ensureRuntime();
+  if (sdkEntry) {
+    await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
+  }
+}
+
 async function main() {
   const action = process.argv[2];
   if (!ACTIONS.has(action)) return;
@@ -449,11 +473,24 @@ async function main() {
     return;
   }
 
+  if (action === "prepare-runtime-background") {
+    startBackgroundDrain();
+    return;
+  }
+
+  if (action === "update-memory-background") {
+    await runHook("enqueue-memory", input, null);
+    startBackgroundDrain();
+    return;
+  }
+
+  if (action === "drain-background") {
+    await drainPending();
+    return;
+  }
+
   if (action === "prepare-runtime") {
-    const sdkEntry = await ensureRuntime();
-    if (sdkEntry) {
-      await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
-    }
+    await drainPending();
     return;
   }
 

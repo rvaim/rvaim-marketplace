@@ -1,0 +1,32 @@
+{
+  "name": "letta-mem",
+  "version": "2.0.0+codex.20260801083421",
+  "description": "\u901a\u8fc7\u672c\u673a\u6216\u81ea\u6258\u7ba1\u65b0\u7248 Letta App Server \u4e3a Codex \u5de5\u4f5c\u533a\u63d0\u4f9b\u6301\u4e45\u8bb0\u5fc6\u3002",
+  "author": {
+    "name": "rvaim",
+    "url": "https://github.com/rvaim"
+  },
+  "homepage": "https://github.com/rvaim/rvaim-marketplace/blob/main/plugins/letta-mem/README.md",
+  "repository": "https://github.com/rvaim/rvaim-marketplace",
+  "license": "MIT",
+  "keywords": [
+    "letta",
+    "codex",
+    "memory",
+    "agent",
+    "self-hosted"
+  ],
+  "interface": {
+    "displayName": "Letta Mem",
+    "shortDescription": "\u4f7f\u7528\u672c\u5730 Letta \u4e3a Codex \u7ef4\u62a4\u6301\u4e45\u8bb0\u5fc6",
+    "longDescription": "\u76d1\u542c Codex \u5bf9\u8bdd\uff0c\u5728\u672c\u5730\u6216\u81ea\u6258\u7ba1 Letta \u4e2d\u540e\u53f0\u7ef4\u62a4\u8bb0\u5fc6\uff0c\u5e76\u5728\u540e\u7eed\u5bf9\u8bdd\u4e2d\u6ce8\u5165\u76f8\u5173\u4e0a\u4e0b\u6587\u3002",
+    "developerName": "rvaim",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "\u68c0\u67e5 letta-mem \u7684\u914d\u7f6e\u3001\u8fd0\u884c\u72b6\u6001\u548c\u6700\u8fd1\u65e5\u5fd7\u3002"
+    ]
+  }
+}

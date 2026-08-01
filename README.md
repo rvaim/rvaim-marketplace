@@ -9,7 +9,7 @@ rvaim 的个人插件市场，同时维护 Claude Code 和 Codex 的 marketplace
 | `arkts-harmony` | ArkTS / HarmonyOS 迁移与审查规则，以及文档查询、代码智能、设备自动化 MCP。 |
 | `harmonyos-design` | 华为官方 HarmonyOS 通用设计基础、设计 Token、跨设备界面设计与视觉审查。 |
 | `plugin-creator` | 创建、审查和维护 Codex / Claude Code 双平台插件。 |
-| `letta-mem` | 通过本机或自托管的新版 Letta App Server，为每个 Claude Code 工作区按用户语言提供独立持久记忆（仅 Claude Code）。 |
+| `letta-mem` | 通过本机或自托管的新版 Letta App Server，为 Claude Code 与 Codex 提供按用户语言维护的工作区或混合持久记忆。 |
 
 ## 目录结构
 
@@ -52,7 +52,7 @@ rvaim-marketplace/
 /reload-plugins
 ```
 
-`letta-mem` 没有手动 skill 入口，启用后由 Claude Code Hooks 自动工作。安装前请先阅读[本地 Letta 与插件配置](plugins/letta-mem/README.md)。
+`letta-mem` 没有手动 skill 入口，启用后由生命周期 Hooks 自动工作。Claude Code 与 Codex 共用 `~/.letta-mem/config.json`；安装前请先阅读[本地 Letta 与插件配置](plugins/letta-mem/README.md)。
 
 常用入口：
 
@@ -121,11 +121,19 @@ $create-dual-plugin
 $review-plugin
 ```
 
+安装 `letta-mem`：
+
+```text
+codex plugin add letta-mem@rvaim-marketplace
+```
+
+安装后在 `/hooks` 中审查并信任插件 Hook。
+
 如需测试 Codex hooks，确认 Codex 配置已开启：
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 ## 维护规则
@@ -133,7 +141,7 @@ codex_hooks = true
 - Claude Code marketplace 写在 `.claude-plugin/marketplace.json`。
 - Codex marketplace 写在 `.agents/plugins/marketplace.json`。
 - 同时支持 Claude Code 和 Codex 的共享插件，应在两份 marketplace 中保持名称、版本和源路径一致。
-- 平台专属插件只登记到对应 marketplace；例如 `letta-mem` 依赖 Claude Code Hooks，不登记到 Codex marketplace。
+- 平台专属插件只登记到对应 marketplace；支持双平台的插件需要分别提供有效清单和生命周期配置。
 - 插件源码放在 `plugins/` 目录下；Claude Code 使用字符串 source（如 `"./plugins/<name>"`），Codex 使用 `{ "source": "local", "path": "./plugins/<name>" }`。
 - 新增插件时补充本 README 的插件表与相应平台的安装入口；不要为不支持的平台伪造清单或 skill 入口。
 - Codex CLI marketplace 命令参考：`https://developers.openai.com/codex/cli/reference`。

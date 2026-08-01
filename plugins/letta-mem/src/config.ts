@@ -1,9 +1,17 @@
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import type { RuntimeConfig } from "./types.js";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:4500";
+const DEFAULT_MODEL = "auto";
+
+interface SharedConfigFile {
+  serverUrl?: string;
+  model?: string;
+  mixedMemory?: boolean;
+}
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
   for (const value of values) {
@@ -40,9 +48,11 @@ function normalizeServerUrl(raw: string): string {
 function namespaceFor(
   serverUrl: string,
   authToken: string = "",
+  mixedMemory = false,
 ): string {
   const authScope = authToken ? `token:${authToken}` : "token:none";
-  const source = `per-workspace-v1:app-server:${serverUrl}:${authScope}`;
+  const memoryScope = mixedMemory ? "mixed-memory-v1" : "per-workspace-v1";
+  const source = `${memoryScope}:app-server:${serverUrl}:${authScope}`;
   return createHash("sha256").update(source).digest("hex").slice(0, 20);
 }
 
@@ -50,25 +60,95 @@ function isEnabled(value: string | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";
 }
 
+function parseBooleanOption(
+  value: string | undefined,
+  fallback: boolean,
+): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === "true" || normalized === "1") return true;
+  if (normalized === "false" || normalized === "0") return false;
+  throw new Error("混合记忆配置必须是 true、false、1 或 0");
+}
+
+function normalizeModel(value: string | undefined): string {
+  const normalized = value?.trim();
+  if (!normalized) return DEFAULT_MODEL;
+  const automatic = normalized.toLowerCase();
+  if (automatic === "auto" || automatic === "letta/auto") {
+    return DEFAULT_MODEL;
+  }
+  return normalized;
+}
+
+function sharedConfigPath(env: NodeJS.ProcessEnv): string {
+  const configured = firstNonEmpty(env.LETTA_MEM_CONFIG_PATH);
+  if (!configured) return join(homedir(), ".letta-mem", "config.json");
+  if (configured === "~") return homedir();
+  if (configured.startsWith("~/") || configured.startsWith("~\\")) {
+    return join(homedir(), configured.slice(2));
+  }
+  return isAbsolute(configured) ? configured : resolve(configured);
+}
+
+function readSharedConfig(env: NodeJS.ProcessEnv): SharedConfigFile {
+  const path = sharedConfigPath(env);
+  if (!existsSync(path)) return {};
+  const value = JSON.parse(readFileSync(path, "utf8")) as SharedConfigFile;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("letta-mem 共享配置必须是 JSON 对象");
+  }
+  if (value.serverUrl !== undefined && typeof value.serverUrl !== "string") {
+    throw new Error("共享配置 serverUrl 必须是字符串");
+  }
+  if (value.model !== undefined && typeof value.model !== "string") {
+    throw new Error("共享配置 model 必须是字符串");
+  }
+  if (
+    value.mixedMemory !== undefined
+    && typeof value.mixedMemory !== "boolean"
+  ) {
+    throw new Error("共享配置 mixedMemory 必须是布尔值");
+  }
+  return value;
+}
+
 export function readRuntimeConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeConfig {
+  const shared = readSharedConfig(env);
   const serverUrl = normalizeServerUrl(firstNonEmpty(
-    env.CLAUDE_PLUGIN_OPTION_LETTA_SERVER_URL,
     env.LETTA_APP_SERVER_URL,
+    shared.serverUrl,
   ) ?? DEFAULT_SERVER_URL);
   const authToken = firstNonEmpty(
-    env.CLAUDE_PLUGIN_OPTION_LETTA_AUTH_TOKEN,
     env.LETTA_APP_SERVER_TOKEN,
   );
-  const dataDir = firstNonEmpty(env.CLAUDE_PLUGIN_DATA, env.LETTA_MEM_DATA_DIR)
-    ?? join(homedir(), ".claude", "plugins", "data", "letta-mem-development");
+  const model = normalizeModel(firstNonEmpty(
+    env.LETTA_MEM_MODEL,
+    shared.model,
+  ));
+  const mixedMemory = parseBooleanOption(
+    firstNonEmpty(
+      env.LETTA_MEM_MIXED_MEMORY,
+      shared.mixedMemory === undefined ? undefined : String(shared.mixedMemory),
+    ),
+    false,
+  );
+  const dataDir = firstNonEmpty(
+    env.CLAUDE_PLUGIN_DATA,
+    env.PLUGIN_DATA,
+    env.LETTA_MEM_DATA_DIR,
+  )
+    ?? join(homedir(), ".letta-mem", "data", "development");
 
   return {
     serverUrl,
     ...(authToken ? { authToken } : {}),
+    model,
+    mixedMemory,
     dataDir,
-    namespace: namespaceFor(serverUrl, authToken),
+    namespace: namespaceFor(serverUrl, authToken, mixedMemory),
     requestTimeoutMs: parsePositiveInteger(
       env.LETTA_MEM_REQUEST_TIMEOUT_MS,
       150_000,

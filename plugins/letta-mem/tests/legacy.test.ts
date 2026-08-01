@@ -19,6 +19,26 @@ function sourceFiles(directory: string): string[] {
 }
 
 describe("新版 Letta 边界", () => {
+  it("双宿主清单使用共享 Hook 且不声明 Claude userConfig", () => {
+    const claudeManifest = JSON.parse(readFileSync(
+      join(pluginRoot, ".claude-plugin", "plugin.json"),
+      "utf8",
+    )) as Record<string, object>;
+    const codexManifest = JSON.parse(readFileSync(
+      join(pluginRoot, ".codex-plugin", "plugin.json"),
+      "utf8",
+    )) as Record<string, object>;
+    const hooks = readFileSync(
+      join(pluginRoot, "hooks", "hooks.json"),
+      "utf8",
+    );
+
+    expect(claudeManifest).not.toHaveProperty("userConfig");
+    expect(codexManifest).not.toHaveProperty("hooks");
+    expect(hooks).toContain("prepare-runtime-background");
+    expect(hooks).toContain("update-memory-background");
+  });
+
   it("直接依赖仅使用新版 Agent SDK", () => {
     const packageJson = JSON.parse(
       readFileSync(join(pluginRoot, "package.json"), "utf8"),
@@ -51,7 +71,6 @@ describe("新版 Letta 边界", () => {
       /\bcloud\b/i,
       /\b(?:api|app)\.letta\.com\b/i,
       /\b(?:LETTA|OPENAI|ANTHROPIC|DEEPSEEK|GEMINI|MISTRAL|GROQ)_API_KEY\b/,
-      /\b(?:model|modelName|modelId|llm|embedding)\s*[:=]/i,
     ];
 
     for (const pattern of forbidden) {

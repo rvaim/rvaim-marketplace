@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "rvaim-marketplace",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "rvaim 的个人 Claude Code 插件市场，用于沉淀个人开发规则、代码迁移规范、审查习惯和自动化工作流。",
   "owner": {
     "name": "rvaim"
@@ -107,8 +107,8 @@
     },
     {
       "name": "letta-mem",
-      "description": "为每个 Claude Code 工作区创建独立的新版 Letta Agent，按用户语言异步维护记忆并注入相关上下文。",
-      "version": "1.1.1",
+      "description": "通过本机或自托管新版 Letta，为 Claude Code 与 Codex 提供工作区或混合持久记忆。",
+      "version": "2.0.0",
       "author": {
         "name": "rvaim"
       },
@@ -117,6 +117,7 @@
       "keywords": [
         "letta",
         "claude-code",
+        "codex",
         "memory",
         "agent",
         "self-hosted"

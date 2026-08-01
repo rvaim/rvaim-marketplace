@@ -148,66 +148,70 @@ export function saveSessionState(
 
 function agentReferencePath(
   config: RuntimeConfig,
-  workspacePath: string,
+  scopeKey: string,
 ): string {
   return join(
     namespaceDir(config),
     "agents",
-    `${hash(workspacePath)}.json`,
+    `${hash(scopeKey)}.json`,
   );
+}
+
+interface StoredAgentReference {
+  version: 1;
+  agentId: string;
+  scopeKey?: string;
+  workspacePath?: string;
+  model?: string;
+  updatedAt: string;
 }
 
 export function loadAgentReference(
   config: RuntimeConfig,
-  workspacePath: string,
+  scopeKey: string,
 ): AgentReference | null {
-  const value = readJson<AgentReference>(
-    agentReferencePath(config, workspacePath),
+  const value = readJson<StoredAgentReference>(
+    agentReferencePath(config, scopeKey),
   );
-  return value?.version === 1
-      && value.workspacePath === workspacePath
-      && typeof value.agentId === "string"
-    ? value
-    : null;
+  const storedScopeKey = value?.scopeKey ?? value?.workspacePath;
+  if (
+    value?.version !== 1
+    || storedScopeKey !== scopeKey
+    || typeof value.agentId !== "string"
+  ) return null;
+  return {
+    version: 1,
+    agentId: value.agentId,
+    scopeKey,
+    model: typeof value.model === "string" ? value.model : "auto",
+    updatedAt: value.updatedAt,
+  };
 }
 
 export function saveAgentReference(
   config: RuntimeConfig,
-  workspacePath: string,
+  scopeKey: string,
   agentId: string,
+  model: string = "auto",
 ): void {
-  writeJsonAtomic(agentReferencePath(config, workspacePath), {
+  writeJsonAtomic(agentReferencePath(config, scopeKey), {
     version: 1,
     agentId,
-    workspacePath,
+    scopeKey,
+    model,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }
 
-export function loadOrCreateInstanceId(config: RuntimeConfig): string {
-  const path = join(namespaceDir(config), "instance.json");
-  const current = readJson<{ version: 1; instanceId: string }>(path);
-  if (current?.version === 1 && typeof current.instanceId === "string") {
-    return current.instanceId;
-  }
-  const instanceId = randomUUID();
-  writeJsonAtomic(path, {
-    version: 1,
-    instanceId,
-    createdAt: new Date().toISOString(),
-  });
-  return instanceId;
-}
-
 export function clearAgentReference(
   config: RuntimeConfig,
-  workspacePath: string,
+  scopeKey: string,
   expectedAgentId: string,
 ): boolean {
-  const current = loadAgentReference(config, workspacePath);
+  const current = loadAgentReference(config, scopeKey);
   if (current?.agentId !== expectedAgentId) return false;
   try {
-    unlinkSync(agentReferencePath(config, workspacePath));
+    unlinkSync(agentReferencePath(config, scopeKey));
     return true;
   } catch {
     return false;

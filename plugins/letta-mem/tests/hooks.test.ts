@@ -20,10 +20,15 @@ import type {
   AgentSession,
 } from "../src/letta.js";
 import {
+  agentScopeKey,
+  resolveAgentId,
+} from "../src/letta.js";
+import {
   acquireLock,
   agentRunLockPath,
   loadContextSnapshot,
   loadFailureState,
+  loadAgentReference,
   loadSessionState,
   listPendingUpdates,
   saveAgentReference,
@@ -42,6 +47,8 @@ function createConfig(): RuntimeConfig {
   temporaryDirectories.push(dataDir);
   return {
     serverUrl: "ws://127.0.0.1:4500",
+    model: "auto",
+    mixedMemory: false,
     dataDir,
     namespace: "hook-tests",
     requestTimeoutMs: 1_000,
@@ -365,6 +372,204 @@ describe("后台记忆 Hook", () => {
       .toBe("agent-workspace");
     expect(loadSessionState(config, workspacePath, "backend-chat").agentId)
       .toBe("agent-workspace");
+  });
+
+  it("混合记忆模式让不同工作区共享名为 letta-mem 的 Agent", async () => {
+    const config = {
+      ...createConfig(),
+      model: "deepseek/deepseek-v4-flash",
+      mixedMemory: true,
+    };
+    const firstWorkspace = join(config.dataDir, "mixed-first");
+    const secondWorkspace = join(config.dataDir, "mixed-second");
+    const transcripts = [
+      createTranscript(config, "第一个工作区消息", "mixed-first.jsonl"),
+      createTranscript(config, "第二个工作区消息", "mixed-second.jsonl"),
+    ];
+    const openedSessions: ReturnType<typeof createSession>[] = [];
+    let conversationSequence = 0;
+    const createAgent = vi.fn(async () => "agent-mixed");
+    const createAgentSession = vi.fn((agentId: string) => {
+      const opened = createSession(
+        `mixed-conversation-${++conversationSequence}`,
+        `混合上下文-${conversationSequence}`,
+        agentId,
+      );
+      openedSessions.push(opened);
+      return opened.session;
+    });
+    const client: AgentClient = {
+      createAgent,
+      createSession: createAgentSession,
+      resumeSession: vi.fn((conversationId: string) => createSession(
+        conversationId,
+        "恢复的混合上下文",
+        "agent-mixed",
+      ).session),
+      agents: {
+        list: vi.fn(async () => []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
+
+    const workspaces: Array<[string, string, string]> = [
+      [firstWorkspace, transcripts[0] ?? "", "mixed-session-first"],
+      [secondWorkspace, transcripts[1] ?? "", "mixed-session-second"],
+    ];
+    for (const [cwd, transcriptPath, sessionId] of workspaces) {
+      await handleUpdateMemory(config, {
+        session_id: sessionId,
+        transcript_path: transcriptPath,
+        cwd,
+      }, log, clientFactory);
+    }
+
+    expect(createAgent).toHaveBeenCalledOnce();
+    expect(createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      name: "letta-mem",
+      model: "deepseek/deepseek-v4-flash",
+      tags: expect.arrayContaining(["letta-mem-memory-mode:mixed"]),
+      systemPrompt: expect.stringContaining("多个编码工作区共享"),
+    }));
+    expect(createAgentSession).toHaveBeenCalledTimes(2);
+    expect(createAgentSession.mock.calls.map((call) => call[0]))
+      .toEqual(["agent-mixed", "agent-mixed"]);
+    expect(openedSessions[0]?.sent[0]).toContain("<memory_mode>mixed</memory_mode>");
+    expect(openedSessions[0]?.sent[0]).toContain(firstWorkspace);
+    expect(openedSessions[1]?.sent[0]).toContain(secondWorkspace);
+    expect(loadContextSnapshot(config, firstWorkspace)?.text).toBe("混合上下文-1");
+    expect(loadContextSnapshot(config, secondWorkspace)?.text).toBe("混合上下文-2");
+    expect(loadSessionState(config, firstWorkspace, "mixed-session-first").agentId)
+      .toBe("agent-mixed");
+    expect(loadSessionState(config, secondWorkspace, "mixed-session-second").agentId)
+      .toBe("agent-mixed");
+  });
+
+  it("Claude Code 与 Codex 的独立本地数据目录会复用服务器端共享 Agent", async () => {
+    const firstConfig = { ...createConfig(), mixedMemory: true };
+    const secondConfig = { ...createConfig(), mixedMemory: true };
+    let storedAgent: {
+      id: string;
+      name: string;
+      tags: string[];
+      model: string;
+    } | undefined;
+    const createAgent = vi.fn(async (
+      options: Parameters<AgentClient["createAgent"]>[0],
+    ) => {
+      storedAgent = {
+        id: "agent-cross-host",
+        name: options.name,
+        tags: options.tags,
+        model: "deepseek/deepseek-v4-pro",
+      };
+      return storedAgent.id;
+    });
+    const client: AgentClient = {
+      createAgent,
+      createSession: vi.fn(() => createSession("unused", "").session),
+      resumeSession: vi.fn(() => createSession("unused", "").session),
+      agents: {
+        list: vi.fn(async () => storedAgent ? [storedAgent] : []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    const firstAgentId = await resolveAgentId(
+      firstConfig,
+      client,
+      "/workspace/shared",
+      log,
+    );
+    const secondAgentId = await resolveAgentId(
+      secondConfig,
+      client,
+      "/workspace/another",
+      log,
+    );
+
+    expect(firstAgentId).toBe("agent-cross-host");
+    expect(secondAgentId).toBe("agent-cross-host");
+    expect(createAgent).toHaveBeenCalledOnce();
+    expect(client.agents.list).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "agent-reused",
+      "agent-cross-host",
+    );
+  });
+
+  it("默认模型配置变化时更新现有 Agent 而不丢失记忆", async () => {
+    const config = {
+      ...createConfig(),
+      model: "deepseek/deepseek-v4-flash",
+    };
+    const workspacePath = join(config.dataDir, "model-workspace");
+    const transcriptPath = createTranscript(config, "模型切换后的消息");
+    saveAgentReference(config, workspacePath, "agent-existing", "auto");
+    saveSessionState(config, {
+      version: 1,
+      sessionId: "model-session",
+      workspacePath,
+      agentId: "agent-existing",
+      conversationId: "conversation-before-model-update",
+      lastProcessedLine: -1,
+      recentDigests: [],
+    });
+    const opened = createSession(
+      "conversation-after-model-update",
+      "模型更新后的上下文",
+      "agent-existing",
+    );
+    const update = vi.fn(async () => ({
+      id: "agent-existing",
+      model: "deepseek/deepseek-v4-flash",
+    }));
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-unused"),
+      createSession: vi.fn(() => opened.session),
+      resumeSession: vi.fn(() => opened.session),
+      agents: {
+        list: vi.fn(async () => []),
+        update,
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await handleUpdateMemory(config, {
+      session_id: "model-session",
+      transcript_path: transcriptPath,
+      cwd: workspacePath,
+    }, log, vi.fn(async () => client) as AgentClientFactory);
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith("agent-existing", {
+      model: "deepseek/deepseek-v4-flash",
+    });
+    expect(client.createAgent).not.toHaveBeenCalled();
+    expect(client.resumeSession).not.toHaveBeenCalled();
+    expect(client.createSession).toHaveBeenCalledWith(
+      "agent-existing",
+      expect.any(Object),
+    );
+    expect(loadSessionState(config, workspacePath, "model-session"))
+      .toMatchObject({
+        agentModel: "deepseek/deepseek-v4-flash",
+        conversationId: "conversation-after-model-update",
+      });
+    expect(loadAgentReference(
+      config,
+      agentScopeKey(config, workspacePath),
+    )).toMatchObject({
+      agentId: "agent-existing",
+      model: "deepseek/deepseek-v4-flash",
+    });
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "agent-model-updated",
+      "agent-existing:deepseek/deepseek-v4-flash",
+    );
   });
 
   it("客户端异常时不抛错并记录指数退避", async () => {

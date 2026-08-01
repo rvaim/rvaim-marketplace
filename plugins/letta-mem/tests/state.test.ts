@@ -1,11 +1,13 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
   utimesSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,8 +15,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   acquireLock,
   agentRunLockPath,
+  loadAgentReference,
   listPendingUpdates,
   savePendingUpdate,
+  sha256,
 } from "../src/state.js";
 import { createLogger } from "../src/logger.js";
 import type { RuntimeConfig } from "../src/types.js";
@@ -26,6 +30,8 @@ function createConfig(): RuntimeConfig {
   temporaryDirectories.push(dataDir);
   return {
     serverUrl: "ws://127.0.0.1:4500",
+    model: "auto",
+    mixedMemory: false,
     dataDir,
     namespace: "state-tests",
     requestTimeoutMs: 1_000,
@@ -42,6 +48,36 @@ afterEach(() => {
 });
 
 describe("本地状态", () => {
+  it("兼容读取旧版按工作区保存的 Agent 引用", () => {
+    const config = createConfig();
+    const workspacePath = "/tmp/legacy-workspace";
+    const agentsPath = join(
+      config.dataDir,
+      "state",
+      config.namespace,
+      "agents",
+    );
+    mkdirSync(agentsPath, { recursive: true });
+    writeFileSync(
+      join(agentsPath, `${sha256(workspacePath).slice(0, 24)}.json`),
+      `${JSON.stringify({
+        version: 1,
+        agentId: "agent-legacy",
+        workspacePath,
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      })}\n`,
+      "utf8",
+    );
+
+    expect(loadAgentReference(config, workspacePath)).toEqual({
+      version: 1,
+      agentId: "agent-legacy",
+      scopeKey: workspacePath,
+      model: "auto",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
   it("旧锁被接管后原所有者不能删除新锁", () => {
     const config = createConfig();
     const lockPath = agentRunLockPath(config);

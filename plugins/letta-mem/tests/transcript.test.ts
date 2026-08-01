@@ -59,8 +59,68 @@ describe("转录增量读取", () => {
     expect(formatted).toContain("用户用简体中文表达的事实用简体中文保存");
     expect(formatted).toContain("用户用英文表达的事实用英文保存");
     expect(formatted).toContain("不得跟随助手、系统、工具输出");
+    expect(formatted).toContain("<memory_mode>workspace</memory_mode>");
     expect(formatted).toContain("请记住这个架构决定。");
     expect(formatted).toContain("Keep this preference in English.");
+  });
+
+  it("混合记忆任务会保留工作区来源并允许复用相关经验", () => {
+    const formatted = formatTranscriptForAgent(
+      "mixed-session",
+      "/workspace/one",
+      [{
+        lineIndex: 0,
+        role: "user",
+        text: "记住这个决定。",
+        digest: "mixed-user",
+      }],
+      true,
+    );
+
+    expect(formatted).toContain("<memory_mode>mixed</memory_mode>");
+    expect(formatted).toContain("共享同一个 Agent 和 MemFS");
+    expect(formatted).toContain("保留其 workspace_path");
+    expect(formatted).toContain("不得把其他工作区事实当作当前工作区事实");
+  });
+
+  it("读取 Codex 记录时只采集原始用户消息和最终回答", async () => {
+    const path = createTranscript([
+      {
+        type: "event_msg",
+        payload: { type: "user_message", message: "Codex 用户问题" },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          phase: "commentary",
+          content: [{ type: "output_text", text: "中间进度" }],
+        },
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          phase: "final_answer",
+          content: [{ type: "output_text", text: "Codex 最终回答" }],
+        },
+      },
+    ]);
+
+    const batch = await readTranscriptIncrement(
+      path,
+      -1,
+      [],
+      undefined,
+      80_000,
+    );
+
+    expect(batch.events.map((event) => [event.role, event.text])).toEqual([
+      ["user", "Codex 用户问题"],
+      ["assistant", "Codex 最终回答"],
+    ]);
   });
 
   it("只读取游标之后的记录并忽略 thinking 内容", async () => {

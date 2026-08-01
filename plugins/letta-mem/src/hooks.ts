@@ -6,6 +6,7 @@ import {
   normalizeWorkspacePath,
 } from "./context.js";
 import {
+  agentScopeKey,
   createAgentClient,
   openAgentSession,
   resolveAgentId,
@@ -196,7 +197,11 @@ async function openSessionWithRecovery(
     }
   }
 
-  if (!clearAgentReference(config, workspacePath, initialAgentId)) {
+  if (!clearAgentReference(
+    config,
+    agentScopeKey(config, workspacePath),
+    initialAgentId,
+  )) {
     throw lastError instanceof Error ? lastError : new Error(lastError);
   }
   const recoveredAgentId = await resolveAgentId(
@@ -235,6 +240,9 @@ export async function handleSessionStart(
         sessionId: state.sessionId,
         workspacePath: state.workspacePath,
         ...(state.agentId !== undefined ? { agentId: state.agentId } : {}),
+        ...(state.agentModel !== undefined
+          ? { agentModel: state.agentModel }
+          : {}),
         ...(state.conversationId !== undefined
           ? { conversationId: state.conversationId }
           : {}),
@@ -370,7 +378,9 @@ async function processPendingUpdate(
           workspacePath,
           log,
         );
+        const stateModel = state.agentModel ?? "auto";
         const resumableConversation = state.agentId === resolvedAgentId
+            && stateModel === config.model
           ? state.conversationId
           : undefined;
         const opened = await openSessionWithRecovery(
@@ -394,6 +404,7 @@ async function processPendingUpdate(
           (latest) => ({
             ...latest,
             agentId: openedAgentId,
+            agentModel: config.model,
             conversationId: openedConversationId,
           }),
           2_000,
@@ -411,6 +422,7 @@ async function processPendingUpdate(
         sessionId,
         workspacePath,
         batch.events,
+        config.mixedMemory,
       );
       const guidance = await sendAgentUpdate(agentSession, message);
       const trimmedGuidance = normalizedGuidance(
@@ -438,6 +450,7 @@ async function processPendingUpdate(
         (latest) => ({
           ...latest,
           agentId: activeAgentId,
+          agentModel: config.model,
           conversationId: activeConversationId,
           lastProcessedLine: Math.max(
             latest.lastProcessedLine,
