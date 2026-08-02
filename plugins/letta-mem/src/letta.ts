@@ -33,11 +33,28 @@ interface AgentSessionMessage {
   content?: string;
   success?: boolean;
   result?: string;
+  toolCallId?: string;
+  toolName?: string;
+  isError?: boolean;
   error?: string;
   message?: string;
   errorCode?: string;
   errorDetail?: string;
+  stopReason?: string;
 }
+
+interface AgentSessionDeviceStatus {
+  isProcessing: boolean;
+  pendingControlRequests: Array<{
+    requestId: string;
+    toolName: string;
+    toolCallId?: string;
+  }>;
+}
+
+type AgentToolApproval =
+  | { behavior: "allow" }
+  | { behavior: "deny"; message?: string; interrupt?: boolean };
 
 export interface AgentConversationMessage {
   id: string;
@@ -58,6 +75,9 @@ export interface AgentSession {
     conversationId: string;
     messages?: AgentConversationMessage[];
   }>;
+  getDeviceStatus?(
+    options?: { timeoutMs?: number },
+  ): Promise<AgentSessionDeviceStatus>;
   close(): void;
 }
 
@@ -110,6 +130,10 @@ interface SessionOptions {
   cwd: string;
   permissionMode: "unrestricted";
   maxApprovalRecoveryAttempts: number;
+  canUseTool(
+    toolName: string,
+    toolInput: Record<string, unknown>,
+  ): AgentToolApproval | Promise<AgentToolApproval>;
 }
 
 interface AgentSdkModule {
@@ -142,7 +166,9 @@ function sessionOptions(workspacePath: string): SessionOptions {
   return {
     cwd: workspacePath,
     permissionMode: "unrestricted",
-    maxApprovalRecoveryAttempts: 0,
+    maxApprovalRecoveryAttempts: 1,
+    // unrestricted 已允许工具；显式回调用于防止 SDK 在自动审批完成前结束本轮。
+    canUseTool: () => ({ behavior: "allow" }),
   };
 }
 
@@ -539,16 +565,28 @@ export async function sendAgentUpdate(
 ): Promise<string> {
   await session.send(message);
   const guidance: string[] = [];
+  const pendingToolCalls = new Map<string, string>();
   let completed = false;
   let failure = "";
 
   for await (const event of session.stream()) {
     if (event.type === "assistant" && event.content) {
       guidance.push(event.content);
+    } else if (event.type === "tool_call" && event.toolCallId) {
+      pendingToolCalls.set(
+        event.toolCallId,
+        event.toolName?.trim() || "unknown",
+      );
+    } else if (event.type === "tool_result" && event.toolCallId) {
+      pendingToolCalls.delete(event.toolCallId);
     } else if (event.type === "result") {
-      completed = event.success === true;
+      completed = event.success === true
+        && event.stopReason !== "requires_approval";
       const resultFailure = event.errorDetail ?? event.errorCode ?? event.error;
       if (resultFailure) failure = resultFailure;
+      if (event.stopReason === "requires_approval") {
+        failure = "Letta Session 在工具审批完成前提前结束";
+      }
       if (completed && guidance.length === 0 && event.result?.trim()) {
         guidance.push(event.result);
       }
@@ -559,6 +597,27 @@ export async function sendAgentUpdate(
         ?? event.content
         ?? "Letta Session 返回错误";
     }
+  }
+
+  if (session.getDeviceStatus) {
+    const status = await session.getDeviceStatus();
+    if (status.pendingControlRequests.length > 0) {
+      const tools = status.pendingControlRequests
+        .map((request) => request.toolName)
+        .filter(Boolean)
+        .join(", ");
+      throw new Error(
+        `Letta Session 仍有待审批工具请求${tools ? `: ${tools}` : ""}`,
+      );
+    }
+    if (status.isProcessing) {
+      throw new Error("Letta Session 返回完成后仍在处理");
+    }
+  }
+
+  if (pendingToolCalls.size > 0) {
+    const tools = [...pendingToolCalls.values()].join(", ");
+    throw new Error(`Letta Session 存在未完成工具调用: ${tools}`);
   }
 
   if (!completed) {

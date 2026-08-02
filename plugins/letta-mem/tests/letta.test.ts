@@ -80,4 +80,94 @@ describe("Letta Agent 流式响应", () => {
     await expect(sendAgentUpdate(session, "测试消息"))
       .resolves.toBe("下一轮 Claude Code 需要此上下文。");
   });
+
+  it("等待原生记忆工具返回后才确认本轮完成", async () => {
+    const session: AgentSession = {
+      send: vi.fn(async () => {}),
+      async *stream() {
+        yield {
+          type: "tool_call",
+          toolCallId: "memory-call-1",
+          toolName: "memory",
+        };
+        yield {
+          type: "tool_result",
+          toolCallId: "memory-call-1",
+          content: "记忆已更新",
+          isError: false,
+        };
+        yield { type: "assistant", content: "下一轮需要的上下文" };
+        yield { type: "result", success: true, stopReason: "end_turn" };
+      },
+      async bootstrapState() {
+        return { agentId: "agent-test", conversationId: "conversation-test" };
+      },
+      async getDeviceStatus() {
+        return { isProcessing: false, pendingControlRequests: [] };
+      },
+      close: vi.fn(),
+    };
+
+    await expect(sendAgentUpdate(session, "测试写记忆"))
+      .resolves.toBe("下一轮需要的上下文");
+  });
+
+  it("SDK 把待审批误报为成功时仍判定本轮失败", async () => {
+    const session: AgentSession = {
+      send: vi.fn(async () => {}),
+      async *stream() {
+        yield {
+          type: "tool_call",
+          toolCallId: "memory-call-pending",
+          toolName: "memory",
+        };
+        yield {
+          type: "result",
+          success: true,
+          stopReason: "requires_approval",
+        };
+      },
+      async bootstrapState() {
+        return { agentId: "agent-test", conversationId: "conversation-test" };
+      },
+      async getDeviceStatus() {
+        return {
+          isProcessing: false,
+          pendingControlRequests: [{
+            requestId: "approval-1",
+            toolName: "memory",
+            toolCallId: "memory-call-pending",
+          }],
+        };
+      },
+      close: vi.fn(),
+    };
+
+    await expect(sendAgentUpdate(session, "测试待审批"))
+      .rejects.toThrow("Letta Session 仍有待审批工具请求: memory");
+  });
+
+  it("运行时已清空审批但工具没有返回时仍判定失败", async () => {
+    const session: AgentSession = {
+      send: vi.fn(async () => {}),
+      async *stream() {
+        yield {
+          type: "tool_call",
+          toolCallId: "memory-call-lost",
+          toolName: "memory",
+        };
+        yield { type: "result", success: true };
+      },
+      async bootstrapState() {
+        return { agentId: "agent-test", conversationId: "conversation-test" };
+      },
+      async getDeviceStatus() {
+        return { isProcessing: false, pendingControlRequests: [] };
+      },
+      close: vi.fn(),
+    };
+
+    await expect(sendAgentUpdate(session, "测试丢失工具结果"))
+      .rejects.toThrow("Letta Session 存在未完成工具调用: memory");
+  });
 });

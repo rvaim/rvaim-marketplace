@@ -4,7 +4,7 @@
 
 它把当前问题、可见会话增量、工作区路径以及记忆约束交给 Letta Agent；哪些内容值得记住、属于共享记忆还是工作区记忆、具体保存到哪里，全部由 Letta Agent 和 Letta 当前提供的原生记忆能力决定。
 
-当前版本：`2.6.1`。
+当前版本：`2.6.2`。
 
 ## 一句话架构
 
@@ -33,6 +33,7 @@ Letta Agent
 - 在工具调用前同步 Letta Conversation 中稍后完成的 Agent 消息。
 - 编码助手结束一轮回答后，异步读取转录增量并交给 Letta Agent 更新记忆。
 - 使用持久待处理队列，失败、崩溃或 Agent 忙碌时不会直接丢失更新。
+- 等待 Letta 原生工具产生对应结果，并复核 Session 处理与审批状态后才确认记忆更新成功。
 - 把 Codex 当前任务标题同步为 Letta Conversation 的 `summary`，避免一直显示 `No summary`。
 - 创建和恢复每个 Letta SDK Session 时都传入该会话首次绑定的工作区根目录作为 `cwd`。
 - 约束 Agent 使用产生事实的用户消息语言保存记忆，并使用当前用户语言完成分析与返回。
@@ -77,7 +78,8 @@ Letta Agent 负责：
 - 强制选择 `api`、`local`、云端或其他 backend。
 - 检查 backend 是否支持某一种记忆机制。
 - 给新 Agent 预建插件定义的记忆块。
-- 通过 `allowedTools`、`skillSources` 或审批回调覆盖 Letta 默认工具与 skills。
+- 通过 `allowedTools` 或 `skillSources` 覆盖 Letta 默认工具与 skills。
+- 使用审批回调决定记忆内容、作用域、存储位置或 backend；Session 中的回调只确认 `unrestricted` 模式已经允许的原生工具继续执行。
 - 把本地故障回退快照当作真正的记忆来源。
 
 ## 对象映射
@@ -239,8 +241,9 @@ sequenceDiagram
 7. 恢复同一工作区 Agent 和当前 Conversation。
 8. 发送 `<coding_session_update>`。
 9. Letta Agent 自行判断是否更新记忆、更新哪些内容、使用何种作用域和保存位置。
-10. 成功后提交转录游标并删除待处理项。
-11. Agent 返回了下一轮可能有用的上下文时，保存一份有限的本地故障回退快照。
+10. 等待所有原生工具调用返回，并确认 Session 已停止处理且不存在待审批请求。
+11. 只有完成状态通过复核后才提交转录游标并删除待处理项；未完成时保留队列并退避重试。
+12. Agent 返回了下一轮可能有用的上下文时，保存一份有限的本地故障回退快照。
 
 写入请求结构：
 
@@ -536,7 +539,15 @@ Agent 系统提示明确要求：
 - 只使用当前 Letta 环境实际提供的能力。
 - 不要求插件创建、挂载或维护任何记忆存储。
 
-SDK Session 使用 `permissionMode: "unrestricted"`，目的是不由插件拦截 Letta 原生工具与 skills；实际行为边界通过 Agent 系统提示约束。插件不会再额外实现工具白名单或审批回调。
+SDK Session 使用 `permissionMode: "unrestricted"`，目的是不由插件拦截 Letta 原生工具与 skills；实际行为边界通过 Agent 系统提示约束。Session 还会提供一个始终允许的 `canUseTool` 回调，它不会增加权限或干预记忆决策，只用于明确告诉当前版本 SDK：审批事件会被自动处理，不要在短暂的 `WAITING_ON_APPROVAL` 状态提前结束本轮。
+
+插件不会只根据 SDK 的 `result.success` 判断完成。每次 Agent turn 结束后还会检查：
+
+- 每个 `tool_call` 是否已有对应 `tool_result`。
+- 权威设备状态中是否仍有 `pendingControlRequests`。
+- Session 是否仍处于 `isProcessing`。
+
+任何一项未完成都会保留待处理队列并稍后重试，不会推进 transcript 游标。
 
 ## 要求
 
@@ -668,6 +679,10 @@ Codex 标题来自本地任务索引；索引不可用时会使用用户问题�
 
 插件不会强制保存每句话。Letta Agent 会判断长期价值，也可能认为内容临时、重复、不确定或敏感。可以在 Letta App 中检查对应 Conversation 的 Agent turn 和当前原生记忆能力。
 
+### 为什么 Letta App 一直显示 `Updating memory`？
+
+旧版本可能在原生 `memory` 工具仍等待审批结果时收到 SDK 错误的 `success: true`，随后提前关闭 Session 并误记 `memory-updated`。`2.6.2` 会显式声明自动审批处理，并在工具结果、待审批请求和处理状态全部完成后才推进游标；未完成的更新保留在 pending 队列中重试。
+
 ### 为什么共享记忆和工作区记忆没有固定目录？
 
 这是设计结果。插件只把语义边界告诉 Agent，不规定 Letta 应当使用 block、MemFS、archive、Shared Memory repository 或其他机制。实际结构由 Letta 决定。
@@ -697,6 +712,13 @@ LETTA_MEM_DISABLED=1
 这只停止 Hook，不删除 Agent、Conversation、Letta 记忆或插件本地状态。
 
 ## 升级说明
+
+### 升级到 `2.6.2`
+
+- SDK Session 显式注册自动审批处理，修复 `unrestricted` 模式下原生记忆工具在 `WAITING_ON_APPROVAL` 阶段被提前结束的问题。
+- `memory-updated` 现在表示工具调用、设备处理状态和待审批状态均已完成，而不只是 SDK 返回了 `success: true`。
+- 未完成的写入会保留在 pending 队列并重试，不再错误推进 transcript 游标。
+- 升级不会改变 Letta Agent 对共享/工作区记忆、本地/云端 backend 或实际存储位置的自主判断。
 
 ### 升级到 `2.6.1`
 

@@ -562,16 +562,18 @@ describe("后台记忆 Hook", () => {
     expect(createdAgentOptions).not.toHaveProperty("baseTools");
     expect(createAgentSession).toHaveBeenCalledWith(
       "agent-1",
-      {
+      expect.objectContaining({
         cwd: projectPath,
         permissionMode: "unrestricted",
-        maxApprovalRecoveryAttempts: 0,
-      },
+        maxApprovalRecoveryAttempts: 1,
+        canUseTool: expect.any(Function),
+      }),
     );
     const createdSessionOptions = createAgentSession.mock.calls[0]?.[1];
     expect(createdSessionOptions).not.toHaveProperty("allowedTools");
     expect(createdSessionOptions).not.toHaveProperty("skillSources");
-    expect(createdSessionOptions).not.toHaveProperty("canUseTool");
+    expect(await createdSessionOptions?.canUseTool("memory", {}))
+      .toEqual({ behavior: "allow" });
     expect(createdSessionOptions?.cwd).toBe(projectPath);
     expect(firstState).toMatchObject({
       agentId: "agent-1",
@@ -606,11 +608,12 @@ describe("后台记忆 Hook", () => {
     );
     expect(resumeAgentSession).toHaveBeenCalledWith(
       "conversation-1",
-      {
+      expect.objectContaining({
         cwd: projectPath,
         permissionMode: "unrestricted",
-        maxApprovalRecoveryAttempts: 0,
-      },
+        maxApprovalRecoveryAttempts: 1,
+        canUseTool: expect.any(Function),
+      }),
     );
     expect(resumedState.lastProcessedLine).toBe(1);
     expect(resumedState.recentDigests).toHaveLength(2);
@@ -663,11 +666,12 @@ describe("后台记忆 Hook", () => {
       memfs: expect.anything(),
     }));
     const options = vi.mocked(client.createSession).mock.calls[0]?.[1];
-    expect(options).toEqual({
+    expect(options).toEqual(expect.objectContaining({
       cwd: workspacePath,
       permissionMode: "unrestricted",
-      maxApprovalRecoveryAttempts: 0,
-    });
+      maxApprovalRecoveryAttempts: 1,
+      canUseTool: expect.any(Function),
+    }));
     expect(opened.close).toHaveBeenCalledOnce();
   });
 
@@ -1046,6 +1050,83 @@ describe("后台记忆 Hook", () => {
       "error",
       "memory-update-failed",
       expect.stringContaining("模拟工作区 Agent 失败"),
+    );
+  });
+
+  it("SDK 将待审批误报为成功时不推进游标并保留待处理项", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "approval-pending-workspace");
+    const transcriptPath = createTranscript(config, "需要持久化的工作区决定");
+    const agentClose = vi.fn();
+    const pendingApprovalSession: AgentSession = {
+      async send() {},
+      async *stream() {
+        yield {
+          type: "tool_call",
+          toolCallId: "memory-call-pending",
+          toolName: "memory",
+        };
+        yield {
+          type: "result",
+          success: true,
+          stopReason: "requires_approval",
+        };
+      },
+      async bootstrapState() {
+        return {
+          agentId: "agent-approval-pending",
+          conversationId: "conversation-approval-pending",
+        };
+      },
+      async getDeviceStatus() {
+        return {
+          isProcessing: false,
+          pendingControlRequests: [{
+            requestId: "approval-request-1",
+            toolName: "memory",
+            toolCallId: "memory-call-pending",
+          }],
+        };
+      },
+      close: agentClose,
+    };
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-approval-pending"),
+      createSession: vi.fn(() => pendingApprovalSession),
+      resumeSession: vi.fn(() => pendingApprovalSession),
+      agents: {
+        list: vi.fn(async () => []),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await expect(handleUpdateMemory(
+      config,
+      {
+        session_id: "approval-pending-session",
+        transcript_path: transcriptPath,
+        cwd: workspacePath,
+      },
+      log,
+      vi.fn(async () => client) as AgentClientFactory,
+    )).resolves.toBe("");
+
+    expect(agentClose).toHaveBeenCalledOnce();
+    expect(loadSessionState(
+      config,
+      workspacePath,
+      "approval-pending-session",
+    ).lastProcessedLine).toBe(-1);
+    expect(listPendingUpdates(config, true)).toHaveLength(1);
+    expect(log).not.toHaveBeenCalledWith(
+      "info",
+      "memory-updated",
+      "approval-pending-session",
+    );
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "memory-update-failed",
+      expect.stringContaining("待审批工具请求: memory"),
     );
   });
 

@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2.6.2
+
+- SDK Session 现在显式提供自动工具审批回调，避免 `unrestricted` 模式下的短暂 `WAITING_ON_APPROVAL` 被 SDK 提前当成本轮结束。
+- 不再只相信 SDK 的 `result.success`：插件会跟踪 `tool_call` 与 `tool_result`、检查权威设备状态，并拒绝仍在处理、仍有待审批请求或存在未完成工具调用的结果。
+- 未完成的记忆工具调用不会推进 transcript 游标，也不会删除待处理项；后续 drain 会继续重试，避免出现 App 卡在 `Updating memory`、日志却误报 `memory-updated` 的情况。
+- 新增正常记忆工具完成、审批误报成功、审批已清空但工具结果丢失，以及 Hook 保留队列四类回归测试。
+
 ## 2.6.1
 
 - 首条非空 `UserPromptSubmit` 现在会把规范化工作区根目录与 `sessionId` 稳定绑定；后续 Hook 不再用可能已经变化的当前 `cwd` 重新推导工作区身份。

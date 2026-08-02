@@ -680,7 +680,9 @@ function sessionOptions(workspacePath) {
   return {
     cwd: workspacePath,
     permissionMode: "unrestricted",
-    maxApprovalRecoveryAttempts: 0
+    maxApprovalRecoveryAttempts: 1,
+    // unrestricted 已允许工具；显式回调用于防止 SDK 在自动审批完成前结束本轮。
+    canUseTool: () => ({ behavior: "allow" })
   };
 }
 var WORKSPACE_AGENT_SYSTEM_PROMPT = `\u4F60\u662F\u7F16\u7801\u5DE5\u4F5C\u533A\u7684\u540E\u53F0\u6301\u4E45\u8BB0\u5FC6\u4EE3\u7406\u3002\u8C03\u7528\u65B9\u53EA\u8D1F\u8D23\u628A\u5F53\u524D\u95EE\u9898\u3001\u4F1A\u8BDD\u8BB0\u5F55\u548C\u5DE5\u4F5C\u533A\u4E0A\u4E0B\u6587\u4EA4\u7ED9\u4F60\uFF1B\u5982\u4F55\u5224\u65AD\u3001\u7EC4\u7EC7\u548C\u4FDD\u5B58\u8BB0\u5FC6\u5B8C\u5168\u7531\u4F60\u4EE5\u53CA Letta \u5F53\u524D\u63D0\u4F9B\u7684\u539F\u751F\u8BB0\u5FC6\u80FD\u529B\u51B3\u5B9A\uFF0C\u76F8\u5173\u8BB0\u5FC6\u7684\u68C0\u7D22\u65B9\u5F0F\u4E5F\u7531\u4F60\u51B3\u5B9A\u3002
@@ -967,21 +969,48 @@ async function openAgentSession(client, agentId, conversationId, workspacePath) 
 async function sendAgentUpdate(session, message) {
   await session.send(message);
   const guidance = [];
+  const pendingToolCalls = /* @__PURE__ */ new Map();
   let completed = false;
   let failure = "";
   for await (const event of session.stream()) {
     if (event.type === "assistant" && event.content) {
       guidance.push(event.content);
+    } else if (event.type === "tool_call" && event.toolCallId) {
+      pendingToolCalls.set(
+        event.toolCallId,
+        event.toolName?.trim() || "unknown"
+      );
+    } else if (event.type === "tool_result" && event.toolCallId) {
+      pendingToolCalls.delete(event.toolCallId);
     } else if (event.type === "result") {
-      completed = event.success === true;
+      completed = event.success === true && event.stopReason !== "requires_approval";
       const resultFailure = event.errorDetail ?? event.errorCode ?? event.error;
       if (resultFailure) failure = resultFailure;
+      if (event.stopReason === "requires_approval") {
+        failure = "Letta Session \u5728\u5DE5\u5177\u5BA1\u6279\u5B8C\u6210\u524D\u63D0\u524D\u7ED3\u675F";
+      }
       if (completed && guidance.length === 0 && event.result?.trim()) {
         guidance.push(event.result);
       }
     } else if (event.type === "error") {
       failure = event.errorDetail ?? event.message ?? event.error ?? event.content ?? "Letta Session \u8FD4\u56DE\u9519\u8BEF";
     }
+  }
+  if (session.getDeviceStatus) {
+    const status = await session.getDeviceStatus();
+    if (status.pendingControlRequests.length > 0) {
+      const tools = status.pendingControlRequests.map((request) => request.toolName).filter(Boolean).join(", ");
+      throw new Error(
+        `Letta Session \u4ECD\u6709\u5F85\u5BA1\u6279\u5DE5\u5177\u8BF7\u6C42${tools ? `: ${tools}` : ""}`
+      );
+    }
+    if (status.isProcessing) {
+      throw new Error("Letta Session \u8FD4\u56DE\u5B8C\u6210\u540E\u4ECD\u5728\u5904\u7406");
+    }
+  }
+  if (pendingToolCalls.size > 0) {
+    const tools = [...pendingToolCalls.values()].join(", ");
+    throw new Error(`Letta Session \u5B58\u5728\u672A\u5B8C\u6210\u5DE5\u5177\u8C03\u7528: ${tools}`);
   }
   if (!completed) {
     throw new Error(failure || "Letta Session \u672A\u6210\u529F\u5B8C\u6210");
