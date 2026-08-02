@@ -15,11 +15,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   acquireLock,
   agentRunLockPath,
+  bindSessionWorkspace,
+  findActivatedSessionWorkspace,
   loadAgentReference,
+  loadSessionWorkspaceBinding,
   loadSharedAgentReference,
   listPendingUpdates,
   saveAgentReference,
   savePendingUpdate,
+  saveSessionState,
   sha256,
 } from "../src/state.js";
 import { createLogger } from "../src/logger.js";
@@ -52,6 +56,50 @@ afterEach(() => {
 });
 
 describe("本地状态", () => {
+  it("会话工作区首次绑定后不会被后续 cwd 覆盖", async () => {
+    const config = createConfig();
+    const first = await bindSessionWorkspace(
+      config,
+      "stable-session",
+      "/tmp/project-root",
+      250,
+    );
+    const second = await bindSessionWorkspace(
+      config,
+      "stable-session",
+      "/tmp/project-root/generated-child",
+      250,
+    );
+
+    expect(first?.workspacePath).toBe("/tmp/project-root");
+    expect(second?.workspacePath).toBe("/tmp/project-root");
+    expect(loadSessionWorkspaceBinding(config, "stable-session")?.workspacePath)
+      .toBe("/tmp/project-root");
+  });
+
+  it("旧会话迁移时选择最早激活的工作区状态", () => {
+    const config = createConfig();
+    saveSessionState(config, {
+      version: 1,
+      sessionId: "legacy-stable-session",
+      workspacePath: "/tmp/project-root/generated-child",
+      activatedAt: "2026-08-02T08:10:00.000Z",
+      lastProcessedLine: -1,
+      recentDigests: [],
+    });
+    saveSessionState(config, {
+      version: 1,
+      sessionId: "legacy-stable-session",
+      workspacePath: "/tmp/project-root",
+      activatedAt: "2026-08-02T08:00:00.000Z",
+      lastProcessedLine: -1,
+      recentDigests: [],
+    });
+
+    expect(findActivatedSessionWorkspace(config, "legacy-stable-session"))
+      .toBe("/tmp/project-root");
+  });
+
   it("不同宿主数据目录共享同一工作区的 Agent 引用和运行锁", () => {
     const coordinationDir = mkdtempSync(join(tmpdir(), "letta-mem-shared-"));
     temporaryDirectories.push(coordinationDir);

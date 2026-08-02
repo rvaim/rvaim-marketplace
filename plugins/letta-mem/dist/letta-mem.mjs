@@ -80,6 +80,20 @@ function sessionPath(config, workspacePath, sessionId) {
     `${hash(`${workspacePath}\0${sessionId}`)}.json`
   );
 }
+function sessionWorkspacePath(config, sessionId) {
+  return join(
+    namespaceDir(config),
+    "session-workspaces",
+    `${hash(sessionId)}.json`
+  );
+}
+function sessionWorkspaceLockPath(config, sessionId) {
+  return join(
+    namespaceDir(config),
+    "locks",
+    `session-workspace-${hash(sessionId)}.lock`
+  );
+}
 function sessionLockPath(config, workspacePath, sessionId) {
   return join(
     namespaceDir(config),
@@ -143,6 +157,51 @@ function saveSessionState(config, state) {
     sessionPath(config, state.workspacePath, state.sessionId),
     state
   );
+}
+function loadSessionWorkspaceBinding(config, sessionId) {
+  const value = readJson(
+    sessionWorkspacePath(config, sessionId)
+  );
+  if (value?.version !== 1 || value.sessionId !== sessionId || typeof value.workspacePath !== "string" || !value.workspacePath || typeof value.boundAt !== "string") return null;
+  return value;
+}
+function findActivatedSessionWorkspace(config, sessionId) {
+  const sessionsPath = join(namespaceDir(config), "sessions");
+  let filenames;
+  try {
+    filenames = readdirSync(sessionsPath);
+  } catch {
+    return null;
+  }
+  const matches = filenames.map((filename) => readJson(join(sessionsPath, filename))).filter((value) => value?.version === 1 && value.sessionId === sessionId && typeof value.workspacePath === "string" && Boolean(value.workspacePath) && typeof value.activatedAt === "string").sort((first, second) => {
+    const activatedOrder = (first.activatedAt ?? "").localeCompare(second.activatedAt ?? "");
+    return activatedOrder !== 0 ? activatedOrder : first.workspacePath.localeCompare(second.workspacePath);
+  });
+  return matches[0]?.workspacePath ?? null;
+}
+async function bindSessionWorkspace(config, sessionId, workspacePath, waitMs = 0) {
+  const deadline = Date.now() + waitMs;
+  const lockPath = sessionWorkspaceLockPath(config, sessionId);
+  let release = acquireLock(lockPath);
+  while (!release && Date.now() < deadline) {
+    await delay(25);
+    release = acquireLock(lockPath);
+  }
+  if (!release) return loadSessionWorkspaceBinding(config, sessionId);
+  try {
+    const existing = loadSessionWorkspaceBinding(config, sessionId);
+    if (existing) return existing;
+    const binding = {
+      version: 1,
+      sessionId,
+      workspacePath,
+      boundAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    writeJsonAtomic(sessionWorkspacePath(config, sessionId), binding);
+    return binding;
+  } finally {
+    release();
+  }
 }
 function agentReferencePath(config, scopeKey) {
   return join(
@@ -1299,6 +1358,37 @@ function validSessionId(input) {
   const value = input.session_id?.trim();
   return value || null;
 }
+function resolveSessionWorkspace(config, sessionId, cwd) {
+  const binding = loadSessionWorkspaceBinding(config, sessionId);
+  if (binding) {
+    return { workspacePath: binding.workspacePath, source: "bound" };
+  }
+  const migrated = findActivatedSessionWorkspace(config, sessionId);
+  if (migrated) {
+    return { workspacePath: migrated, source: "migrated" };
+  }
+  return {
+    workspacePath: normalizeWorkspacePath(cwd),
+    source: "current"
+  };
+}
+async function activateSessionWorkspace(config, sessionId, cwd, log) {
+  const resolved = resolveSessionWorkspace(config, sessionId, cwd);
+  if (resolved.source === "bound") return resolved.workspacePath;
+  const binding = await bindSessionWorkspace(
+    config,
+    sessionId,
+    resolved.workspacePath,
+    2e3
+  );
+  const workspacePath = binding?.workspacePath ?? resolved.workspacePath;
+  log(
+    "info",
+    resolved.source === "migrated" ? "session-workspace-migrated" : "session-workspace-bound",
+    workspacePath
+  );
+  return workspacePath;
+}
 function normalizeTranscriptPath(value, cwd) {
   const trimmed = value?.trim();
   if (!trimmed) return void 0;
@@ -1574,10 +1664,14 @@ async function sendAgentUpdateWithTimeout(session, message, timeoutMs) {
 async function handleSessionStart(config, input) {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd
+  );
   const transcriptPath = normalizeTranscriptPath(
     input.transcript_path,
-    input.cwd
+    workspacePath
   );
   const forkTail = input.source === "fork" ? await transcriptTailLineIndex(transcriptPath) : -1;
   await updateSessionState(
@@ -1611,7 +1705,11 @@ async function handleSessionStart(config, input) {
 async function handlePrepareSession(config, input, log, _clientFactory = createAgentClient) {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd
+  );
   const state = loadSessionState(config, workspacePath, sessionId);
   log(
     "info",
@@ -1624,12 +1722,22 @@ async function handleInjectContext(config, input, log = () => {
 }, clientFactory = createAgentClient) {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
   const prompt = input.prompt?.trim();
   if (!prompt) {
+    const { workspacePath: workspacePath2 } = resolveSessionWorkspace(
+      config,
+      sessionId,
+      input.cwd
+    );
     log("info", "memory-read-fallback", "missing-prompt");
-    return claimCachedContext(config, sessionId, workspacePath);
+    return claimCachedContext(config, sessionId, workspacePath2);
   }
+  const workspacePath = await activateSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd,
+    log
+  );
   const activated = await updateSessionState(
     config,
     workspacePath,
@@ -1746,7 +1854,11 @@ async function handleInjectContext(config, input, log = () => {
 async function handleSyncContext(config, input, log, clientFactory = createAgentClient) {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd
+  );
   const state = loadSessionState(config, workspacePath, sessionId);
   if (!state.conversationId || !state.agentId) return "";
   try {
@@ -1840,11 +1952,15 @@ function pendingInput(pending) {
 async function handleEnqueueMemory(config, input, log) {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const transcriptPath = normalizeTranscriptPath(
-    input.transcript_path,
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
     input.cwd
   );
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const transcriptPath = normalizeTranscriptPath(
+    input.transcript_path,
+    workspacePath
+  );
   const state = loadSessionState(config, workspacePath, sessionId);
   if (!state.activatedAt) {
     log("info", "memory-update-skipped-inactive", sessionId);

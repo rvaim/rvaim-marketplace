@@ -22,6 +22,7 @@ import type {
   PendingUpdate,
   RuntimeConfig,
   SessionState,
+  SessionWorkspaceBinding,
 } from "./types.js";
 
 const LOCK_STALE_MS = 7 * 60 * 1_000;
@@ -86,6 +87,28 @@ function sessionPath(
     namespaceDir(config),
     "sessions",
     `${hash(`${workspacePath}\0${sessionId}`)}.json`,
+  );
+}
+
+function sessionWorkspacePath(
+  config: RuntimeConfig,
+  sessionId: string,
+): string {
+  return join(
+    namespaceDir(config),
+    "session-workspaces",
+    `${hash(sessionId)}.json`,
+  );
+}
+
+function sessionWorkspaceLockPath(
+  config: RuntimeConfig,
+  sessionId: string,
+): string {
+  return join(
+    namespaceDir(config),
+    "locks",
+    `session-workspace-${hash(sessionId)}.lock`,
   );
 }
 
@@ -200,6 +223,85 @@ export function saveSessionState(
     sessionPath(config, state.workspacePath, state.sessionId),
     state,
   );
+}
+
+export function loadSessionWorkspaceBinding(
+  config: RuntimeConfig,
+  sessionId: string,
+): SessionWorkspaceBinding | null {
+  const value = readJson<SessionWorkspaceBinding>(
+    sessionWorkspacePath(config, sessionId),
+  );
+  if (
+    value?.version !== 1
+    || value.sessionId !== sessionId
+    || typeof value.workspacePath !== "string"
+    || !value.workspacePath
+    || typeof value.boundAt !== "string"
+  ) return null;
+  return value;
+}
+
+export function findActivatedSessionWorkspace(
+  config: RuntimeConfig,
+  sessionId: string,
+): string | null {
+  const sessionsPath = join(namespaceDir(config), "sessions");
+  let filenames: string[];
+  try {
+    filenames = readdirSync(sessionsPath);
+  } catch {
+    return null;
+  }
+
+  const matches = filenames
+    .map((filename) => readJson<SessionState>(join(sessionsPath, filename)))
+    .filter((value): value is SessionState => (
+      value?.version === 1
+      && value.sessionId === sessionId
+      && typeof value.workspacePath === "string"
+      && Boolean(value.workspacePath)
+      && typeof value.activatedAt === "string"
+    ))
+    .sort((first, second) => {
+      const activatedOrder = (first.activatedAt ?? "")
+        .localeCompare(second.activatedAt ?? "");
+      return activatedOrder !== 0
+        ? activatedOrder
+        : first.workspacePath.localeCompare(second.workspacePath);
+    });
+  return matches[0]?.workspacePath ?? null;
+}
+
+export async function bindSessionWorkspace(
+  config: RuntimeConfig,
+  sessionId: string,
+  workspacePath: string,
+  waitMs: number = 0,
+): Promise<SessionWorkspaceBinding | null> {
+  const deadline = Date.now() + waitMs;
+  const lockPath = sessionWorkspaceLockPath(config, sessionId);
+  let release = acquireLock(lockPath);
+  while (!release && Date.now() < deadline) {
+    await delay(25);
+    release = acquireLock(lockPath);
+  }
+  if (!release) return loadSessionWorkspaceBinding(config, sessionId);
+
+  try {
+    const existing = loadSessionWorkspaceBinding(config, sessionId);
+    if (existing) return existing;
+    const binding: SessionWorkspaceBinding = {
+      version: 1,
+      sessionId,
+      workspacePath,
+      boundAt: new Date().toISOString(),
+    };
+    writeJsonAtomic(sessionWorkspacePath(config, sessionId), binding);
+    return binding;
+  } finally {
+    release();
+  }
 }
 
 function agentReferencePath(

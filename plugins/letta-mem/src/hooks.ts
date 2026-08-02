@@ -29,12 +29,15 @@ import { errorDetail } from "./logger.js";
 import {
   acquireLock,
   agentRunLockPath,
+  bindSessionWorkspace,
   clearAgentReference,
   clearFailureState,
   deferPendingUpdate,
+  findActivatedSessionWorkspace,
   loadFailureState,
   listPendingUpdates,
   loadSessionState,
+  loadSessionWorkspaceBinding,
   removePendingUpdate,
   saveContextSnapshot,
   saveFailureState,
@@ -57,6 +60,52 @@ import type {
 function validSessionId(input: HookInput): string | null {
   const value = input.session_id?.trim();
   return value || null;
+}
+
+type SessionWorkspaceSource = "bound" | "migrated" | "current";
+
+function resolveSessionWorkspace(
+  config: RuntimeConfig,
+  sessionId: string,
+  cwd: string | undefined,
+): { workspacePath: string; source: SessionWorkspaceSource } {
+  const binding = loadSessionWorkspaceBinding(config, sessionId);
+  if (binding) {
+    return { workspacePath: binding.workspacePath, source: "bound" };
+  }
+  const migrated = findActivatedSessionWorkspace(config, sessionId);
+  if (migrated) {
+    return { workspacePath: migrated, source: "migrated" };
+  }
+  return {
+    workspacePath: normalizeWorkspacePath(cwd),
+    source: "current",
+  };
+}
+
+async function activateSessionWorkspace(
+  config: RuntimeConfig,
+  sessionId: string,
+  cwd: string | undefined,
+  log: LogFunction,
+): Promise<string> {
+  const resolved = resolveSessionWorkspace(config, sessionId, cwd);
+  if (resolved.source === "bound") return resolved.workspacePath;
+  const binding = await bindSessionWorkspace(
+    config,
+    sessionId,
+    resolved.workspacePath,
+    2_000,
+  );
+  const workspacePath = binding?.workspacePath ?? resolved.workspacePath;
+  log(
+    "info",
+    resolved.source === "migrated"
+      ? "session-workspace-migrated"
+      : "session-workspace-bound",
+    workspacePath,
+  );
+  return workspacePath;
 }
 
 function normalizeTranscriptPath(
@@ -436,10 +485,14 @@ export async function handleSessionStart(
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd,
+  );
   const transcriptPath = normalizeTranscriptPath(
     input.transcript_path,
-    input.cwd,
+    workspacePath,
   );
   const forkTail = input.source === "fork"
     ? await transcriptTailLineIndex(transcriptPath)
@@ -494,7 +547,11 @@ export async function handlePrepareSession(
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd,
+  );
   const state = loadSessionState(config, workspacePath, sessionId);
   log(
     "info",
@@ -514,12 +571,23 @@ export async function handleInjectContext(
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
   const prompt = input.prompt?.trim();
   if (!prompt) {
+    const { workspacePath } = resolveSessionWorkspace(
+      config,
+      sessionId,
+      input.cwd,
+    );
     log("info", "memory-read-fallback", "missing-prompt");
     return claimCachedContext(config, sessionId, workspacePath);
   }
+
+  const workspacePath = await activateSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd,
+    log,
+  );
 
   const activated = await updateSessionState(
     config,
@@ -649,7 +717,11 @@ export async function handleSyncContext(
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
+    input.cwd,
+  );
   const state = loadSessionState(config, workspacePath, sessionId);
   if (!state.conversationId || !state.agentId) return "";
 
@@ -764,11 +836,15 @@ export async function handleEnqueueMemory(
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
-  const transcriptPath = normalizeTranscriptPath(
-    input.transcript_path,
+  const { workspacePath } = resolveSessionWorkspace(
+    config,
+    sessionId,
     input.cwd,
   );
-  const workspacePath = normalizeWorkspacePath(input.cwd);
+  const transcriptPath = normalizeTranscriptPath(
+    input.transcript_path,
+    workspacePath,
+  );
   const state = loadSessionState(config, workspacePath, sessionId);
   if (!state.activatedAt) {
     log("info", "memory-update-skipped-inactive", sessionId);

@@ -4,7 +4,7 @@
 
 它把当前问题、可见会话增量、工作区路径以及记忆约束交给 Letta Agent；哪些内容值得记住、属于共享记忆还是工作区记忆、具体保存到哪里，全部由 Letta Agent 和 Letta 当前提供的原生记忆能力决定。
 
-当前版本：`2.6.0`。
+当前版本：`2.6.1`。
 
 ## 一句话架构
 
@@ -27,13 +27,14 @@ Letta Agent
 - 每个 Claude Code 或 Codex 会话对应该 Agent 下的一条 Letta Conversation。
 - `SessionStart` 只恢复插件本地会话状态，不连接 Letta，也不创建 Agent 或 Conversation。
 - 工作区第一次收到真实用户问题时才创建或复用 Agent 和 Conversation。
+- 首条真实用户问题会把 `session_id` 与当时的规范化工作区根目录稳定绑定；任务后续进入子目录不会改变 Agent、Conversation 或记忆作用域。
 - 第一条以及后续每条用户问题提交前，实时询问 Letta Agent 是否有相关记忆。
 - 把 Letta 返回的上下文作为隐藏的 Hook 上下文注入编码助手。
 - 在工具调用前同步 Letta Conversation 中稍后完成的 Agent 消息。
 - 编码助手结束一轮回答后，异步读取转录增量并交给 Letta Agent 更新记忆。
 - 使用持久待处理队列，失败、崩溃或 Agent 忙碌时不会直接丢失更新。
 - 把 Codex 当前任务标题同步为 Letta Conversation 的 `summary`，避免一直显示 `No summary`。
-- 创建和恢复每个 Letta SDK Session 时都传入当前工作区绝对路径作为 `cwd`。
+- 创建和恢复每个 Letta SDK Session 时都传入该会话首次绑定的工作区根目录作为 `cwd`。
 - 约束 Agent 使用产生事实的用户消息语言保存记忆，并使用当前用户语言完成分析与返回。
 - 约束 Agent 自行区分跨工作区共享信息与当前工作区专属信息。
 - 默认使用 Letta Agent SDK 管理 App Server 生命周期，也支持连接用户管理的 App Server。
@@ -46,7 +47,7 @@ Letta Agent
 插件负责：
 
 - 接收宿主 Hook 输入。
-- 规范化当前工作区路径。
+- 在首次真实用户消息时规范化并固定当前会话的工作区根目录。
 - 解析或恢复对应 Letta Agent 与 Conversation。
 - 传递当前问题、会话增量、语言规则、作用域规则和安全边界。
 - 把 Letta 返回的相关上下文注入编码助手。
@@ -88,7 +89,7 @@ Letta Agent 负责：
 | 当前用户问题 | `<memory_context_request>` | 作答前实时检索相关记忆，不直接保存该问题 |
 | 已完成的会话增量 | `<coding_session_update>` | 由 Agent 判断长期价值并自主更新记忆 |
 | Codex 当前任务标题 | Conversation `summary` | 在 Letta App 中显示可识别的对话名称 |
-| 当前工作区路径 | SDK Session `cwd` | 规定插件发起的 Agent Session 在哪个代码目录执行 |
+| 首条真实消息绑定的工作区根目录 | SDK Session `cwd` | 规定插件发起的 Agent Session 在哪个代码目录执行，并在任务进入子目录后保持稳定 |
 
 工作区 Agent 默认名称为：
 
@@ -113,7 +114,7 @@ sequenceDiagram
 
     U->>H: 第一条用户问题
     H->>P: UserPromptSubmit
-    P->>P: 标记会话已由真实用户激活
+    P->>P: 固定 session_id 对应的工作区根目录并激活会话
     P->>A: 创建或复用工作区 Agent 与 Conversation
     P->>A: memory_context_request
     A->>M: 自主检索相关共享或工作区记忆
@@ -139,7 +140,7 @@ sequenceDiagram
 
 新建、恢复、清空、压缩或派生会话时，宿主触发 `SessionStart`。
 
-插件只在前台快速创建或恢复本地会话状态，不初始化 SDK，不连接 Letta，不查找或创建工作区 Agent，也不创建 Conversation。
+插件只在前台快速创建或恢复本地候选会话状态，不初始化 SDK，不连接 Letta，不查找或创建工作区 Agent，也不创建 Conversation。`SessionStart` 的 `cwd` 不会单独触发最终工作区绑定。
 
 这样，Claude Code 或 Claude Desktop 仅仅扫描、恢复或预加载历史工作区时，不会在 Letta 中留下从未真正使用过的 Agent。真正的 Letta 激活点是该会话第一次收到非空 `UserPromptSubmit`。
 
@@ -147,12 +148,12 @@ sequenceDiagram
 
 用户提交问题时，插件会：
 
-1. 取得 `session_id`、当前 `cwd` 和用户问题。
-2. 把当前会话标记为已经由真实用户激活；后续 `Stop` 只有看到该标记才允许入队。
-3. 把 `cwd` 规范化为真实绝对路径，用它定位工作区 Agent。
+1. 取得 `session_id`、首条真实消息对应的 `cwd` 和用户问题。
+2. 第一次收到非空问题时，把该 `cwd` 规范化为真实绝对路径，并稳定绑定为该 `session_id` 的 `workspaceRoot`；后续 Hook 不再用变化后的 `cwd` 改写它。
+3. 把当前会话标记为已经由真实用户激活；后续 `Stop` 只有看到该标记才允许入队。
 4. 获取该工作区的跨宿主 Agent 运行锁，避免 Claude Code、Claude Desktop、Codex 或插件的不同安装身份并发创建同一 Agent。
 5. 首次调用时创建或复用工作区 Agent 与 Conversation；后续用户消息直接恢复已有映射。
-6. 创建或恢复 Letta SDK Session，并再次传入当前工作区 `cwd`。
+6. 创建或恢复 Letta SDK Session，并再次传入稳定的 `workspaceRoot` 作为 `cwd`。
 7. 向同一 Conversation 发送 `<memory_context_request>`。
 8. 等待 Agent 使用 Letta 原生记忆能力检索。
 9. Agent 返回相关上下文时，以 `source="live-agent"` 注入当前编码助手；没有相关内容时静默返回。
@@ -230,15 +231,16 @@ sequenceDiagram
 编码助手完成一轮回答后，`Stop` Hook 不会在前台等待完整记忆处理。它会：
 
 1. 先确认该会话已经成功接收过非空 `UserPromptSubmit`；仅由宿主预加载、从未真实使用的会话直接跳过。
-2. 立即把当前转录位置、工作区、会话 ID 和最后一条助手消息写入待处理队列。
-3. 启动与宿主分离的后台 drain 进程。
-4. 后台进程读取尚未处理的转录增量。
-5. 按字符上限拆分批次，并去重已经处理过的事件。
-6. 恢复同一工作区 Agent 和当前 Conversation。
-7. 发送 `<coding_session_update>`。
-8. Letta Agent 自行判断是否更新记忆、更新哪些内容、使用何种作用域和保存位置。
-9. 成功后提交转录游标并删除待处理项。
-10. Agent 返回了下一轮可能有用的上下文时，保存一份有限的本地故障回退快照。
+2. 按 `session_id` 恢复首次绑定的 `workspaceRoot`，即使当前命令目录已经进入工作区子目录也不改变工作区身份。
+3. 立即把当前转录位置、稳定工作区根目录、会话 ID 和最后一条助手消息写入待处理队列。
+4. 启动与宿主分离的后台 drain 进程。
+5. 后台进程读取尚未处理的转录增量。
+6. 按字符上限拆分批次，并去重已经处理过的事件。
+7. 恢复同一工作区 Agent 和当前 Conversation。
+8. 发送 `<coding_session_update>`。
+9. Letta Agent 自行判断是否更新记忆、更新哪些内容、使用何种作用域和保存位置。
+10. 成功后提交转录游标并删除待处理项。
+11. Agent 返回了下一轮可能有用的上下文时，保存一份有限的本地故障回退快照。
 
 写入请求结构：
 
@@ -346,7 +348,7 @@ Agent 初始化锁、工作区运行锁和规范 Agent ID 引用位于默认的 
 - 描述。
 - 系统提示。
 - 发现标签。
-- 当前工作区 `cwd`。
+- 首条真实消息绑定的工作区根目录 `cwd`。
 - 用户显式配置的模型句柄；`auto` 时不覆盖 Letta 选择。
 
 插件不显式传 `memory`、`memfs`、`baseTools`、`allowedTools` 或 `skillSources`。相关默认行为由 Letta Agent SDK 和 Letta 决定。
@@ -357,17 +359,19 @@ Agent 初始化锁、工作区运行锁和规范 Agent ID 引用位于默认的 
 
 `cwd` 是 Letta SDK Session 的执行属性，不是 Agent 的永久属性，也不是记忆保存路径。
 
-插件在以下三个位置都显式传入规范化工作区绝对路径：
+插件在以下三个位置都显式传入首条真实消息锁定的规范化工作区根目录：
 
 - 创建工作区 Agent 时。
 - 为 Agent 新建 Conversation Session 时。
 - 恢复已有 Conversation Session 时。
 
-因此，插件发起的后台 Agent Session 会在当前编码工作区执行，例如：
+因此，插件发起的后台 Agent Session 会始终在该编码任务的工作区根目录执行，例如：
 
 ```text
 /Users/rainvice/Projects/rvaim-marketplace
 ```
+
+例如任务从上述目录开始，随后工具或命令进入 `plugins/letta-mem`，插件仍会使用 `/Users/rainvice/Projects/rvaim-marketplace` 作为 Agent 身份、Conversation 映射、`workspace_path` 和 SDK Session `cwd`。当前命令目录只属于任务的瞬时执行状态，不会创建另一个工作区 Agent。
 
 Letta App 底栏显示的 `~/Documents` 等目录，表示 Letta App 自己为前台聊天打开的运行 Session。App 在查看同一 Agent 或 Conversation 时会建立自己的前台 Session，所以该目录可以与插件后台 Session 的 `cwd` 不同。
 
@@ -443,7 +447,7 @@ Hook 入口是零第三方依赖的 `bin/bootstrap.cjs`。它会：
 | Hook | 前台行为 | 后台行为 | 主要日志 |
 | --- | --- | --- | --- |
 | `SessionStart` | 快速恢复本地会话状态 | 无；不连接 Letta，不创建 Agent 或 Conversation | 无 |
-| `UserPromptSubmit` | 激活真实会话，首次延迟创建或复用 Agent/Conversation，最多等待约 30 秒实时检索并注入相关记忆 | 触发一次遗留队列 drain | `memory-read-started`、`agent-created`、`agent-reused`、`memory-read-live`、`memory-read-empty`、`memory-read-timeout`、`memory-read-fallback` |
+| `UserPromptSubmit` | 首次固定工作区根目录并激活真实会话，延迟创建或复用 Agent/Conversation，最多等待约 30 秒实时检索并注入相关记忆 | 触发一次遗留队列 drain | `session-workspace-bound`、`session-workspace-migrated`、`memory-read-started`、`agent-created`、`agent-reused`、`memory-read-live`、`memory-read-empty`、`memory-read-timeout`、`memory-read-fallback` |
 | `PreToolUse` | 最多等待约 5 秒查询 Conversation 新消息 | 无 | `memory-read-conversation-sync`、`memory-read-conversation-sync-failed` |
 | `Stop` | 已激活会话快速写入持久待处理项；未激活会话跳过 | 派生进程处理转录增量并更新 Letta 记忆 | `memory-update-queued`、`memory-update-skipped-inactive`、`memory-updated`、`memory-update-failed` |
 
@@ -487,6 +491,7 @@ Codex 或 Claude Code 必须先信任这些 Hook。未信任时，宿主不会�
 runtime/<generation>/
 state/<server-namespace>/
 ├── agents/      # 仅兼容升级前的旧版 Agent ID 映射
+├── session-workspaces/ # session_id 到首次真实消息工作区根目录的稳定绑定
 ├── sessions/    # 宿主会话到 Conversation、激活标记、标题和游标的映射
 ├── contexts/    # 最后一次成功返回的有限故障回退快照
 ├── pending/     # 尚未成功处理的转录增量
@@ -509,6 +514,7 @@ logs/
 
 - 两处 `agents/` 都不保存 Agent 的记忆，只保存 ID；新版本只写共享协调目录。
 - `sessions/` 不保存完整 Conversation，只保存映射和游标。
+- `session-workspaces/` 只保存稳定工作区路径绑定，防止任务进入子目录后误建 Agent 或漏掉结束写入。
 - `contexts/` 不是正常读取源，只在实时 Letta 读取失败时有限回退。
 - `pending/` 是待发送转录队列，不是长期记忆。
 - 实际记忆仍完全存放在 Letta 决定的位置。
@@ -613,6 +619,7 @@ Claude Code 与 Codex 共用配置文件：
 一个正常的新会话通常会依次出现：
 
 ```text
+session-workspace-bound 或 session-workspace-migrated
 memory-read-started
 agent-created 或 agent-reused
 conversation-title-synced
@@ -651,7 +658,7 @@ Codex 标题来自本地任务索引；索引不可用时会使用用户问题�
 
 ### 为什么 Letta App 底部显示 `~/Documents`？
 
-那是 Letta App 自己打开的前台 Session 目录。插件每次创建或恢复后台 SDK Session 时仍会传入当前编码工作区 `cwd`。`cwd` 也不是记忆保存位置。
+那是 Letta App 自己打开的前台 Session 目录。插件每次创建或恢复后台 SDK Session 时仍会传入首条真实消息绑定的工作区根目录作为 `cwd`。`cwd` 也不是记忆保存位置。
 
 ### 为什么 Agent 存成了英文？
 
@@ -690,6 +697,12 @@ LETTA_MEM_DISABLED=1
 这只停止 Hook，不删除 Agent、Conversation、Letta 记忆或插件本地状态。
 
 ## 升级说明
+
+### 升级到 `2.6.1`
+
+- 首条非空 `UserPromptSubmit` 会固定 `session_id` 对应的工作区根目录；后续进入子目录不会切换 Agent 或 Conversation。
+- `PreToolUse` 和 `Stop` 会按 `session_id` 恢复该根目录，确保会话结束更新不会因为 `cwd` 漂移而被误判为未激活。
+- 升级前已经激活的会话会从现有状态恢复最早使用的工作区；Letta Agent、Conversation 和记忆不会被迁移或修改。
 
 ### 升级到 `2.6.0`
 

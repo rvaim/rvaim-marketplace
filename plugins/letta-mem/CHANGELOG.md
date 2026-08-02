@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2.6.1
+
+- 首条非空 `UserPromptSubmit` 现在会把规范化工作区根目录与 `sessionId` 稳定绑定；后续 Hook 不再用可能已经变化的当前 `cwd` 重新推导工作区身份。
+- 修复编码任务进入生成的子目录后，`Stop` 找不到原会话激活状态、跳过 `<coding_session_update>`，从而导致会话结束记忆没有写入 Letta 的问题。
+- `PreToolUse`、`Stop`、待处理队列、Agent/Conversation 恢复、SDK Session `cwd` 和提示中的 `workspace_path` 全部复用首次绑定的工作区根目录。
+- 兼容升级前已经激活但没有工作区绑定索引的会话；插件会从现有状态中选择最早激活的工作区并建立绑定，不迁移或修改 Letta 记忆。
+
 ## 2.6.0
 
 - 移除 `SessionStart` 的 Letta 后台预热；打开、恢复、扫描或预加载工作区时只恢复插件本地状态，不再查找或创建 Agent、Conversation。

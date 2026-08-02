@@ -59,6 +59,13 @@ export interface SessionState {
   lastSeenConversationMessageId?: string;
 }
 
+export interface SessionWorkspaceBinding {
+  version: 1;
+  sessionId: string;
+  workspacePath: string;
+  boundAt: string;
+}
+
 export interface AgentReference {
   version: 1;
   agentId: string;

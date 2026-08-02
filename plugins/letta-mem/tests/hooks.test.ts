@@ -1,5 +1,6 @@
 import {
   appendFileSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
   writeFileSync,
@@ -286,6 +287,83 @@ describe("后台记忆 Hook", () => {
       "memory-read-live",
       "session-live-read",
     );
+  });
+
+  it("进入子目录后仍以首次真实消息的工作区根目录结束写入", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "stable-workspace");
+    const childPath = join(workspacePath, "generated-app");
+    mkdirSync(childPath, { recursive: true });
+    const stableWorkspacePath = normalizeWorkspacePath(workspacePath);
+    const stableChildPath = normalizeWorkspacePath(childPath);
+    const transcriptPath = createTranscript(
+      config,
+      "请在当前工作区创建 generated-app",
+      "stable-workspace-transcript.jsonl",
+    );
+    const reading = createSession(
+      "conversation-stable-workspace",
+      "当前工作区已有相关约束",
+      "agent-stable-workspace",
+    );
+    const writing = createSession(
+      "conversation-stable-workspace",
+      "",
+      "agent-stable-workspace",
+    );
+    const createSessionMock = vi.fn(() => reading.session);
+    const resumeSessionMock = vi.fn(() => writing.session);
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-stable-workspace"),
+      createSession: createSessionMock,
+      resumeSession: resumeSessionMock,
+      agents: {
+        list: vi.fn(async () => []),
+      },
+    };
+    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
+    const log = vi.fn() as LogFunction;
+    const sessionId = "session-stable-workspace";
+
+    await handleInjectContext(config, {
+      session_id: sessionId,
+      cwd: workspacePath,
+      prompt: "创建子目录项目",
+    }, log, clientFactory);
+    await enqueueMemory(config, {
+      session_id: sessionId,
+      transcript_path: transcriptPath,
+      cwd: childPath,
+      hook_event_name: "Stop",
+    }, log);
+
+    expect(listPendingUpdates(config, true)).toHaveLength(1);
+    expect(listPendingUpdates(config, true)[0]?.workspacePath)
+      .toBe(stableWorkspacePath);
+    await handleDrainPending(config, log, clientFactory);
+
+    expect(createSessionMock).toHaveBeenCalledWith(
+      "agent-stable-workspace",
+      expect.objectContaining({ cwd: stableWorkspacePath }),
+    );
+    expect(resumeSessionMock).toHaveBeenCalledWith(
+      "conversation-stable-workspace",
+      expect.objectContaining({ cwd: stableWorkspacePath }),
+    );
+    expect(writing.sent).toHaveLength(1);
+    expect(writing.sent[0]).toContain("<coding_session_update>");
+    expect(writing.sent[0]).toContain(
+      `<workspace_path>${stableWorkspacePath}</workspace_path>`,
+    );
+    expect(writing.sent[0]).not.toContain(stableChildPath);
+    expect(loadSessionState(config, stableWorkspacePath, sessionId))
+      .toMatchObject({
+        agentId: "agent-stable-workspace",
+        conversationId: "conversation-stable-workspace",
+        lastProcessedLine: 0,
+      });
+    expect(loadSessionState(config, stableChildPath, sessionId))
+      .not.toHaveProperty("activatedAt");
   });
 
   it("发现同工作区多个 Agent 时稳定复用一个且不再新建", async () => {
@@ -593,7 +671,7 @@ describe("后台记忆 Hook", () => {
     expect(opened.close).toHaveBeenCalledOnce();
   });
 
-  it("相同 Claude 会话 ID 在不同工作区中创建不同 Agent", async () => {
+  it("不同 Claude 会话在不同工作区中创建不同 Agent", async () => {
     const config = createConfig();
     const firstWorkspace = join(config.dataDir, "first-workspace");
     const secondWorkspace = join(config.dataDir, "second-workspace");
@@ -630,13 +708,13 @@ describe("后台记忆 Hook", () => {
     const clientFactory = vi.fn(async () => client) as AgentClientFactory;
     const log = vi.fn() as LogFunction;
 
-    const workspaces: Array<[string, string]> = [
-      [firstWorkspace, firstTranscript],
-      [secondWorkspace, secondTranscript],
+    const workspaces: Array<[string, string, string]> = [
+      ["first-claude-session", firstWorkspace, firstTranscript],
+      ["second-claude-session", secondWorkspace, secondTranscript],
     ];
-    for (const [cwd, transcriptPath] of workspaces) {
+    for (const [sessionId, cwd, transcriptPath] of workspaces) {
       await handleUpdateMemory(config, {
-        session_id: "same-claude-session",
+        session_id: sessionId,
         transcript_path: transcriptPath,
         cwd,
       }, log, clientFactory);
@@ -664,12 +742,12 @@ describe("后台记忆 Hook", () => {
     expect(loadSessionState(
       config,
       firstWorkspace,
-      "same-claude-session",
+      "first-claude-session",
     ).agentId).toBe("agent-1");
     expect(loadSessionState(
       config,
       secondWorkspace,
-      "same-claude-session",
+      "second-claude-session",
     ).agentId).toBe("agent-2");
   });
 
@@ -1467,7 +1545,8 @@ describe("后台记忆 Hook", () => {
 
     const pending = listPendingUpdates(config, true);
     expect(pending).toHaveLength(1);
-    expect(pending[0]?.transcriptPath).toBe(transcriptPath);
+    expect(pending[0]?.transcriptPath)
+      .toBe(normalizeWorkspacePath(transcriptPath));
     expect(pending[0]?.transcriptEndLine).toBe(0);
   });
 
