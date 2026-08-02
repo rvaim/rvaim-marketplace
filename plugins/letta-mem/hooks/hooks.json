@@ -20,7 +20,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" inject-context",
             "timeout": 40,
-            "statusMessage": "正在向 Letta Agent 获取相关记忆"
+            "statusMessage": "正在读取 Letta 已准备的记忆指导"
           }
         ]
       }
@@ -32,7 +32,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" sync-context",
             "timeout": 10,
-            "statusMessage": "正在同步 Letta 后台上下文"
+            "statusMessage": "正在检查 Letta 最新记忆指导"
           }
         ]
       }

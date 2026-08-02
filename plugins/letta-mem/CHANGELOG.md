@@ -1,5 +1,16 @@
 # 变更日志
 
+## 2.7.0
+
+- 读取流程改为消费上一轮 `Stop` 已完成的下一轮指导；`UserPromptSubmit` 和 `PreToolUse` 不再向 Letta Agent 发送当前问题、检索请求或任何新提示词，也不等待新的模型推理。
+- `SessionStart` 继续保持纯本地，避免 Claude Desktop 预加载工作区时创建无效 Agent；第一条真实用户消息只负责固定工作区、激活会话和建立 Agent/Conversation 映射。
+- `Stop` 后台 Agent turn 同时负责使用 Letta 原生能力更新记忆，并在最终响应中准备下一轮编码助手需要的简短指导；没有有用指导时允许返回空内容。
+- 语言、作用域、安全边界和响应规则只保存在 Agent system prompt 中；每个 transcript 批次只发送会话数据和一句简短任务，不再重复注入完整策略。
+- 插件记录已完成最终 `assistant_message` 的 Agent、Conversation、消息 ID 和 revision；下一轮按消息 ID 精确读取，不再扫描或拼接任意新增 assistant 消息。
+- Agent 工具调用前的计划、分析、进度和记忆状态不会作为下一轮上下文；响应提取以最后一次工具调用后的最终 assistant 内容为结构边界，不进行英文文本过滤。
+- Claude Code、Claude Desktop 与 Codex 通过协调目录共享最新指导引用；本地正文快照仍只用于 Letta 读取失败时的有限故障回退，不是记忆数据库。
+- 新增跨宿主指导引用、`Stop` 到下一会话读取、前台零 `session.send()`、短批次提示和最终消息选择的回归测试。
+
 ## 2.6.2
 
 - SDK Session 现在显式提供自动工具审批回调，避免 `unrestricted` 模式下的短暂 `WAITING_ON_APPROVAL` 被 SDK 提前当成本轮结束。

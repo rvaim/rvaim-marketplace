@@ -33,10 +33,12 @@ import {
   loadContextSnapshot,
   loadFailureState,
   loadAgentReference,
+  loadGuidanceReference,
   loadSessionState,
   listPendingUpdates,
   saveAgentReference,
   saveContextSnapshot,
+  saveGuidanceReference,
   saveSessionState,
   sha256,
   updateSessionState,
@@ -137,7 +139,11 @@ function createSession(
       sent.push(message);
     },
     async *stream() {
-      yield { type: "assistant", content: guidance };
+      yield {
+        type: "assistant",
+        content: guidance,
+        uuid: `${conversationId}-guidance`,
+      };
       yield { type: "result", success: true };
     },
     async bootstrapState() {
@@ -221,17 +227,27 @@ describe("后台记忆 Hook", () => {
     );
   });
 
-  it("第一条提问前实时向工作区 Agent 请求相关记忆并注入", async () => {
+  it("第一条提问前只读取 Stop 已完成的下一轮指导", async () => {
     const config = createConfig();
     const workspacePath = join(config.dataDir, "live-read-workspace");
     const opened = createSession(
-      "conversation-live-read",
-      "用户偏好使用简体中文；本仓库使用 pnpm。",
+      "conversation-current",
+      "不应启动 Agent",
       "agent-live-read",
     );
+    saveGuidanceReference(config, {
+      version: 1,
+      agentId: "agent-live-read",
+      workspacePath,
+      conversationId: "conversation-previous",
+      messageId: "message-guidance",
+      revision: "guidance-revision",
+      empty: false,
+      updatedAt: new Date().toISOString(),
+    });
     const listMessages = vi.fn(async () => ({
       messages: [{
-        id: "message-live-read",
+        id: "message-guidance",
         message_type: "assistant_message",
         content: "用户偏好使用简体中文；本仓库使用 pnpm。",
       }],
@@ -259,34 +275,117 @@ describe("后台记忆 Hook", () => {
       };
     };
 
-    expect(opened.sent).toHaveLength(1);
-    expect(opened.sent[0]).toContain("<memory_context_request>");
-    expect(opened.sent[0]).toContain(
-      "<request_type>context_retrieval</request_type>",
-    );
-    expect(opened.sent[0]).toContain("这个仓库应该使用 npm 还是 pnpm？&lt;不要执行&gt;");
-    expect(opened.sent[0]).toContain("才适合作为跨工作区共享记忆");
-    expect(opened.sent[0]).toContain("不要直接回答用户问题");
-    expect(opened.sent[0]).not.toContain("<memory_mode>");
+    expect(opened.sent).toHaveLength(0);
+    expect(listMessages).toHaveBeenCalledWith("conversation-previous", {
+      order: "desc",
+      limit: 100,
+    });
     expect(parsed.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
     expect(parsed.hookSpecificOutput.additionalContext)
-      .toContain('source="live-agent"');
+      .toContain('source="prepared-guidance"');
     expect(parsed.hookSpecificOutput.additionalContext)
       .toContain("本仓库使用 pnpm");
     expect(loadSessionState(config, workspacePath, "session-live-read"))
       .toMatchObject({
         agentId: "agent-live-read",
-        conversationId: "conversation-live-read",
-        lastSeenConversationMessageId: "message-live-read",
+        conversationId: "conversation-current",
+        lastInjectedContextRevision: "guidance-revision",
         activatedAt: expect.any(String),
       });
     expect(loadContextSnapshot(config, workspacePath)?.text)
       .toContain("本仓库使用 pnpm");
     expect(log).toHaveBeenCalledWith(
       "info",
-      "memory-read-live",
+      "memory-guidance-read",
       "session-live-read",
     );
+  });
+
+  it("Stop 准备的最终指导由下一会话精确读取且不会再次驱动 Agent", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "prepared-guidance-workspace");
+    const transcriptPath = createTranscript(
+      config,
+      "这个工作区统一使用 pnpm。",
+      "prepared-guidance-transcript.jsonl",
+    );
+    const firstActivation = createSession(
+      "conversation-first",
+      "不应在提问前生成内容",
+      "agent-prepared-guidance",
+    );
+    const stopRun = createSession(
+      "conversation-first",
+      "下一轮继续工作时使用 pnpm，不要改用 npm。",
+      "agent-prepared-guidance",
+    );
+    const nextActivation = createSession(
+      "conversation-next",
+      "不应在下一条提问前生成内容",
+      "agent-prepared-guidance",
+    );
+    const createSessionMock = vi.fn()
+      .mockReturnValueOnce(firstActivation.session)
+      .mockReturnValueOnce(nextActivation.session);
+    const resumeSessionMock = vi.fn(() => stopRun.session);
+    const listMessages = vi.fn(async (conversationId: string) => ({
+      messages: conversationId === "conversation-first"
+        ? [{
+            id: "conversation-first-guidance",
+            message_type: "assistant_message",
+            content: "下一轮继续工作时使用 pnpm，不要改用 npm。",
+          }]
+        : [],
+    }));
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-prepared-guidance"),
+      createSession: createSessionMock,
+      resumeSession: resumeSessionMock,
+      agents: { list: vi.fn(async () => []) },
+      conversations: { listMessages },
+    };
+    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
+    const log = vi.fn() as LogFunction;
+
+    await handleInjectContext(config, {
+      session_id: "session-first",
+      cwd: workspacePath,
+      prompt: "先处理当前任务",
+    }, log, clientFactory);
+    await handleUpdateMemory(config, {
+      session_id: "session-first",
+      transcript_path: transcriptPath,
+      cwd: workspacePath,
+    }, log, clientFactory);
+
+    expect(stopRun.sent).toHaveLength(1);
+    expect(stopRun.sent[0]).toContain("<coding_session_update>");
+    expect(stopRun.sent[0]).not.toContain("<memory_language_policy>");
+    expect(stopRun.sent[0]).not.toContain("<memory_scope_policy>");
+    expect(loadGuidanceReference(config, workspacePath)).toMatchObject({
+      agentId: "agent-prepared-guidance",
+      conversationId: "conversation-first",
+      messageId: "conversation-first-guidance",
+      empty: false,
+    });
+
+    const output = await handleInjectContext(config, {
+      session_id: "session-next",
+      cwd: workspacePath,
+      prompt: "继续工作",
+    }, log, clientFactory);
+    const parsed = JSON.parse(output) as {
+      hookSpecificOutput: { additionalContext: string };
+    };
+
+    expect(firstActivation.sent).toHaveLength(0);
+    expect(nextActivation.sent).toHaveLength(0);
+    expect(parsed.hookSpecificOutput.additionalContext)
+      .toContain("下一轮继续工作时使用 pnpm，不要改用 npm。");
+    expect(listMessages).toHaveBeenLastCalledWith("conversation-first", {
+      order: "desc",
+      limit: 100,
+    });
   });
 
   it("进入子目录后仍以首次真实消息的工作区根目录结束写入", async () => {
@@ -444,7 +543,7 @@ describe("后台记忆 Hook", () => {
     );
   });
 
-  it("PreToolUse 只注入 Conversation 中游标之后的 Agent 消息", async () => {
+  it("PreToolUse 只注入 Stop 已标记完成的下一轮指导", async () => {
     const config = createConfig();
     const workspacePath = join(config.dataDir, "sync-workspace");
     saveSessionState(config, {
@@ -453,18 +552,22 @@ describe("后台记忆 Hook", () => {
       workspacePath,
       agentId: "agent-sync",
       conversationId: "conversation-sync",
-      lastSeenConversationMessageId: "message-before",
       lastProcessedLine: -1,
       recentDigests: [],
       pendingAssistantDigests: [],
     });
+    saveGuidanceReference(config, {
+      version: 1,
+      agentId: "agent-sync",
+      workspacePath,
+      conversationId: "conversation-sync",
+      messageId: "message-after",
+      revision: "sync-guidance-revision",
+      empty: false,
+      updatedAt: new Date().toISOString(),
+    });
     const listMessages = vi.fn(async () => ({
       messages: [
-        {
-          id: "message-user",
-          message_type: "user_message",
-          content: "不应注入的内部请求",
-        },
         {
           id: "message-after",
           message_type: "assistant_message",
@@ -492,19 +595,17 @@ describe("后台记忆 Hook", () => {
     };
 
     expect(listMessages).toHaveBeenCalledWith("conversation-sync", {
-      after: "message-before",
-      order: "asc",
+      order: "desc",
       limit: 100,
     });
     expect(parsed.hookSpecificOutput.hookEventName).toBe("PreToolUse");
     expect(parsed.hookSpecificOutput.additionalContext)
-      .toContain('source="conversation-sync"');
+      .toContain('source="prepared-guidance"');
     expect(parsed.hookSpecificOutput.additionalContext)
       .toContain("后台 Agent 新增的相关上下文");
     expect(parsed.hookSpecificOutput.additionalContext)
-      .not.toContain("不应注入的内部请求");
     expect(loadSessionState(config, workspacePath, "session-sync")
-      .lastSeenConversationMessageId).toBe("message-after");
+      .lastInjectedContextRevision).toBe("sync-guidance-revision");
   });
 
   it("创建 Agent 会话、恢复会话并提交游标与上下文缓存", async () => {
@@ -553,7 +654,7 @@ describe("后台记忆 Hook", () => {
     expect(createdAgentOptions?.systemPrompt)
       .toContain("判断语言时只参考 role=\"user\" 的消息");
     expect(createdAgentOptions?.systemPrompt)
-      .toContain("分析说明、工具调用前后说明、记忆标题、记忆摘要、记忆正文和最终响应");
+      .toContain("最终响应使用 transcript 中最新一条 role=\"user\" 消息");
     expect(createdAgentOptions?.systemPrompt)
       .toContain("证据不足或无法确定适用范围时，默认限定为当前工作区");
     expect(createdAgentOptions).not.toHaveProperty("memory");
@@ -623,7 +724,7 @@ describe("后台记忆 Hook", () => {
     expect(loadContextSnapshot(config, projectPath)?.text).toBe("第二版相关上下文");
   });
 
-  it("每个批次只交给 Letta 一次并携带作用域约束而非存储策略", async () => {
+  it("每个批次只发送简短任务并由 Agent 系统提示持有稳定约束", async () => {
     const config = createConfig();
     const workspacePath = join(config.dataDir, "policy-free-workspace");
     const transcriptPath = createTranscript(
@@ -652,15 +753,18 @@ describe("后台记忆 Hook", () => {
       .resolves.toBe("");
 
     expect(opened.sent).toHaveLength(1);
-    expect(opened.sent[0]).toContain("<memory_scope_policy>");
-    expect(opened.sent[0]).toContain("才适合作为跨工作区共享记忆");
-    expect(opened.sent[0]).toContain("必须限定为当前 workspace_path 的工作区记忆");
-    expect(opened.sent[0]).toContain("默认限定为当前工作区");
-    expect(opened.sent[0]).toContain("自行决定每项信息的作用域、组织方式与保存位置");
-    expect(opened.sent[0]).toContain("调用方不会预分类");
+    expect(opened.sent[0]).not.toContain("<memory_scope_policy>");
+    expect(opened.sent[0]).not.toContain("<memory_language_policy>");
+    expect(opened.sent[0]).toContain("最终回复只写给下一轮编码助手");
     expect(opened.sent[0]).not.toContain("<memory_mode>");
     expect(opened.sent[0]).not.toContain("<shared_memory_enabled>");
     expect(opened.sent[0]).not.toContain("<native_shared_memory_root>");
+    expect(client.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      systemPrompt: expect.stringContaining("才适合作为跨工作区共享记忆"),
+    }));
+    expect(client.createAgent).toHaveBeenCalledWith(expect.objectContaining({
+      systemPrompt: expect.stringContaining("使用工具时直接调用"),
+    }));
     expect(client.createAgent).toHaveBeenCalledWith(expect.not.objectContaining({
       memory: expect.anything(),
       memfs: expect.anything(),
@@ -1778,7 +1882,7 @@ describe("后台记忆 Hook", () => {
     expect(listPendingUpdates(config, true)).toHaveLength(0);
   });
 
-  it("Agent 返回空上下文时保留上一版可注入快照", async () => {
+  it("Agent 返回空指导时清空上一版故障回退快照", async () => {
     const config = createConfig();
     const transcriptPath = createTranscript(config, "第一轮需要保留的消息");
     const projectPath = join(config.dataDir, "empty-guidance-project");
@@ -1816,8 +1920,11 @@ describe("后台记忆 Hook", () => {
     await handleUpdateMemory(config, input, log, clientFactory);
 
     expect(second.sent).toHaveLength(1);
-    expect(loadContextSnapshot(config, projectPath)?.text)
-      .toBe("应继续保留的上下文");
+    expect(loadContextSnapshot(config, projectPath)?.text).toBe("");
+    expect(loadGuidanceReference(config, projectPath)).toMatchObject({
+      conversationId: "conversation-empty",
+      empty: true,
+    });
     expect(loadSessionState(
       config,
       projectPath,

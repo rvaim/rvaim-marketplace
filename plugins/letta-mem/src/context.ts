@@ -42,7 +42,9 @@ function escapeXmlWithin(value: string, limit: number): string {
   return truncated ? `${output}${TRUNCATION_MARK}` : output;
 }
 
-export type ContextSource = "live-agent" | "conversation-sync" | "local-fallback";
+export type ContextSource =
+  | "prepared-guidance"
+  | "local-fallback";
 
 export function formatContextForHook(
   context: string,

@@ -18,10 +18,12 @@ import {
   bindSessionWorkspace,
   findActivatedSessionWorkspace,
   loadAgentReference,
+  loadGuidanceReference,
   loadSessionWorkspaceBinding,
   loadSharedAgentReference,
   listPendingUpdates,
   saveAgentReference,
+  saveGuidanceReference,
   savePendingUpdate,
   saveSessionState,
   sha256,
@@ -168,6 +170,36 @@ describe("本地状态", () => {
     expect(readdirSync(lockPath)).toHaveLength(1);
     releaseNew?.();
     expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("不同宿主数据目录共享下一轮指导的 Letta 消息引用", () => {
+    const coordinationDir = mkdtempSync(join(tmpdir(), "letta-mem-guidance-"));
+    temporaryDirectories.push(coordinationDir);
+    const first = createConfig({ coordinationDir });
+    const second = createConfig({ coordinationDir });
+    const workspacePath = "/tmp/shared-guidance-workspace";
+
+    saveGuidanceReference(first, {
+      version: 1,
+      agentId: "agent-guidance",
+      workspacePath,
+      conversationId: "conversation-guidance",
+      messageId: "message-guidance",
+      revision: "revision-guidance",
+      empty: false,
+      updatedAt: "2026-08-02T00:00:00.000Z",
+    });
+
+    expect(loadGuidanceReference(second, workspacePath)).toEqual({
+      version: 1,
+      agentId: "agent-guidance",
+      workspacePath,
+      conversationId: "conversation-guidance",
+      messageId: "message-guidance",
+      revision: "revision-guidance",
+      empty: false,
+      updatedAt: "2026-08-02T00:00:00.000Z",
+    });
   });
 
   it("状态目录和队列文件使用私有权限", () => {

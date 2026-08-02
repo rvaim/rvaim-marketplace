@@ -19,6 +19,7 @@ import type {
   AgentReference,
   ContextSnapshot,
   FailureState,
+  GuidanceReference,
   PendingUpdate,
   RuntimeConfig,
   SessionState,
@@ -388,7 +389,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
-    definitionVersion: 6,
+    definitionVersion: 7,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }
@@ -437,6 +438,47 @@ export function saveContextSnapshot(
   snapshot: ContextSnapshot,
 ): void {
   writeJsonAtomic(contextPath(config, snapshot.workspacePath), snapshot);
+}
+
+function guidanceReferencePath(
+  config: RuntimeConfig,
+  workspacePath: string,
+): string {
+  return join(
+    coordinationNamespaceDir(config),
+    "guidance",
+    `${hash(workspacePath)}.json`,
+  );
+}
+
+export function loadGuidanceReference(
+  config: RuntimeConfig,
+  workspacePath: string,
+): GuidanceReference | null {
+  const value = readJson<GuidanceReference>(
+    guidanceReferencePath(config, workspacePath),
+  );
+  if (
+    value?.version !== 1
+    || value.workspacePath !== workspacePath
+    || typeof value.agentId !== "string"
+    || typeof value.conversationId !== "string"
+    || typeof value.revision !== "string"
+    || typeof value.empty !== "boolean"
+    || typeof value.updatedAt !== "string"
+    || (!value.empty && typeof value.messageId !== "string")
+  ) return null;
+  return value;
+}
+
+export function saveGuidanceReference(
+  config: RuntimeConfig,
+  reference: GuidanceReference,
+): void {
+  writeJsonAtomic(
+    guidanceReferencePath(config, reference.workspacePath),
+    reference,
+  );
 }
 
 export function loadFailureState(config: RuntimeConfig): FailureState | null {

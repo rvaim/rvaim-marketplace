@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe("转录增量读取", () => {
-  it("更新任务只按用户消息语言保存中文或英文记忆", () => {
+  it("更新任务只携带会话增量而不重复注入稳定语言规则", () => {
     const formatted = formatTranscriptForAgent(
       "language-session",
       "/workspace",
@@ -55,13 +55,11 @@ describe("转录增量读取", () => {
       ],
     );
 
-    expect(formatted).toContain("判断语言时只参考 role=\"user\" 的消息");
-    expect(formatted).toContain("用户用简体中文表达的事实用简体中文保存");
-    expect(formatted).toContain("用户用英文表达的事实用英文保存");
-    expect(formatted).toContain("不得跟随助手、系统、工具输出");
+    expect(formatted).not.toContain("<memory_language_policy>");
+    expect(formatted).not.toContain("<memory_scope_policy>");
+    expect(formatted).toContain("最终回复只写给下一轮编码助手");
     expect(formatted).not.toContain("<memory_mode>");
     expect(formatted).not.toContain("<shared_memory_enabled>");
-    expect(formatted).toContain("<memory_scope_policy>");
     expect(formatted).toContain("请记住这个架构决定。");
     expect(formatted).toContain("Keep this preference in English.");
   });
@@ -79,14 +77,9 @@ describe("转录增量读取", () => {
     );
 
     expect(formatted).toContain("/workspace/&lt;one&gt;");
-    expect(formatted).toContain("自行决定每项信息的作用域、组织方式与保存位置");
-    expect(formatted).toContain("才适合作为跨工作区共享记忆");
-    expect(formatted).toContain("必须限定为当前 workspace_path 的工作区记忆");
-    expect(formatted).toContain("拆分其作用域");
-    expect(formatted).toContain("默认限定为当前工作区");
-    expect(formatted).toContain("不得把其他工作区的项目事实");
-    expect(formatted).toContain("调用方不会预分类");
-    expect(formatted).toContain("不指定、创建或维护任何存储机制");
+    expect(formatted).toContain("自主更新有长期价值的记忆");
+    expect(formatted).toContain("最终回复只写给下一轮编码助手");
+    expect(formatted).not.toContain("<memory_scope_policy>");
     expect(formatted).not.toContain("<memory_mode>");
     expect(formatted).not.toContain("<shared_memory_enabled>");
     expect(formatted).not.toContain("<native_shared_memory_root>");

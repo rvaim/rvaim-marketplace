@@ -84,6 +84,17 @@ export interface ContextSnapshot {
   text: string;
 }
 
+export interface GuidanceReference {
+  version: 1;
+  agentId: string;
+  workspacePath: string;
+  conversationId: string;
+  messageId?: string;
+  revision: string;
+  empty: boolean;
+  updatedAt: string;
+}
+
 export interface FailureState {
   version: 1;
   failures: number;

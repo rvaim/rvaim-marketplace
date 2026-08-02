@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   agentClientOptions,
   sendAgentUpdate,
+  sendAgentUpdateWithResult,
 } from "../src/letta.js";
 import type { AgentSession } from "../src/letta.js";
 import type { RuntimeConfig } from "../src/types.js";
@@ -86,6 +87,11 @@ describe("Letta Agent 流式响应", () => {
       send: vi.fn(async () => {}),
       async *stream() {
         yield {
+          type: "assistant",
+          content: "我先检查记忆。",
+          uuid: "message-process",
+        };
+        yield {
           type: "tool_call",
           toolCallId: "memory-call-1",
           toolName: "memory",
@@ -96,7 +102,11 @@ describe("Letta Agent 流式响应", () => {
           content: "记忆已更新",
           isError: false,
         };
-        yield { type: "assistant", content: "下一轮需要的上下文" };
+        yield {
+          type: "assistant",
+          content: "下一轮需要的上下文",
+          uuid: "message-guidance",
+        };
         yield { type: "result", success: true, stopReason: "end_turn" };
       },
       async bootstrapState() {
@@ -108,8 +118,50 @@ describe("Letta Agent 流式响应", () => {
       close: vi.fn(),
     };
 
-    await expect(sendAgentUpdate(session, "测试写记忆"))
-      .resolves.toBe("下一轮需要的上下文");
+    await expect(sendAgentUpdateWithResult(session, "测试写记忆"))
+      .resolves.toEqual({
+        guidance: "下一轮需要的上下文",
+        messageId: "message-guidance",
+      });
+  });
+
+  it("工具调用后没有最终 assistant 消息时不使用聚合结果冒充指导", async () => {
+    const session: AgentSession = {
+      send: vi.fn(async () => {}),
+      async *stream() {
+        yield {
+          type: "assistant",
+          content: "我先检查并更新记忆。",
+          uuid: "message-process",
+        };
+        yield {
+          type: "tool_call",
+          toolCallId: "memory-call-no-guidance",
+          toolName: "memory",
+        };
+        yield {
+          type: "tool_result",
+          toolCallId: "memory-call-no-guidance",
+          isError: false,
+        };
+        yield {
+          type: "result",
+          success: true,
+          stopReason: "end_turn",
+          result: "我先检查并更新记忆。记忆已经更新完成。",
+        };
+      },
+      async bootstrapState() {
+        return { agentId: "agent-test", conversationId: "conversation-test" };
+      },
+      async getDeviceStatus() {
+        return { isProcessing: false, pendingControlRequests: [] };
+      },
+      close: vi.fn(),
+    };
+
+    await expect(sendAgentUpdateWithResult(session, "测试写记忆"))
+      .resolves.toEqual({ guidance: "" });
   });
 
   it("SDK 把待审批误报为成功时仍判定本轮失败", async () => {
