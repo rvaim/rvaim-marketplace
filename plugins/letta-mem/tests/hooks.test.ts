@@ -7,14 +7,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { normalizeWorkspacePath } from "../src/context.js";
 import {
   handleDrainPending,
-  handleEnqueueMemory,
+  handleEnqueueMemory as enqueueMemory,
   handleInjectContext,
   handlePrepareSession,
   handleSessionStart,
   handleSyncContext,
-  handleUpdateMemory,
+  handleUpdateMemory as updateMemory,
 } from "../src/hooks.js";
 import type {
   AgentClient,
@@ -37,6 +38,7 @@ import {
   saveContextSnapshot,
   saveSessionState,
   sha256,
+  updateSessionState,
 } from "../src/state.js";
 import type {
   LogFunction,
@@ -54,12 +56,51 @@ function createConfig(): RuntimeConfig {
     autoStartServer: false,
     model: "auto",
     dataDir,
+    coordinationDir: join(dataDir, "coordination"),
     namespace: "hook-tests",
     requestTimeoutMs: 1_000,
     maxContextChars: 8_000,
     maxBatchChars: 80_000,
     disabled: false,
   };
+}
+
+async function activateSession(
+  config: RuntimeConfig,
+  input: { session_id?: string; cwd?: string },
+): Promise<void> {
+  const sessionId = input.session_id?.trim();
+  if (!sessionId) return;
+  const workspacePath = normalizeWorkspacePath(input.cwd);
+  await updateSessionState(
+    config,
+    workspacePath,
+    sessionId,
+    (state) => ({
+      ...state,
+      activatedAt: state.activatedAt ?? new Date().toISOString(),
+    }),
+    2_000,
+  );
+}
+
+async function handleEnqueueMemory(
+  config: RuntimeConfig,
+  input: Parameters<typeof enqueueMemory>[1],
+  log: LogFunction,
+): Promise<string> {
+  await activateSession(config, input);
+  return enqueueMemory(config, input, log);
+}
+
+async function handleUpdateMemory(
+  config: RuntimeConfig,
+  input: Parameters<typeof updateMemory>[1],
+  log: LogFunction,
+  clientFactory?: AgentClientFactory,
+): Promise<string> {
+  await activateSession(config, input);
+  return updateMemory(config, input, log, clientFactory);
 }
 
 function createTranscript(
@@ -129,55 +170,54 @@ afterEach(() => {
 });
 
 describe("后台记忆 Hook", () => {
-  it("SessionStart 后台准备工作区 Agent 和 Conversation 但不发送记忆请求", async () => {
+  it("SessionStart 兼容准备步骤不连接 Letta 或创建 Agent", async () => {
     const config = createConfig();
     const workspacePath = join(config.dataDir, "prepared-workspace");
-    const opened = createSession(
-      "conversation-prepared",
-      "不应发送任何消息",
-      "agent-prepared",
-    );
-    const createSessionMock = vi.fn(() => opened.session);
-    const updateConversation = vi.fn(async () => ({}));
-    const client: AgentClient = {
-      createAgent: vi.fn(async () => "agent-prepared"),
-      createSession: createSessionMock,
-      resumeSession: vi.fn(() => opened.session),
-      agents: {
-        list: vi.fn(async () => []),
-      },
-      conversations: {
-        update: updateConversation,
-        listMessages: vi.fn(async () => ({ messages: [] })),
-      },
-    };
+    const clientFactory = vi.fn();
+    const log = vi.fn() as LogFunction;
 
     await expect(handlePrepareSession(config, {
       session_id: "session-prepared",
       cwd: workspacePath,
       thread_title: "优化 Letta 记忆插件",
-    }, vi.fn() as LogFunction, vi.fn(async () => client) as AgentClientFactory))
+    }, log, clientFactory as AgentClientFactory))
       .resolves.toBe("");
 
-    expect(createSessionMock).toHaveBeenCalledWith(
-      "agent-prepared",
-      expect.objectContaining({ cwd: workspacePath }),
-    );
-    expect(opened.sent).toHaveLength(0);
-    expect(opened.close).toHaveBeenCalledOnce();
-    expect(updateConversation).toHaveBeenCalledWith(
-      "conversation-prepared",
-      {
-        summary: "优化 Letta 记忆插件",
-      },
-    );
+    expect(clientFactory).not.toHaveBeenCalled();
     expect(loadSessionState(config, workspacePath, "session-prepared"))
-      .toMatchObject({
-        agentId: "agent-prepared",
-        conversationId: "conversation-prepared",
-        conversationTitle: "优化 Letta 记忆插件",
-        conversationTitleSource: "hook",
-      });
+      .not.toHaveProperty("agentId");
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "session-prepare-skipped-awaiting-prompt",
+      "session-prepared",
+    );
+  });
+
+  it("只有 SessionStart 的未使用会话在 Stop 时不会创建待写队列", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "inactive-workspace");
+    const transcriptPath = createTranscript(config, "历史会话中的旧消息");
+    const log = vi.fn() as LogFunction;
+
+    await handleSessionStart(config, {
+      session_id: "session-inactive",
+      transcript_path: transcriptPath,
+      cwd: workspacePath,
+      source: "startup",
+    });
+    await enqueueMemory(config, {
+      session_id: "session-inactive",
+      transcript_path: transcriptPath,
+      cwd: workspacePath,
+      hook_event_name: "Stop",
+    }, log);
+
+    expect(listPendingUpdates(config, true)).toHaveLength(0);
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "memory-update-skipped-inactive",
+      "session-inactive",
+    );
   });
 
   it("第一条提问前实时向工作区 Agent 请求相关记忆并注入", async () => {
@@ -237,6 +277,7 @@ describe("后台记忆 Hook", () => {
         agentId: "agent-live-read",
         conversationId: "conversation-live-read",
         lastSeenConversationMessageId: "message-live-read",
+        activatedAt: expect.any(String),
       });
     expect(loadContextSnapshot(config, workspacePath)?.text)
       .toContain("本仓库使用 pnpm");
@@ -244,6 +285,49 @@ describe("后台记忆 Hook", () => {
       "info",
       "memory-read-live",
       "session-live-read",
+    );
+  });
+
+  it("发现同工作区多个 Agent 时稳定复用一个且不再新建", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "duplicate-agent-workspace");
+    const opened = createSession(
+      "conversation-canonical",
+      "已有工作区记忆",
+      "agent-a",
+    );
+    const createAgent = vi.fn(async () => "agent-new");
+    const createSessionMock = vi.fn(() => opened.session);
+    const updateAgent = vi.fn(async (agentId: string) => ({ id: agentId }));
+    const client: AgentClient = {
+      createAgent,
+      createSession: createSessionMock,
+      resumeSession: vi.fn(() => opened.session),
+      agents: {
+        list: vi.fn(async (options) => [
+          { id: "agent-z", tags: options.tags },
+          { id: "agent-a", tags: options.tags },
+        ]),
+        update: updateAgent,
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await handleInjectContext(config, {
+      session_id: "session-canonical",
+      cwd: workspacePath,
+      prompt: "读取已有记忆",
+    }, log, vi.fn(async () => client) as AgentClientFactory);
+
+    expect(createAgent).not.toHaveBeenCalled();
+    expect(createSessionMock).toHaveBeenCalledWith(
+      "agent-a",
+      expect.objectContaining({ cwd: workspacePath }),
+    );
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "agent-duplicates-detected",
+      "2:agent-a",
     );
   });
 

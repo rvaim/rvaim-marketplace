@@ -90,6 +90,14 @@ function sharedConfigPath(env: NodeJS.ProcessEnv): string {
   return isAbsolute(configured) ? configured : resolve(configured);
 }
 
+function normalizeLocalPath(value: string): string {
+  if (value === "~") return homedir();
+  if (value.startsWith("~/") || value.startsWith("~\\")) {
+    return join(homedir(), value.slice(2));
+  }
+  return isAbsolute(value) ? value : resolve(value);
+}
+
 function readSharedConfig(env: NodeJS.ProcessEnv): SharedConfigFile {
   const path = sharedConfigPath(env);
   if (!existsSync(path)) return {};
@@ -143,6 +151,9 @@ export function readRuntimeConfig(
     env.LETTA_MEM_DATA_DIR,
   )
     ?? join(homedir(), ".letta-mem", "data", "development");
+  const coordinationDir = normalizeLocalPath(firstNonEmpty(
+    env.LETTA_MEM_COORDINATION_DIR,
+  ) ?? join(homedir(), ".letta-mem", "coordination"));
 
   return {
     serverUrl,
@@ -150,6 +161,7 @@ export function readRuntimeConfig(
     autoStartServer,
     model,
     dataDir,
+    coordinationDir,
     namespace: namespaceFor(serverUrl, authToken),
     requestTimeoutMs: parsePositiveInteger(
       env.LETTA_MEM_REQUEST_TIMEOUT_MS,

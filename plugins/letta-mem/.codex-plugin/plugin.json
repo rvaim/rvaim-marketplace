@@ -1,7 +1,7 @@
 {
   "name": "letta-mem",
-  "version": "2.5.1+codex.20260801200515",
-  "description": "将 Codex 会话与记忆作用域约束交给 Letta Agent，由 Letta 原生能力自主管理持久记忆。",
+  "version": "2.6.0+codex.20260802074659",
+  "description": "\u5c06 Codex \u4f1a\u8bdd\u4e0e\u8bb0\u5fc6\u4f5c\u7528\u57df\u7ea6\u675f\u4ea4\u7ed9 Letta Agent\uff0c\u7531 Letta \u539f\u751f\u80fd\u529b\u81ea\u4e3b\u7ba1\u7406\u6301\u4e45\u8bb0\u5fc6\u3002",
   "author": {
     "name": "rvaim",
     "url": "https://github.com/rvaim"
@@ -19,8 +19,8 @@
   ],
   "interface": {
     "displayName": "Letta Mem",
-    "shortDescription": "由 Letta Agent 区分共享与工作区记忆",
-    "longDescription": "监听 Codex 对话，把会话增量、工作区路径与记忆作用域约束交给对应的 Letta Agent；Agent 自行区分共享记忆与工作区记忆，并由 Letta 决定本地或云端的实际存储方式。",
+    "shortDescription": "\u7531 Letta Agent \u533a\u5206\u5171\u4eab\u4e0e\u5de5\u4f5c\u533a\u8bb0\u5fc6",
+    "longDescription": "\u76d1\u542c Codex \u5bf9\u8bdd\uff0c\u628a\u4f1a\u8bdd\u589e\u91cf\u3001\u5de5\u4f5c\u533a\u8def\u5f84\u4e0e\u8bb0\u5fc6\u4f5c\u7528\u57df\u7ea6\u675f\u4ea4\u7ed9\u5bf9\u5e94\u7684 Letta Agent\uff1bAgent \u81ea\u884c\u533a\u5206\u5171\u4eab\u8bb0\u5fc6\u4e0e\u5de5\u4f5c\u533a\u8bb0\u5fc6\uff0c\u5e76\u7531 Letta \u51b3\u5b9a\u672c\u5730\u6216\u4e91\u7aef\u7684\u5b9e\u9645\u5b58\u50a8\u65b9\u5f0f\u3002",
     "developerName": "rvaim",
     "category": "Productivity",
     "capabilities": [

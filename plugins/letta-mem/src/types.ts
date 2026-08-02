@@ -27,6 +27,7 @@ export interface RuntimeConfig {
   autoStartServer: boolean;
   model: string;
   dataDir: string;
+  coordinationDir: string;
   namespace: string;
   requestTimeoutMs: number;
   maxContextChars: number;
@@ -50,6 +51,7 @@ export interface SessionState {
   conversationId?: string;
   conversationTitle?: string;
   conversationTitleSource?: "hook" | "codex" | "prompt";
+  activatedAt?: string;
   lastProcessedLine: number;
   recentDigests: string[];
   pendingAssistantDigests?: string[];

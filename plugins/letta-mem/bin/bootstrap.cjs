@@ -477,6 +477,7 @@ async function main() {
     } else if (output) {
       log("context-output-too-large");
     }
+    if (action === "inject-context") startBackgroundDrain();
     return;
   }
 

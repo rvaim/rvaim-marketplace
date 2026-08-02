@@ -4,7 +4,7 @@
 
 它把当前问题、可见会话增量、工作区路径以及记忆约束交给 Letta Agent；哪些内容值得记住、属于共享记忆还是工作区记忆、具体保存到哪里，全部由 Letta Agent 和 Letta 当前提供的原生记忆能力决定。
 
-当前版本：`2.5.1`。
+当前版本：`2.6.0`。
 
 ## 一句话架构
 
@@ -25,7 +25,8 @@ Letta Agent
 
 - 每个规范化工作区对应一个可复用的 Letta Agent。
 - 每个 Claude Code 或 Codex 会话对应该 Agent 下的一条 Letta Conversation。
-- 新会话启动时在后台预热 Agent 和 Conversation。
+- `SessionStart` 只恢复插件本地会话状态，不连接 Letta，也不创建 Agent 或 Conversation。
+- 工作区第一次收到真实用户问题时才创建或复用 Agent 和 Conversation。
 - 第一条以及后续每条用户问题提交前，实时询问 Letta Agent 是否有相关记忆。
 - 把 Letta 返回的上下文作为隐藏的 Hook 上下文注入编码助手。
 - 在工具调用前同步 Letta Conversation 中稍后完成的 Agent 消息。
@@ -36,7 +37,7 @@ Letta Agent
 - 约束 Agent 使用产生事实的用户消息语言保存记忆，并使用当前用户语言完成分析与返回。
 - 约束 Agent 自行区分跨工作区共享信息与当前工作区专属信息。
 - 默认使用 Letta Agent SDK 管理 App Server 生命周期，也支持连接用户管理的 App Server。
-- Claude Code 与 Codex 共用 `~/.letta-mem/config.json`，但各自保留独立的插件运行队列和游标。
+- Claude Code 与 Codex 共用 `~/.letta-mem/config.json` 和跨宿主 Agent 协调目录，但各自保留独立的插件运行队列和会话游标。
 
 ## 核心设计原则
 
@@ -109,10 +110,11 @@ sequenceDiagram
 
     H->>P: SessionStart
     P-->>H: 立即完成本地状态恢复
-    P->>A: 后台创建或恢复 Agent 与 Conversation
 
     U->>H: 第一条用户问题
     H->>P: UserPromptSubmit
+    P->>P: 标记会话已由真实用户激活
+    P->>A: 创建或复用工作区 Agent 与 Conversation
     P->>A: memory_context_request
     A->>M: 自主检索相关共享或工作区记忆
     M-->>A: 相关记忆
@@ -133,31 +135,29 @@ sequenceDiagram
     P->>P: 保存有限故障回退快照并提交转录游标
 ```
 
-### 1. `SessionStart`：恢复状态并后台预热
+### 1. `SessionStart`：只恢复本地状态
 
 新建、恢复、清空、压缩或派生会话时，宿主触发 `SessionStart`。
 
-插件会执行两条相互独立的路径：
+插件只在前台快速创建或恢复本地会话状态，不初始化 SDK，不连接 Letta，不查找或创建工作区 Agent，也不创建 Conversation。
 
-1. 在前台快速创建或恢复本地会话状态，不连接 Letta。
-2. 派生后台进程，安装或复用 SDK 运行时，解析工作区 Agent，并创建或恢复当前 Conversation。
-
-预热只建立映射，不发送记忆读写请求。它的目的，是降低第一条用户问题实时检索时的初始化开销。
-
-如果预热仍未完成，`UserPromptSubmit` 会自行完成同样的 Agent 与 Conversation 恢复，因此第一句话不依赖预热一定成功。
+这样，Claude Code 或 Claude Desktop 仅仅扫描、恢复或预加载历史工作区时，不会在 Letta 中留下从未真正使用过的 Agent。真正的 Letta 激活点是该会话第一次收到非空 `UserPromptSubmit`。
 
 ### 2. `UserPromptSubmit`：作答前实时读取记忆
 
 用户提交问题时，插件会：
 
 1. 取得 `session_id`、当前 `cwd` 和用户问题。
-2. 把 `cwd` 规范化为真实绝对路径，用它定位工作区 Agent。
-3. 获取该工作区的 Agent 运行锁，避免同一 Agent 同时读写导致 Conversation 或记忆冲突。
-4. 创建或恢复 Letta SDK Session，并再次传入当前工作区 `cwd`。
-5. 向同一 Conversation 发送 `<memory_context_request>`。
-6. 等待 Agent 使用 Letta 原生记忆能力检索。
-7. Agent 返回相关上下文时，以 `source="live-agent"` 注入当前编码助手。
-8. Agent 判断没有相关内容时静默返回，不注入空提示。
+2. 把当前会话标记为已经由真实用户激活；后续 `Stop` 只有看到该标记才允许入队。
+3. 把 `cwd` 规范化为真实绝对路径，用它定位工作区 Agent。
+4. 获取该工作区的跨宿主 Agent 运行锁，避免 Claude Code、Claude Desktop、Codex 或插件的不同安装身份并发创建同一 Agent。
+5. 首次调用时创建或复用工作区 Agent 与 Conversation；后续用户消息直接恢复已有映射。
+6. 创建或恢复 Letta SDK Session，并再次传入当前工作区 `cwd`。
+7. 向同一 Conversation 发送 `<memory_context_request>`。
+8. 等待 Agent 使用 Letta 原生记忆能力检索。
+9. Agent 返回相关上下文时，以 `source="live-agent"` 注入当前编码助手；没有相关内容时静默返回。
+
+`UserPromptSubmit` 会在每条用户消息提交时触发，但“创建 Agent”只会在该工作区尚无可复用 Agent 时发生。第一条消息不会漏掉记忆读取：Agent/Conversation 的延迟初始化和实时读取在同一次 Hook 中完成。
 
 实时读取请求结构：
 
@@ -229,15 +229,16 @@ sequenceDiagram
 
 编码助手完成一轮回答后，`Stop` Hook 不会在前台等待完整记忆处理。它会：
 
-1. 立即把当前转录位置、工作区、会话 ID 和最后一条助手消息写入待处理队列。
-2. 启动与宿主分离的后台 drain 进程。
-3. 后台进程读取尚未处理的转录增量。
-4. 按字符上限拆分批次，并去重已经处理过的事件。
-5. 创建或恢复同一工作区 Agent 和当前 Conversation。
-6. 发送 `<coding_session_update>`。
-7. Letta Agent 自行判断是否更新记忆、更新哪些内容、使用何种作用域和保存位置。
-8. 成功后提交转录游标并删除待处理项。
-9. Agent 返回了下一轮可能有用的上下文时，保存一份有限的本地故障回退快照。
+1. 先确认该会话已经成功接收过非空 `UserPromptSubmit`；仅由宿主预加载、从未真实使用的会话直接跳过。
+2. 立即把当前转录位置、工作区、会话 ID 和最后一条助手消息写入待处理队列。
+3. 启动与宿主分离的后台 drain 进程。
+4. 后台进程读取尚未处理的转录增量。
+5. 按字符上限拆分批次，并去重已经处理过的事件。
+6. 恢复同一工作区 Agent 和当前 Conversation。
+7. 发送 `<coding_session_update>`。
+8. Letta Agent 自行判断是否更新记忆、更新哪些内容、使用何种作用域和保存位置。
+9. 成功后提交转录游标并删除待处理项。
+10. Agent 返回了下一轮可能有用的上下文时，保存一份有限的本地故障回退快照。
 
 写入请求结构：
 
@@ -330,11 +331,14 @@ letta-mem-workspace:<规范化工作区路径指纹>
 
 解析顺序：
 
-1. 优先读取插件本地保存的 Agent ID。
-2. 本地引用不存在或定义版本过旧时，在 Letta 中按标签寻找可复用 Agent。
-3. 找到后原地更新系统提示、描述、标签和显式模型配置。
-4. 找不到时才创建新 Agent。
-5. 本地引用指向已删除 Agent 时，清理引用并重新发现或创建。
+1. 优先读取跨宿主协调目录中保存的 Agent ID。
+2. 共享引用不存在时兼容读取旧版各插件数据目录中的 Agent ID，并迁移为共享引用。
+3. 引用不存在或定义版本过旧时，在 Letta 中按标签寻找可复用 Agent。
+4. 找到后原地更新系统提示、描述、标签和显式模型配置。
+5. 找不到时才创建新 Agent。
+6. 引用指向已删除 Agent 时，清理引用并重新发现或创建。
+
+Agent 初始化锁、工作区运行锁和规范 Agent ID 引用位于默认的 `~/.letta-mem/coordination`。它们只协调多个宿主进程，不保存任何记忆内容。若 Letta 中已经存在多个带相同工作区标签的 Agent，插件会按 Agent ID 稳定选定一个、记录 `agent-duplicates-detected`，但不会自动删除或合并其他 Agent。
 
 创建 Agent 时插件只传：
 
@@ -438,10 +442,10 @@ Hook 入口是零第三方依赖的 `bin/bootstrap.cjs`。它会：
 
 | Hook | 前台行为 | 后台行为 | 主要日志 |
 | --- | --- | --- | --- |
-| `SessionStart` | 快速恢复本地会话状态 | 预热 SDK、Agent、Conversation，并尝试处理遗留队列 | `session-prepared`、`session-prepare-failed` |
-| `UserPromptSubmit` | 最多等待约 30 秒实时检索并注入相关记忆 | 无 | `memory-read-started`、`memory-read-live`、`memory-read-empty`、`memory-read-timeout`、`memory-read-fallback` |
+| `SessionStart` | 快速恢复本地会话状态 | 无；不连接 Letta，不创建 Agent 或 Conversation | 无 |
+| `UserPromptSubmit` | 激活真实会话，首次延迟创建或复用 Agent/Conversation，最多等待约 30 秒实时检索并注入相关记忆 | 触发一次遗留队列 drain | `memory-read-started`、`agent-created`、`agent-reused`、`memory-read-live`、`memory-read-empty`、`memory-read-timeout`、`memory-read-fallback` |
 | `PreToolUse` | 最多等待约 5 秒查询 Conversation 新消息 | 无 | `memory-read-conversation-sync`、`memory-read-conversation-sync-failed` |
-| `Stop` | 快速写入持久待处理项 | 派生进程处理转录增量并更新 Letta 记忆 | `memory-update-queued`、`memory-updated`、`memory-update-failed` |
+| `Stop` | 已激活会话快速写入持久待处理项；未激活会话跳过 | 派生进程处理转录增量并更新 Letta 记忆 | `memory-update-queued`、`memory-update-skipped-inactive`、`memory-updated`、`memory-update-failed` |
 
 Codex 或 Claude Code 必须先信任这些 Hook。未信任时，宿主不会执行插件命令，也就不会创建 Agent、读取记忆或写入队列。
 
@@ -457,7 +461,7 @@ Codex 或 Claude Code 必须先信任这些 Hook。未信任时，宿主不会�
 
 `Stop` 先持久化待处理项，再启动后台进程。即使后台进程崩溃、SDK 安装失败、服务暂时不可用或 Agent 正忙，待处理项仍然保留。
 
-后续 `SessionStart` 或 `Stop` 会再次触发 drain。
+后续真实的 `UserPromptSubmit` 或 `Stop` 会再次触发 drain；单纯 `SessionStart` 不会碰 Letta。
 
 ### 退避和失败上限
 
@@ -477,13 +481,13 @@ Codex 或 Claude Code 必须先信任这些 Hook。未信任时，宿主不会�
 
 ## 本地状态是什么，不是什么
 
-运行状态位于 `${CLAUDE_PLUGIN_DATA}` 或 `${PLUGIN_DATA}`：
+宿主专属运行状态位于 `${CLAUDE_PLUGIN_DATA}` 或 `${PLUGIN_DATA}`：
 
 ```text
 runtime/<generation>/
 state/<server-namespace>/
-├── agents/      # 工作区作用域到 Letta Agent ID 的映射
-├── sessions/    # 宿主会话到 Conversation、标题和游标的映射
+├── agents/      # 仅兼容升级前的旧版 Agent ID 映射
+├── sessions/    # 宿主会话到 Conversation、激活标记、标题和游标的映射
 ├── contexts/    # 最后一次成功返回的有限故障回退快照
 ├── pending/     # 尚未成功处理的转录增量
 ├── failures.json
@@ -493,9 +497,17 @@ logs/
 └── letta-mem.log.1
 ```
 
+跨 Claude Code、Claude Desktop、Codex 和不同插件安装身份的协调状态默认位于：
+
+```text
+~/.letta-mem/coordination/<server-namespace>/
+├── agents/      # 工作区作用域到规范 Letta Agent ID 的共享映射
+└── locks/       # Agent 初始化锁和按工作区划分的运行锁
+```
+
 这些文件用于协调 Hook，不是 Letta 记忆：
 
-- `agents/` 不保存 Agent 的记忆，只保存 ID。
+- 两处 `agents/` 都不保存 Agent 的记忆，只保存 ID；新版本只写共享协调目录。
 - `sessions/` 不保存完整 Conversation，只保存映射和游标。
 - `contexts/` 不是正常读取源，只在实时 Letta 读取失败时有限回退。
 - `pending/` 是待发送转录队列，不是长期记忆。
@@ -582,6 +594,7 @@ Claude Code 与 Codex 共用配置文件：
 | `LETTA_MEM_AUTO_START_SERVER` | 接受 `true`、`false`、`1`、`0`。 |
 | `LETTA_MEM_MODEL` | 临时覆盖模型句柄。 |
 | `LETTA_MEM_DATA_DIR` | 仅用于开发；宿主未提供插件数据目录时覆盖运行状态目录。 |
+| `LETTA_MEM_COORDINATION_DIR` | 覆盖跨宿主 Agent ID 与锁的协调目录；默认 `~/.letta-mem/coordination`。这里只保存协调元数据，不保存 Letta 记忆。 |
 | `LETTA_MEM_DISABLED=1` | 临时停用全部记忆 Hook。 |
 | `LETTA_MEM_REQUEST_TIMEOUT_MS` | 覆盖 SDK 请求超时；实时读取自身仍最多等待约 30 秒。 |
 | `LETTA_MEM_MAX_CONTEXT_CHARS` | 覆盖单次注入上下文的字符上限。 |
@@ -600,9 +613,9 @@ Claude Code 与 Codex 共用配置文件：
 一个正常的新会话通常会依次出现：
 
 ```text
-session-prepared
-conversation-title-synced
 memory-read-started
+agent-created 或 agent-reused
+conversation-title-synced
 memory-read-live
 memory-update-queued
 memory-updated
@@ -625,7 +638,7 @@ memory-updated
 
 ### 第一句话会读取记忆吗？
 
-会。`SessionStart` 只负责预热；第一条 `UserPromptSubmit` 会实时询问 Letta Agent。预热失败时也会在这一阶段自行创建或恢复会话。
+会。`SessionStart` 不再预热或连接 Letta；第一条非空 `UserPromptSubmit` 会在同一次 Hook 中激活会话、创建或复用 Agent 与 Conversation，然后实时询问 Letta Agent。后续每条用户消息也会触发读取，但会复用已有映射。
 
 ### 为什么 Letta App 中仍然显示 `No summary`？
 
@@ -657,13 +670,14 @@ Codex 标题来自本地任务索引；索引不可用时会使用用户问题�
 确认：
 
 - Hook 已信任。
-- 日志没有 `session-prepare-failed`、`agent-create-recovered` 后续失败或 `memory-update-failed`。
+- 当前工作区至少真正提交过一条非空用户消息；仅打开、扫描或恢复工作区不会创建 Agent。
+- 日志没有 `memory-read-fallback`、`agent-create-recovered` 后续失败或 `memory-update-failed`。
 - Letta App 当前查看的是与插件相同的本地环境或同一个用户管理 App Server。
 - 插件已更新并在新会话中重新加载。
 
 ### 更新失败后为什么没有立即重试？
 
-待处理项会保留并执行指数退避。后续 `SessionStart` 或 `Stop` 会继续 drain，不需要插件自行复制或迁移 Letta 记忆。
+待处理项会保留并执行指数退避。后续真实的 `UserPromptSubmit` 或 `Stop` 会继续 drain，不需要插件自行复制或迁移 Letta 记忆。
 
 ### 如何彻底停用插件？
 
@@ -676,6 +690,15 @@ LETTA_MEM_DISABLED=1
 这只停止 Hook，不删除 Agent、Conversation、Letta 记忆或插件本地状态。
 
 ## 升级说明
+
+### 升级到 `2.6.0`
+
+- `SessionStart` 不再连接 Letta、预热 Agent 或创建 Conversation；只有第一条非空 `UserPromptSubmit` 才激活当前会话，因此宿主预加载的历史工作区不会生成空壳 Agent。
+- 第一条用户消息仍会读取记忆：延迟初始化 Agent/Conversation 与 `<memory_context_request>` 在同一次 Hook 中完成。
+- `Stop` 只为已经收到真实用户消息的会话入队，避免未使用会话的后台路径补建 Agent。
+- Claude Code、Claude Desktop、Codex 和插件的不同安装身份通过 `~/.letta-mem/coordination` 共用 Agent 引用与按工作区锁，减少并发创建同名 Agent。
+- 已有重复 Agent 不会自动删除；按标签发现重复项时会稳定选定一个并记录 `agent-duplicates-detected`。
+- 旧版插件数据目录中的 Agent ID 映射会按需迁移到共享协调目录；Letta Agent、Conversation 和记忆本身不迁移、不删除。
 
 ### 升级到 `2.5.1`
 

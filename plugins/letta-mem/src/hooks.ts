@@ -467,6 +467,9 @@ export async function handleSessionStart(
         ...(state.conversationTitleSource !== undefined
           ? { conversationTitleSource: state.conversationTitleSource }
           : {}),
+        ...(state.activatedAt !== undefined
+          ? { activatedAt: state.activatedAt }
+          : {}),
         ...(state.lastSeenConversationMessageId !== undefined
           ? {
               lastSeenConversationMessageId:
@@ -487,45 +490,19 @@ export async function handlePrepareSession(
   config: RuntimeConfig,
   input: HookInput,
   log: LogFunction,
-  clientFactory: AgentClientFactory = createAgentClient,
+  _clientFactory: AgentClientFactory = createAgentClient,
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
   const workspacePath = normalizeWorkspacePath(input.cwd);
-  const scopeKey = agentScopeKey(config, workspacePath);
-  const release = acquireLock(agentRunLockPath(config, scopeKey));
-  if (!release) {
-    log("info", "session-prepare-deferred-agent-busy", sessionId);
-    return "";
-  }
-
-  let agentSession: AgentSession | undefined;
-  try {
-    const opened = await openMappedAgentSession(
-      config,
-      workspacePath,
-      input,
-      log,
-      clientFactory,
-    );
-    agentSession = opened.session;
-    log(
-      "info",
-      "session-prepared",
-      `${opened.agentId}:${opened.conversationId}`,
-    );
-  } catch (error) {
-    const detail = error instanceof Error ? errorDetail(error) : String(error);
-    log("warn", "session-prepare-failed", detail);
-  } finally {
-    try {
-      agentSession?.close();
-    } catch (error) {
-      const detail = error instanceof Error ? errorDetail(error) : String(error);
-      log("warn", "session-close-failed", detail);
-    }
-    release();
-  }
+  const state = loadSessionState(config, workspacePath, sessionId);
+  log(
+    "info",
+    state.activatedAt
+      ? "session-state-restored"
+      : "session-prepare-skipped-awaiting-prompt",
+    sessionId,
+  );
   return "";
 }
 
@@ -541,6 +518,21 @@ export async function handleInjectContext(
   const prompt = input.prompt?.trim();
   if (!prompt) {
     log("info", "memory-read-fallback", "missing-prompt");
+    return claimCachedContext(config, sessionId, workspacePath);
+  }
+
+  const activated = await updateSessionState(
+    config,
+    workspacePath,
+    sessionId,
+    (state) => ({
+      ...state,
+      activatedAt: state.activatedAt ?? new Date().toISOString(),
+    }),
+    2_000,
+  );
+  if (!activated) {
+    log("warn", "session-activation-failed", sessionId);
     return claimCachedContext(config, sessionId, workspacePath);
   }
 
@@ -777,6 +769,11 @@ export async function handleEnqueueMemory(
     input.cwd,
   );
   const workspacePath = normalizeWorkspacePath(input.cwd);
+  const state = loadSessionState(config, workspacePath, sessionId);
+  if (!state.activatedAt) {
+    log("info", "memory-update-skipped-inactive", sessionId);
+    return "";
+  }
   const transcriptEndLine = await transcriptTailLineIndex(transcriptPath);
   const revision = randomUUID();
   const enqueuedAt = new Date();

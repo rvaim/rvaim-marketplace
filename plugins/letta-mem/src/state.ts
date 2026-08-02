@@ -48,6 +48,13 @@ function namespaceDir(config: RuntimeConfig): string {
   return path;
 }
 
+function coordinationNamespaceDir(config: RuntimeConfig): string {
+  const path = join(config.coordinationDir, config.namespace);
+  ensurePrivateDirectory(config.coordinationDir);
+  ensurePrivateDirectory(path);
+  return path;
+}
+
 function readJson<T>(path: string): T | null {
   try {
     chmodSync(path, 0o600);
@@ -99,14 +106,21 @@ export function agentRunLockPath(
   scopeKey: string = "global",
 ): string {
   return join(
-    namespaceDir(config),
+    coordinationNamespaceDir(config),
     "locks",
     `agent-run-${hash(scopeKey)}.lock`,
   );
 }
 
-export function agentLockPath(config: RuntimeConfig): string {
-  return join(namespaceDir(config), "locks", "agent.lock");
+export function agentLockPath(
+  config: RuntimeConfig,
+  scopeKey: string = "global",
+): string {
+  return join(
+    coordinationNamespaceDir(config),
+    "locks",
+    `agent-${hash(scopeKey)}.lock`,
+  );
 }
 
 export function loadSessionState(
@@ -144,6 +158,9 @@ export function loadSessionState(
           || value.conversationTitleSource === "codex"
           || value.conversationTitleSource === "prompt"
         ? { conversationTitleSource: value.conversationTitleSource }
+        : {}),
+      ...(typeof value.activatedAt === "string"
+        ? { activatedAt: value.activatedAt }
         : {}),
       ...(typeof value.lastInjectedContextRevision === "string"
         ? { lastInjectedContextRevision: value.lastInjectedContextRevision }
@@ -190,6 +207,17 @@ function agentReferencePath(
   scopeKey: string,
 ): string {
   return join(
+    coordinationNamespaceDir(config),
+    "agents",
+    `${hash(scopeKey)}.json`,
+  );
+}
+
+function legacyAgentReferencePath(
+  config: RuntimeConfig,
+  scopeKey: string,
+): string {
+  return join(
     namespaceDir(config),
     "agents",
     `${hash(scopeKey)}.json`,
@@ -206,13 +234,11 @@ interface StoredAgentReference {
   updatedAt: string;
 }
 
-export function loadAgentReference(
-  config: RuntimeConfig,
+function loadAgentReferenceAtPath(
+  path: string,
   scopeKey: string,
 ): AgentReference | null {
-  const value = readJson<StoredAgentReference>(
-    agentReferencePath(config, scopeKey),
-  );
+  const value = readJson<StoredAgentReference>(path);
   const storedScopeKey = value?.scopeKey ?? value?.workspacePath;
   if (
     value?.version !== 1
@@ -229,6 +255,24 @@ export function loadAgentReference(
       : {}),
     updatedAt: value.updatedAt,
   };
+}
+
+export function loadSharedAgentReference(
+  config: RuntimeConfig,
+  scopeKey: string,
+): AgentReference | null {
+  return loadAgentReferenceAtPath(agentReferencePath(config, scopeKey), scopeKey);
+}
+
+export function loadAgentReference(
+  config: RuntimeConfig,
+  scopeKey: string,
+): AgentReference | null {
+  return loadSharedAgentReference(config, scopeKey)
+    ?? loadAgentReferenceAtPath(
+      legacyAgentReferencePath(config, scopeKey),
+      scopeKey,
+    );
 }
 
 export function saveAgentReference(
@@ -252,14 +296,21 @@ export function clearAgentReference(
   scopeKey: string,
   expectedAgentId: string,
 ): boolean {
-  const current = loadAgentReference(config, scopeKey);
-  if (current?.agentId !== expectedAgentId) return false;
-  try {
-    unlinkSync(agentReferencePath(config, scopeKey));
-    return true;
-  } catch {
-    return false;
+  let removed = false;
+  for (const path of [
+    agentReferencePath(config, scopeKey),
+    legacyAgentReferencePath(config, scopeKey),
+  ]) {
+    const current = loadAgentReferenceAtPath(path, scopeKey);
+    if (current?.agentId !== expectedAgentId) continue;
+    try {
+      unlinkSync(path);
+      removed = true;
+    } catch {
+      // 文件已被其他进程清理时继续检查另一个引用。
+    }
   }
+  return removed;
 }
 
 function contextPath(config: RuntimeConfig, workspacePath: string): string {

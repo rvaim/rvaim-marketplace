@@ -14,6 +14,7 @@ function createConfig(
     autoStartServer: true,
     model: "auto",
     dataDir: "/tmp/letta-mem-letta-tests",
+    coordinationDir: "/tmp/letta-mem-letta-tests-coordination",
     namespace: "letta-tests",
     requestTimeoutMs: 1_000,
     maxContextChars: 8_000,

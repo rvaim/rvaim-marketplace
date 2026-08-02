@@ -16,7 +16,9 @@ import {
   acquireLock,
   agentRunLockPath,
   loadAgentReference,
+  loadSharedAgentReference,
   listPendingUpdates,
+  saveAgentReference,
   savePendingUpdate,
   sha256,
 } from "../src/state.js";
@@ -25,7 +27,7 @@ import type { RuntimeConfig } from "../src/types.js";
 
 const temporaryDirectories: string[] = [];
 
-function createConfig(): RuntimeConfig {
+function createConfig(values: Partial<RuntimeConfig> = {}): RuntimeConfig {
   const dataDir = mkdtempSync(join(tmpdir(), "letta-mem-state-"));
   temporaryDirectories.push(dataDir);
   return {
@@ -33,11 +35,13 @@ function createConfig(): RuntimeConfig {
     autoStartServer: false,
     model: "auto",
     dataDir,
+    coordinationDir: join(dataDir, "coordination"),
     namespace: "state-tests",
     requestTimeoutMs: 1_000,
     maxContextChars: 8_000,
     maxBatchChars: 80_000,
     disabled: false,
+    ...values,
   };
 }
 
@@ -48,6 +52,25 @@ afterEach(() => {
 });
 
 describe("本地状态", () => {
+  it("不同宿主数据目录共享同一工作区的 Agent 引用和运行锁", () => {
+    const coordinationDir = mkdtempSync(join(tmpdir(), "letta-mem-shared-"));
+    temporaryDirectories.push(coordinationDir);
+    const first = createConfig({ coordinationDir });
+    const second = createConfig({ coordinationDir });
+    const workspacePath = "/tmp/shared-workspace";
+
+    saveAgentReference(first, workspacePath, "agent-shared");
+
+    expect(loadSharedAgentReference(second, workspacePath)?.agentId)
+      .toBe("agent-shared");
+    expect(agentRunLockPath(first, workspacePath))
+      .toBe(agentRunLockPath(second, workspacePath));
+    const release = acquireLock(agentRunLockPath(first, workspacePath));
+    expect(release).not.toBeNull();
+    expect(acquireLock(agentRunLockPath(second, workspacePath))).toBeNull();
+    release?.();
+  });
+
   it("兼容读取旧版按工作区保存的 Agent 引用", () => {
     const config = createConfig();
     const workspacePath = "/tmp/legacy-workspace";

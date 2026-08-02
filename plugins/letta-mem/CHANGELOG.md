@@ -1,5 +1,14 @@
 # 变更日志
 
+## 2.6.0
+
+- 移除 `SessionStart` 的 Letta 后台预热；打开、恢复、扫描或预加载工作区时只恢复插件本地状态，不再查找或创建 Agent、Conversation。
+- 将第一条非空 `UserPromptSubmit` 设为真实激活点，在同一次 Hook 内创建或复用工作区 Agent 与 Conversation，并完成实时记忆读取；后续每条用户消息继续实时检索。
+- `Stop` 只为已由真实用户消息激活的会话创建待处理项，避免宿主为未使用的历史工作区触发后台写入并补建 Agent。
+- 新增默认位于 `~/.letta-mem/coordination` 的跨宿主协调目录，使 Claude Code、Claude Desktop、Codex 和不同插件安装身份共享规范 Agent ID、初始化锁与工作区运行锁；这些文件只保存协调元数据，不保存 Letta 记忆。
+- Agent 发现遇到多个相同工作区标签时按 ID 稳定选择一个并记录 `agent-duplicates-detected`；不会自动删除、合并或迁移已有重复 Agent。
+- 兼容读取旧版各宿主插件数据目录中的 Agent ID，并在首次真实使用时迁移为共享引用；Letta Agent、Conversation 和实际记忆不受改动。
+
 ## 2.5.1
 
 - 将语言约束扩展到 Letta Agent 处理记忆时产生的全部自然语言，包括分析说明、工具调用前后说明、记忆标题、摘要、正文和最终返回；每轮以对应用户消息的主要语言为准。

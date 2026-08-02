@@ -22,6 +22,7 @@ function createConfig(): RuntimeConfig {
     autoStartServer: false,
     model: "auto",
     dataDir,
+    coordinationDir: join(dataDir, "coordination"),
     namespace: "context-tests",
     requestTimeoutMs: 1_000,
     maxContextChars: 8_000,

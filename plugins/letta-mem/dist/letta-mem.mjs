@@ -46,6 +46,12 @@ function namespaceDir(config) {
   ensurePrivateDirectory(path);
   return path;
 }
+function coordinationNamespaceDir(config) {
+  const path = join(config.coordinationDir, config.namespace);
+  ensurePrivateDirectory(config.coordinationDir);
+  ensurePrivateDirectory(path);
+  return path;
+}
 function readJson(path) {
   try {
     chmodSync(path, 384);
@@ -83,13 +89,17 @@ function sessionLockPath(config, workspacePath, sessionId) {
 }
 function agentRunLockPath(config, scopeKey = "global") {
   return join(
-    namespaceDir(config),
+    coordinationNamespaceDir(config),
     "locks",
     `agent-run-${hash(scopeKey)}.lock`
   );
 }
-function agentLockPath(config) {
-  return join(namespaceDir(config), "locks", "agent.lock");
+function agentLockPath(config, scopeKey = "global") {
+  return join(
+    coordinationNamespaceDir(config),
+    "locks",
+    `agent-${hash(scopeKey)}.lock`
+  );
 }
 function loadSessionState(config, workspacePath, sessionId) {
   const value = readJson(
@@ -105,6 +115,7 @@ function loadSessionState(config, workspacePath, sessionId) {
       ...typeof value.conversationId === "string" ? { conversationId: value.conversationId } : {},
       ...typeof value.conversationTitle === "string" ? { conversationTitle: value.conversationTitle } : {},
       ...value.conversationTitleSource === "hook" || value.conversationTitleSource === "codex" || value.conversationTitleSource === "prompt" ? { conversationTitleSource: value.conversationTitleSource } : {},
+      ...typeof value.activatedAt === "string" ? { activatedAt: value.activatedAt } : {},
       ...typeof value.lastInjectedContextRevision === "string" ? { lastInjectedContextRevision: value.lastInjectedContextRevision } : {},
       ...typeof value.lastSeenConversationMessageId === "string" ? {
         lastSeenConversationMessageId: value.lastSeenConversationMessageId
@@ -135,15 +146,20 @@ function saveSessionState(config, state) {
 }
 function agentReferencePath(config, scopeKey) {
   return join(
+    coordinationNamespaceDir(config),
+    "agents",
+    `${hash(scopeKey)}.json`
+  );
+}
+function legacyAgentReferencePath(config, scopeKey) {
+  return join(
     namespaceDir(config),
     "agents",
     `${hash(scopeKey)}.json`
   );
 }
-function loadAgentReference(config, scopeKey) {
-  const value = readJson(
-    agentReferencePath(config, scopeKey)
-  );
+function loadAgentReferenceAtPath(path, scopeKey) {
+  const value = readJson(path);
   const storedScopeKey = value?.scopeKey ?? value?.workspacePath;
   if (value?.version !== 1 || storedScopeKey !== scopeKey || typeof value.agentId !== "string") return null;
   return {
@@ -154,6 +170,15 @@ function loadAgentReference(config, scopeKey) {
     ...Number.isInteger(value.definitionVersion) ? { definitionVersion: value.definitionVersion } : {},
     updatedAt: value.updatedAt
   };
+}
+function loadSharedAgentReference(config, scopeKey) {
+  return loadAgentReferenceAtPath(agentReferencePath(config, scopeKey), scopeKey);
+}
+function loadAgentReference(config, scopeKey) {
+  return loadSharedAgentReference(config, scopeKey) ?? loadAgentReferenceAtPath(
+    legacyAgentReferencePath(config, scopeKey),
+    scopeKey
+  );
 }
 function saveAgentReference(config, scopeKey, agentId, model = "auto") {
   writeJsonAtomic(agentReferencePath(config, scopeKey), {
@@ -166,14 +191,20 @@ function saveAgentReference(config, scopeKey, agentId, model = "auto") {
   });
 }
 function clearAgentReference(config, scopeKey, expectedAgentId) {
-  const current = loadAgentReference(config, scopeKey);
-  if (current?.agentId !== expectedAgentId) return false;
-  try {
-    unlinkSync(agentReferencePath(config, scopeKey));
-    return true;
-  } catch {
-    return false;
+  let removed = false;
+  for (const path of [
+    agentReferencePath(config, scopeKey),
+    legacyAgentReferencePath(config, scopeKey)
+  ]) {
+    const current = loadAgentReferenceAtPath(path, scopeKey);
+    if (current?.agentId !== expectedAgentId) continue;
+    try {
+      unlinkSync(path);
+      removed = true;
+    } catch {
+    }
   }
+  return removed;
 }
 function contextPath(config, workspacePath) {
   return join(namespaceDir(config), "contexts", `${hash(workspacePath)}.json`);
@@ -686,12 +717,12 @@ ${MEMORY_SCOPE_POLICY}
 </task>
 </memory_context_request>`;
 }
-async function acquireAgentLock(config) {
+async function acquireAgentLock(config, scopeKey) {
   const deadline = Date.now() + 1e4;
-  let release = acquireLock(agentLockPath(config));
+  let release = acquireLock(agentLockPath(config, scopeKey));
   while (!release && Date.now() < deadline) {
     await delay2(50);
-    release = acquireLock(agentLockPath(config));
+    release = acquireLock(agentLockPath(config, scopeKey));
   }
   if (!release) throw new Error("Agent \u521D\u59CB\u5316\u6B63\u5728\u7531\u53E6\u4E00\u8FDB\u7A0B\u5904\u7406");
   return release;
@@ -726,16 +757,25 @@ function primaryAgentDefinition(config, workspacePath) {
     ]
   };
 }
-async function findReusableAgent(client, definition) {
+async function findReusableAgent(client, definition, log) {
   const existing = await client.agents.list({
     tags: definition.discoveryTags,
     matchAllTags: true,
     limit: 10,
     order: "desc"
   });
-  return existing.find((agent) => definition.discoveryTags.every(
+  const matched = existing.filter((agent) => definition.discoveryTags.every(
     (tag) => agent.tags?.includes(tag) === true
-  ));
+  )).sort((left, right) => left.id.localeCompare(right.id));
+  const selected = matched[0];
+  if (selected && matched.length > 1) {
+    log(
+      "warn",
+      "agent-duplicates-detected",
+      `${matched.length}:${selected.id}`
+    );
+  }
+  return selected;
 }
 function isMissingAgent(error) {
   const message = error instanceof Error ? error.message : error;
@@ -766,14 +806,19 @@ async function prepareReusableAgent(config, client, reusable, definition) {
 }
 async function resolveDefinedAgentId(config, client, definition, log) {
   const scopeKey = definition.scopeKey;
-  const cached = loadAgentReference(config, scopeKey);
+  const cached = loadSharedAgentReference(config, scopeKey);
   if (cached?.model === config.model && cached.definitionVersion === 6) {
     return cached.agentId;
   }
-  const release = await acquireAgentLock(config);
+  const release = await acquireAgentLock(config, scopeKey);
   try {
+    const afterLockShared = loadSharedAgentReference(config, scopeKey);
+    if (afterLockShared?.model === config.model && afterLockShared.definitionVersion === 6) {
+      return afterLockShared.agentId;
+    }
     const afterLock = loadAgentReference(config, scopeKey);
     if (afterLock?.model === config.model && afterLock.definitionVersion === 6) {
+      saveAgentReference(config, scopeKey, afterLock.agentId, config.model);
       return afterLock.agentId;
     }
     if (afterLock) {
@@ -797,7 +842,7 @@ async function resolveDefinedAgentId(config, client, definition, log) {
       }
       clearAgentReference(config, scopeKey, afterLock.agentId);
     }
-    const reusable = await findReusableAgent(client, definition);
+    const reusable = await findReusableAgent(client, definition, log);
     if (reusable && await prepareReusableAgent(config, client, reusable, definition)) {
       saveAgentReference(config, scopeKey, reusable.id, config.model);
       log("info", "agent-reused", reusable.id);
@@ -815,7 +860,7 @@ async function resolveDefinedAgentId(config, client, definition, log) {
       });
     } catch (error) {
       await delay2(250);
-      const recovered = await findReusableAgent(client, definition);
+      const recovered = await findReusableAgent(client, definition, log);
       if (!recovered) throw error;
       if (!await prepareReusableAgent(config, client, recovered, definition)) {
         throw error;
@@ -1550,6 +1595,7 @@ async function handleSessionStart(config, input) {
         ...state.conversationId !== void 0 ? { conversationId: state.conversationId } : {},
         ...state.conversationTitle !== void 0 ? { conversationTitle: state.conversationTitle } : {},
         ...state.conversationTitleSource !== void 0 ? { conversationTitleSource: state.conversationTitleSource } : {},
+        ...state.activatedAt !== void 0 ? { activatedAt: state.activatedAt } : {},
         ...state.lastSeenConversationMessageId !== void 0 ? {
           lastSeenConversationMessageId: state.lastSeenConversationMessageId
         } : {},
@@ -1562,43 +1608,16 @@ async function handleSessionStart(config, input) {
   );
   return "";
 }
-async function handlePrepareSession(config, input, log, clientFactory = createAgentClient) {
+async function handlePrepareSession(config, input, log, _clientFactory = createAgentClient) {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
   const workspacePath = normalizeWorkspacePath(input.cwd);
-  const scopeKey = agentScopeKey(config, workspacePath);
-  const release = acquireLock(agentRunLockPath(config, scopeKey));
-  if (!release) {
-    log("info", "session-prepare-deferred-agent-busy", sessionId);
-    return "";
-  }
-  let agentSession;
-  try {
-    const opened = await openMappedAgentSession(
-      config,
-      workspacePath,
-      input,
-      log,
-      clientFactory
-    );
-    agentSession = opened.session;
-    log(
-      "info",
-      "session-prepared",
-      `${opened.agentId}:${opened.conversationId}`
-    );
-  } catch (error) {
-    const detail = error instanceof Error ? errorDetail(error) : String(error);
-    log("warn", "session-prepare-failed", detail);
-  } finally {
-    try {
-      agentSession?.close();
-    } catch (error) {
-      const detail = error instanceof Error ? errorDetail(error) : String(error);
-      log("warn", "session-close-failed", detail);
-    }
-    release();
-  }
+  const state = loadSessionState(config, workspacePath, sessionId);
+  log(
+    "info",
+    state.activatedAt ? "session-state-restored" : "session-prepare-skipped-awaiting-prompt",
+    sessionId
+  );
   return "";
 }
 async function handleInjectContext(config, input, log = () => {
@@ -1609,6 +1628,20 @@ async function handleInjectContext(config, input, log = () => {
   const prompt = input.prompt?.trim();
   if (!prompt) {
     log("info", "memory-read-fallback", "missing-prompt");
+    return claimCachedContext(config, sessionId, workspacePath);
+  }
+  const activated = await updateSessionState(
+    config,
+    workspacePath,
+    sessionId,
+    (state) => ({
+      ...state,
+      activatedAt: state.activatedAt ?? (/* @__PURE__ */ new Date()).toISOString()
+    }),
+    2e3
+  );
+  if (!activated) {
+    log("warn", "session-activation-failed", sessionId);
     return claimCachedContext(config, sessionId, workspacePath);
   }
   const scopeKey = agentScopeKey(config, workspacePath);
@@ -1812,6 +1845,11 @@ async function handleEnqueueMemory(config, input, log) {
     input.cwd
   );
   const workspacePath = normalizeWorkspacePath(input.cwd);
+  const state = loadSessionState(config, workspacePath, sessionId);
+  if (!state.activatedAt) {
+    log("info", "memory-update-skipped-inactive", sessionId);
+    return "";
+  }
   const transcriptEndLine = await transcriptTailLineIndex(transcriptPath);
   const revision = randomUUID2();
   const enqueuedAt = /* @__PURE__ */ new Date();
@@ -2107,6 +2145,13 @@ function sharedConfigPath(env) {
   }
   return isAbsolute3(configured) ? configured : resolve3(configured);
 }
+function normalizeLocalPath(value) {
+  if (value === "~") return homedir3();
+  if (value.startsWith("~/") || value.startsWith("~\\")) {
+    return join5(homedir3(), value.slice(2));
+  }
+  return isAbsolute3(value) ? value : resolve3(value);
+}
 function readSharedConfig(env) {
   const path = sharedConfigPath(env);
   if (!existsSync5(path)) return {};
@@ -2151,12 +2196,16 @@ function readRuntimeConfig(env = process.env) {
     env.PLUGIN_DATA,
     env.LETTA_MEM_DATA_DIR
   ) ?? join5(homedir3(), ".letta-mem", "data", "development");
+  const coordinationDir = normalizeLocalPath(firstNonEmpty(
+    env.LETTA_MEM_COORDINATION_DIR
+  ) ?? join5(homedir3(), ".letta-mem", "coordination"));
   return {
     serverUrl,
     ...authToken ? { authToken } : {},
     autoStartServer,
     model,
     dataDir,
+    coordinationDir,
     namespace: namespaceFor(serverUrl, authToken),
     requestTimeoutMs: parsePositiveInteger(
       env.LETTA_MEM_REQUEST_TIMEOUT_MS,

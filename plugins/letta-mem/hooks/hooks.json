@@ -9,12 +9,6 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" session-state",
             "timeout": 2,
             "statusMessage": "正在恢复 Letta 记忆状态"
-          },
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-session-background",
-            "timeout": 2,
-            "statusMessage": "正在准备 Letta 会话"
           }
         ]
       }

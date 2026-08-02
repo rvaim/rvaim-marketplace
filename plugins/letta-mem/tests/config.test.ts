@@ -13,6 +13,7 @@ const missingConfigPath = join(
 function env(values: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
     CLAUDE_PLUGIN_DATA: "/tmp/letta-mem-tests",
+    LETTA_MEM_COORDINATION_DIR: "/tmp/letta-mem-tests-coordination",
     LETTA_MEM_CONFIG_PATH: missingConfigPath,
     ...values,
   };
@@ -39,6 +40,7 @@ describe("运行配置", () => {
     expect(config.serverUrl).toBe("http://127.0.0.1:4500");
     expect(config.autoStartServer).toBe(true);
     expect(config.model).toBe("auto");
+    expect(config.coordinationDir).toBe("/tmp/letta-mem-tests-coordination");
     expect(config.namespace).toHaveLength(20);
     expect(config).not.toHaveProperty("serverBackend");
     expect(config).not.toHaveProperty("mixedMemory");

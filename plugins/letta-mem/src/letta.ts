@@ -8,6 +8,7 @@ import {
   agentLockPath,
   clearAgentReference,
   loadAgentReference,
+  loadSharedAgentReference,
   saveAgentReference,
   sha256,
 } from "./state.js";
@@ -265,12 +266,15 @@ ${MEMORY_SCOPE_POLICY}
 </memory_context_request>`;
 }
 
-async function acquireAgentLock(config: RuntimeConfig): Promise<() => void> {
+async function acquireAgentLock(
+  config: RuntimeConfig,
+  scopeKey: string,
+): Promise<() => void> {
   const deadline = Date.now() + 10_000;
-  let release = acquireLock(agentLockPath(config));
+  let release = acquireLock(agentLockPath(config, scopeKey));
   while (!release && Date.now() < deadline) {
     await delay(50);
-    release = acquireLock(agentLockPath(config));
+    release = acquireLock(agentLockPath(config, scopeKey));
   }
   if (!release) throw new Error("Agent 初始化正在由另一进程处理");
   return release;
@@ -335,6 +339,7 @@ function primaryAgentDefinition(
 async function findReusableAgent(
   client: AgentClient,
   definition: AgentDefinition,
+  log: LogFunction,
 ): Promise<AgentRecord | undefined> {
   const existing = await client.agents.list({
     tags: definition.discoveryTags,
@@ -342,9 +347,18 @@ async function findReusableAgent(
     limit: 10,
     order: "desc",
   });
-  return existing.find((agent) => definition.discoveryTags.every(
+  const matched = existing.filter((agent) => definition.discoveryTags.every(
     (tag) => agent.tags?.includes(tag) === true,
-  ));
+  )).sort((left, right) => left.id.localeCompare(right.id));
+  const selected = matched[0];
+  if (selected && matched.length > 1) {
+    log(
+      "warn",
+      "agent-duplicates-detected",
+      `${matched.length}:${selected.id}`,
+    );
+  }
+  return selected;
 }
 
 function isMissingAgent(error: Error | string): boolean {
@@ -392,15 +406,23 @@ async function resolveDefinedAgentId(
   log: LogFunction,
 ): Promise<string> {
   const scopeKey = definition.scopeKey;
-  const cached = loadAgentReference(config, scopeKey);
+  const cached = loadSharedAgentReference(config, scopeKey);
   if (cached?.model === config.model && cached.definitionVersion === 6) {
     return cached.agentId;
   }
 
-  const release = await acquireAgentLock(config);
+  const release = await acquireAgentLock(config, scopeKey);
   try {
+    const afterLockShared = loadSharedAgentReference(config, scopeKey);
+    if (
+      afterLockShared?.model === config.model
+      && afterLockShared.definitionVersion === 6
+    ) {
+      return afterLockShared.agentId;
+    }
     const afterLock = loadAgentReference(config, scopeKey);
     if (afterLock?.model === config.model && afterLock.definitionVersion === 6) {
+      saveAgentReference(config, scopeKey, afterLock.agentId, config.model);
       return afterLock.agentId;
     }
     if (afterLock) {
@@ -424,7 +446,7 @@ async function resolveDefinedAgentId(
       }
       clearAgentReference(config, scopeKey, afterLock.agentId);
     }
-    const reusable = await findReusableAgent(client, definition);
+    const reusable = await findReusableAgent(client, definition, log);
     if (
       reusable
       && await prepareReusableAgent(config, client, reusable, definition)
@@ -447,7 +469,7 @@ async function resolveDefinedAgentId(
     } catch (error) {
       // App Server 可能已创建 Agent，但在默认初始化完成前断开。
       await delay(250);
-      const recovered = await findReusableAgent(client, definition);
+      const recovered = await findReusableAgent(client, definition, log);
       if (!recovered) throw error;
       if (!await prepareReusableAgent(config, client, recovered, definition)) {
         throw error;
