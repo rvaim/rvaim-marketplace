@@ -57,7 +57,7 @@
     },
     {
       "name": "letta-mem",
-      "version": "2.7.0+codex.20260802114719",
+      "version": "2.8.0+codex.20260802122142",
       "source": {
         "source": "local",
         "path": "./plugins/letta-mem"

@@ -163,6 +163,7 @@ const BASE_AGENT_TAGS = [
   "claude-code-memory",
   "coding-assistant-memory",
 ];
+const AGENT_DEFINITION_VERSION = 8;
 function sessionOptions(workspacePath: string): SessionOptions {
   return {
     cwd: workspacePath,
@@ -189,6 +190,7 @@ ${MEMORY_SCOPE_POLICY}
 - 使用 Letta 当前提供的原生记忆能力完成所有持久化操作。
 
 请求协议：
+- <coding_session_start> 表示新的编码会话已经开始。根据当前工作区的已有记忆和历史会话，使用 Letta 当前提供的原生检索能力准备可能对新会话有用的简短指导；不要仅因收到启动通知而创建新的长期记忆。
 - <coding_session_update> 是已经完成的会话增量。分析 transcript 的长期价值，自行决定是否更新记忆，以及每项记忆的作用域、组织方式和保存位置。
 - 完成记忆处理后，最终回复只写给下一轮编码助手的指导；它会在下一条用户消息提交前直接加入编码助手上下文。
 - 不得要求调用方指定 memory block、MemFS、archive、Shared Memory repository、目录或 backend。
@@ -405,7 +407,10 @@ async function resolveDefinedAgentId(
 ): Promise<string> {
   const scopeKey = definition.scopeKey;
   const cached = loadSharedAgentReference(config, scopeKey);
-  if (cached?.model === config.model && cached.definitionVersion === 7) {
+  if (
+    cached?.model === config.model
+    && cached.definitionVersion === AGENT_DEFINITION_VERSION
+  ) {
     return cached.agentId;
   }
 
@@ -414,12 +419,15 @@ async function resolveDefinedAgentId(
     const afterLockShared = loadSharedAgentReference(config, scopeKey);
     if (
       afterLockShared?.model === config.model
-      && afterLockShared.definitionVersion === 7
+      && afterLockShared.definitionVersion === AGENT_DEFINITION_VERSION
     ) {
       return afterLockShared.agentId;
     }
     const afterLock = loadAgentReference(config, scopeKey);
-    if (afterLock?.model === config.model && afterLock.definitionVersion === 7) {
+    if (
+      afterLock?.model === config.model
+      && afterLock.definitionVersion === AGENT_DEFINITION_VERSION
+    ) {
       saveAgentReference(config, scopeKey, afterLock.agentId, config.model);
       return afterLock.agentId;
     }
@@ -496,6 +504,22 @@ export async function resolveAgentId(
     primaryAgentDefinition(config, workspacePath),
     log,
   );
+}
+
+export async function findExistingAgentId(
+  config: RuntimeConfig,
+  client: AgentClient,
+  workspacePath: string,
+  log: LogFunction,
+): Promise<string | undefined> {
+  const definition = primaryAgentDefinition(config, workspacePath);
+  const reusable = await findReusableAgent(client, definition, log);
+  if (!reusable) {
+    log("info", "session-prepare-skipped-agent-missing", workspacePath);
+    return undefined;
+  }
+  log("info", "session-prepare-agent-found", reusable.id);
+  return reusable.id;
 }
 
 export async function openAgentSession(

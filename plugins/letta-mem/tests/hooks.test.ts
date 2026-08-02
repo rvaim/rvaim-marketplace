@@ -35,6 +35,7 @@ import {
   loadAgentReference,
   loadGuidanceReference,
   loadSessionState,
+  loadSessionWorkspaceBinding,
   listPendingUpdates,
   saveAgentReference,
   saveContextSnapshot,
@@ -177,26 +178,197 @@ afterEach(() => {
 });
 
 describe("后台记忆 Hook", () => {
-  it("SessionStart 兼容准备步骤不连接 Letta 或创建 Agent", async () => {
+  it("SessionStart 找不到已有 Agent 时不会创建 Agent 或 Conversation", async () => {
     const config = createConfig();
     const workspacePath = join(config.dataDir, "prepared-workspace");
-    const clientFactory = vi.fn();
+    const createAgent = vi.fn(async () => "agent-should-not-be-created");
+    const createSessionMock = vi.fn();
+    const resumeSessionMock = vi.fn();
+    const listAgents = vi.fn(async () => []);
+    const client: AgentClient = {
+      createAgent,
+      createSession: createSessionMock,
+      resumeSession: resumeSessionMock,
+      agents: { list: listAgents },
+    };
+    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
     const log = vi.fn() as LogFunction;
 
     await expect(handlePrepareSession(config, {
       session_id: "session-prepared",
       cwd: workspacePath,
       thread_title: "优化 Letta 记忆插件",
-    }, log, clientFactory as AgentClientFactory))
+    }, log, clientFactory))
       .resolves.toBe("");
 
-    expect(clientFactory).not.toHaveBeenCalled();
+    expect(clientFactory).toHaveBeenCalledOnce();
+    expect(listAgents).toHaveBeenCalledWith({
+      tags: [
+        "letta-mem",
+        `letta-mem-workspace:${sha256(workspacePath).slice(0, 24)}`,
+      ],
+      matchAllTags: true,
+      limit: 10,
+      order: "desc",
+    });
+    expect(createAgent).not.toHaveBeenCalled();
+    expect(createSessionMock).not.toHaveBeenCalled();
+    expect(resumeSessionMock).not.toHaveBeenCalled();
     expect(loadSessionState(config, workspacePath, "session-prepared"))
       .not.toHaveProperty("agentId");
+    expect(loadSessionWorkspaceBinding(config, "session-prepared")).toBeNull();
     expect(log).toHaveBeenCalledWith(
       "info",
-      "session-prepare-skipped-awaiting-prompt",
-      "session-prepared",
+      "session-prepare-skipped-agent-missing",
+      workspacePath,
+    );
+  });
+
+  it("SessionStart 只复用已有 Agent 并准备下一轮指导", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "existing-agent-workspace");
+    const agentId = "agent-existing";
+    const conversationId = "conversation-session-start";
+    const opened = createSession(
+      conversationId,
+      "继续工作前先确认现有项目约束。",
+      agentId,
+    );
+    const createAgent = vi.fn(async () => "agent-should-not-be-created");
+    const createSessionMock = vi.fn(() => opened.session);
+    const updateAgent = vi.fn();
+    const listMessages = vi.fn(async () => ({
+      messages: [{
+        id: `${conversationId}-guidance`,
+        message_type: "assistant_message",
+        content: "继续工作前先确认现有项目约束。",
+      }],
+    }));
+    const client: AgentClient = {
+      createAgent,
+      createSession: createSessionMock,
+      resumeSession: vi.fn(() => opened.session),
+      agents: {
+        update: updateAgent,
+        list: vi.fn(async () => [{
+          id: agentId,
+          tags: [
+            "letta-mem",
+            `letta-mem-workspace:${sha256(workspacePath).slice(0, 24)}`,
+          ],
+        }]),
+      },
+      conversations: { listMessages },
+    };
+    const clientFactory = vi.fn(async () => client) as AgentClientFactory;
+    const log = vi.fn() as LogFunction;
+    const input = {
+      session_id: "session-existing-agent",
+      cwd: workspacePath,
+      source: "startup",
+      thread_title: "继续处理项目",
+    };
+
+    await handleSessionStart(config, input);
+    await expect(handlePrepareSession(config, input, log, clientFactory))
+      .resolves.toBe("");
+
+    expect(createAgent).not.toHaveBeenCalled();
+    expect(updateAgent).not.toHaveBeenCalled();
+    expect(createSessionMock).toHaveBeenCalledWith(
+      agentId,
+      expect.objectContaining({
+        cwd: workspacePath,
+        permissionMode: "unrestricted",
+      }),
+    );
+    expect(opened.sent).toHaveLength(1);
+    expect(opened.sent[0]).toContain("<coding_session_start>");
+    expect(opened.sent[0]).toContain(workspacePath);
+    expect(opened.sent[0]).not.toContain("<coding_session_update>");
+    expect(loadSessionState(
+      config,
+      workspacePath,
+      "session-existing-agent",
+    )).toMatchObject({
+      agentId,
+      conversationId,
+      lastSessionStartPreparationAt: expect.any(String),
+    });
+    expect(loadSessionState(
+      config,
+      workspacePath,
+      "session-existing-agent",
+    )).not.toHaveProperty("activatedAt");
+    expect(loadSessionWorkspaceBinding(
+      config,
+      "session-existing-agent",
+    )?.workspacePath).toBe(workspacePath);
+    expect(loadGuidanceReference(config, workspacePath)).toMatchObject({
+      agentId,
+      conversationId,
+      messageId: `${conversationId}-guidance`,
+      empty: false,
+    });
+
+    await handlePrepareSession(config, input, log, clientFactory);
+    expect(createSessionMock).toHaveBeenCalledOnce();
+    expect(opened.sent).toHaveLength(1);
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "session-prepare-skipped-duplicate",
+      "session-existing-agent",
+    );
+  });
+
+  it("SessionStart 返回空指导时保留上一轮 Stop 指导", async () => {
+    const config = createConfig();
+    const workspacePath = join(config.dataDir, "empty-start-guidance-workspace");
+    const agentId = "agent-empty-start";
+    const previousReference = {
+      version: 1 as const,
+      agentId,
+      workspacePath,
+      conversationId: "conversation-previous-stop",
+      messageId: "message-previous-stop",
+      revision: "revision-previous-stop",
+      empty: false,
+      updatedAt: new Date().toISOString(),
+    };
+    saveGuidanceReference(config, previousReference);
+    const opened = createSession(
+      "conversation-empty-start",
+      "无",
+      agentId,
+    );
+    const client: AgentClient = {
+      createAgent: vi.fn(async () => "agent-should-not-be-created"),
+      createSession: vi.fn(() => opened.session),
+      resumeSession: vi.fn(() => opened.session),
+      agents: {
+        list: vi.fn(async () => [{
+          id: agentId,
+          tags: [
+            "letta-mem",
+            `letta-mem-workspace:${sha256(workspacePath).slice(0, 24)}`,
+          ],
+        }]),
+      },
+    };
+    const log = vi.fn() as LogFunction;
+
+    await handlePrepareSession(config, {
+      session_id: "session-empty-start-guidance",
+      cwd: workspacePath,
+      source: "startup",
+    }, log, vi.fn(async () => client) as AgentClientFactory);
+
+    expect(loadGuidanceReference(config, workspacePath))
+      .toEqual(previousReference);
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "session-guidance-empty",
+      "session-empty-start-guidance",
     );
   });
 

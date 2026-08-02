@@ -55,6 +55,7 @@ export interface SessionState {
   lastProcessedLine: number;
   recentDigests: string[];
   pendingAssistantDigests?: string[];
+  lastSessionStartPreparationAt?: string;
   lastInjectedContextRevision?: string;
   lastSeenConversationMessageId?: string;
 }

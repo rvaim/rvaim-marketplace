@@ -195,6 +195,12 @@ export function loadSessionState(
               value.lastSeenConversationMessageId,
           }
         : {}),
+      ...(typeof value.lastSessionStartPreparationAt === "string"
+        ? {
+            lastSessionStartPreparationAt:
+              value.lastSessionStartPreparationAt,
+          }
+        : {}),
       lastProcessedLine: value.lastProcessedLine,
       recentDigests: value.recentDigests.filter(
         (digest): digest is string => typeof digest === "string",
@@ -389,7 +395,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
-    definitionVersion: 7,
+    definitionVersion: 8,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }

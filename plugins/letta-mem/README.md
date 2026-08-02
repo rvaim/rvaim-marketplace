@@ -4,11 +4,16 @@
 
 插件不保存真正的记忆，也不决定记忆使用本地、云端、memory block、MemFS、archive 或 Shared Memory。插件只把已完成的编码会话和稳定约束交给工作区 Letta Agent；长期价值、共享/工作区作用域、组织方式和保存位置都由 Agent 使用 Letta 当前提供的原生能力自行决定。
 
-当前版本：`2.7.0`。
+当前版本：`2.8.0`。
 
 ## 一句话架构
 
 ```text
+SessionStart
+  └─ 只查找已有工作区 Agent
+       ├─ 找不到：静默结束，绝不创建 Agent
+       └─ 找到：后台准备新会话可能需要的记忆指导
+
 上一轮 Stop
   └─ 后台把会话增量交给 Letta Agent
        ├─ Agent 自主更新原生记忆
@@ -24,9 +29,10 @@
 
 - 每个规范化工作区对应一个可复用的 Letta Agent。
 - 每个 Claude Code 或 Codex 会话对应该 Agent 下的一条 Letta Conversation。
-- `SessionStart` 只恢复本地状态，不连接 Letta，不创建 Agent 或 Conversation。
-- 第一条真实用户消息才固定工作区根目录并创建或复用 Agent/Conversation。
-- `UserPromptSubmit` 不向 Agent 发送用户问题或检索提示，只读取上一轮 `Stop` 已完成的指导。
+- `SessionStart` 恢复本地状态后，只查找已有工作区 Agent；找不到时不会创建 Agent 或 Conversation。
+- 找到已有 Agent 时，`SessionStart` 在后台创建或恢复当前编码会话的 Conversation，让 Agent 使用 Letta 原生检索能力提前准备指导。
+- 找到已有 Agent 时由 `SessionStart` 固定工作区根目录；否则由第一条真实用户消息固定并激活，届时才创建 Agent 和 Conversation。
+- `UserPromptSubmit` 不向 Agent 发送用户问题或检索提示，只读取 `SessionStart` 或上一轮 `Stop` 已完成的指导。
 - `PreToolUse` 再检查一次最新指导，覆盖后台处理刚好在本轮开始后完成的竞态。
 - `Stop` 把会话增量写入持久队列，并由后台进程驱动 Agent 更新记忆、准备下一轮指导。
 - 只按 Letta 最终 `assistant_message` 的消息 ID 注入指导，不把分析、工具状态或保存过程混入编码助手上下文。
@@ -41,7 +47,8 @@
 
 - 接收宿主 Hook 输入。
 - 固定会话对应的工作区根目录。
-- 创建、发现或复用工作区 Agent 与 Conversation。
+- 首条真实消息可以创建工作区 Agent；`SessionStart` 只能发现和复用已有 Agent。
+- 创建或复用编码会话对应的 Conversation。
 - 在 Agent 的固定 system prompt 中提供语言、作用域和安全约束。
 - 在 `Stop` 发送已完成的会话增量。
 - 保存 Agent/Conversation ID、处理游标、待处理队列和下一轮指导的消息引用。
@@ -73,10 +80,11 @@
 | --- | --- | --- |
 | 规范化工作区绝对路径 | 一个工作区 Agent | 持有该工作区的持续身份，并可由 Agent 自主使用共享记忆 |
 | 一条 Claude Code 或 Codex 会话 | Agent 下的一条 Conversation | 保存该编码会话与后台 Agent 的处理历史 |
+| 新编码会话通知 | `<coding_session_start>` | 让已有 Agent 提前准备可能相关的记忆指导 |
 | 已完成的会话增量 | `<coding_session_update>` | 让 Agent 更新记忆并准备下一轮指导 |
 | Agent 最终 `assistant_message` | 下一轮指导 | 在下一条问题提交前注入编码助手 |
 | Codex 任务标题 | Conversation `summary` | 在 Letta App 中显示可识别的会话名称 |
-| 首条真实消息的工作区根目录 | SDK Session `cwd` | 固定后台 Agent Session 的代码执行目录 |
+| 当前会话固定的工作区根目录 | SDK Session `cwd` | 固定后台 Agent Session 的代码执行目录 |
 
 Agent 默认名称：
 
@@ -97,13 +105,22 @@ sequenceDiagram
     participant M as Letta 原生记忆
 
     H->>P: SessionStart
-    P-->>H: 仅恢复本地状态
+    P->>P: 恢复本地状态并按工作区标签查找 Agent
+    alt 已有工作区 Agent
+        P->>A: 后台创建或恢复 Conversation
+        P->>A: 发送 coding_session_start
+        A->>M: 自主检索已有记忆和历史会话
+        A-->>P: 最终只返回新会话简短指导
+        P->>P: 保存 Letta 消息引用
+    else 找不到 Agent
+        P-->>H: 静默结束，不创建 Agent 或 Conversation
+    end
 
     U->>H: 第一条用户问题
     H->>P: UserPromptSubmit
     P->>P: 固定工作区根目录并激活会话
-    P->>A: 创建或复用 Agent/Conversation，不发送消息
-    P->>A: 按消息 ID 读取上一轮已完成指导
+    P->>A: 复用预热映射；必要时才创建 Agent/Conversation
+    P->>A: 按消息 ID 读取已完成指导
     A-->>P: 指导或无内容
     P-->>H: 必要时隐藏注入 letta_memory
     H-->>U: 回答当前问题
@@ -123,27 +140,38 @@ sequenceDiagram
 
 ### `SessionStart`
 
-`SessionStart` 不接触 Letta。这样 Claude Desktop 扫描、恢复或预加载历史工作区时，不会创建没有真正使用过的 Agent 或空 Conversation。
+`SessionStart` 分成两个阶段：
+
+1. 同步恢复本地会话状态。
+2. 后台使用工作区标签精确查找已有 Letta Agent。
+
+找不到 Agent 时立即结束，禁止调用 `createAgent`，也不创建 Conversation。这样 Claude Desktop 扫描从未真正使用过的工作区时，不会生成垃圾 Agent。
+
+找到已有 Agent 时，插件会创建或恢复当前编码会话的 Conversation，并以工作区根目录作为 SDK Session `cwd` 发送一条精简的 `<coding_session_start>`。Agent 根据已有记忆和历史会话自行决定是否使用 Letta 原生检索能力，最终只返回可能对新会话有用的简短指导。
+
+预热在独立后台进程执行，不阻塞宿主启动；同一会话 30 秒内的重复 `SessionStart` 只处理一次。已有 Agent 的工作区仍可能产生一条新 Conversation，因为 Agent 需要 Conversation 才能执行预热。
+
+如果预热 Agent 返回空内容，插件保留上一轮 `Stop` 的有效指导，不用空结果覆盖它。
 
 ### 第一条 `UserPromptSubmit`
 
 第一次收到非空用户问题时，插件会：
 
-1. 将当时的 `cwd` 规范化并与 `session_id` 稳定绑定。
+1. 复用 `SessionStart` 已绑定的工作区；未预热时才将当前 `cwd` 规范化并与 `session_id` 稳定绑定。
 2. 标记会话已被真实用户激活，后续 `Stop` 才允许入队。
-3. 创建或复用工作区 Agent。
-4. 为当前编码会话创建或恢复 Conversation，并以工作区根目录作为 SDK Session `cwd`。
-5. 查找该工作区最近一次 `Stop` 保存的指导引用。
+3. 如果 `SessionStart` 已完成预热，复用其 Agent/Conversation 映射；否则创建或复用工作区 Agent 和 Conversation。
+4. 始终以固定工作区根目录作为 SDK Session `cwd`。
+5. 查找该工作区最近一次 `SessionStart` 或 `Stop` 保存的指导引用。
 6. 如果引用存在，直接从 Letta Conversation 读取对应的最终 `assistant_message` 并注入。
 7. 关闭本次只用于建立映射的 SDK Session。
 
 这一步不会调用 `session.send()`，不会把当前问题发送给 Letta Agent，也不会等待一次新的模型推理。
 
-如果这是该工作区第一次使用，之前没有任何成功完成的 `Stop`，第一句话自然没有可注入的历史指导；插件不会把所有记忆块全部灌入上下文，也不会临时驱动 Agent 生成内容。
+如果这是该工作区第一次使用，`SessionStart` 找不到 Agent，第一句话自然没有可注入的预热指导；插件不会把所有记忆块全部灌入上下文，也不会在 `UserPromptSubmit` 临时驱动 Agent 生成内容。
 
 ### 后续 `UserPromptSubmit`
 
-每条用户消息都会检查最新指导 revision，但同一 revision 在同一编码会话只注入一次。正常情况下，它读到的内容来自上一轮 `Stop`。
+每条用户消息都会检查最新指导 revision，但同一 revision 在同一编码会话只注入一次。它读到的内容可能来自当前 `SessionStart` 预热，也可能来自上一轮 `Stop`。
 
 ### `PreToolUse`
 
@@ -171,7 +199,7 @@ sequenceDiagram
 
 ### 固定 system prompt
 
-语言规则、共享/工作区作用域、安全边界和响应格式只放在 Agent system prompt 中。Agent 定义升级时会原地更新一次，不会在每轮 Conversation 中重复发送。
+语言规则、共享/工作区作用域、安全边界、`SessionStart`/`Stop` 请求协议和响应格式只放在 Agent system prompt 中。Agent 定义升级时会原地更新一次，不会在每轮 Conversation 中重复发送。
 
 固定约束包括：
 
@@ -205,6 +233,21 @@ sequenceDiagram
 
 这里不会重复语言策略、作用域策略、存储路径、共享开关或 backend 设置。
 
+### 每次 `SessionStart` 的短消息
+
+只有找到已有工作区 Agent 后才发送：
+
+```xml
+<coding_session_start>
+  <session_id>...</session_id>
+  <workspace_path>...</workspace_path>
+  <timestamp>...</timestamp>
+  <context>新的编码会话已经开始，后续将发送该会话的增量更新。</context>
+</coding_session_start>
+```
+
+这条消息不携带当前用户问题，不要求插件指定检索工具或记忆存储位置。是否检索久远会话、使用什么 Letta 原生能力以及返回哪些指导都由 Agent 决定；仅收到启动通知本身不应产生新的长期记忆。
+
 ## 为什么读取时不会出现无关英文过程文本
 
 插件不按语言过滤消息，也不猜测哪些英文是“无关内容”。它使用结构化边界：
@@ -232,7 +275,7 @@ sequenceDiagram
 
 ## 工作区根目录与 Letta App 底栏目录
 
-首次真实 `UserPromptSubmit` 会锁定该编码会话的工作区根目录。后续工具进入子目录时，Agent 身份、Conversation 映射、`workspace_path` 和 SDK Session `cwd` 都不会变化。
+已有 Agent 的工作区会在 `SessionStart` 预热前锁定编码会话根目录；没有已有 Agent 时，由首次真实 `UserPromptSubmit` 锁定。后续工具进入子目录时，Agent 身份、Conversation 映射、`workspace_path` 和 SDK Session `cwd` 都不会变化。
 
 `cwd` 会传给：
 
@@ -328,8 +371,8 @@ state/<server-namespace>/
 
 | Hook | 是否驱动 Agent | 行为 |
 | --- | --- | --- |
-| `SessionStart` | 否 | 只恢复本地状态，不连接 Letta |
-| `UserPromptSubmit` | 否 | 激活真实会话、创建/复用映射、读取已完成指导 |
+| `SessionStart` | 仅已有 Agent 时在后台驱动 | 找不到 Agent 就静默结束；找到后准备新会话指导 |
+| `UserPromptSubmit` | 否 | 激活真实会话、必要时创建映射、读取已完成指导 |
 | `PreToolUse` | 否 | 检查是否有尚未注入的新指导 |
 | `Stop` | 是，后台 | 排队并异步处理 transcript、更新记忆、准备下一轮指导 |
 
@@ -337,7 +380,20 @@ Codex 或 Claude Code 必须信任 Hook。未信任时不会执行任何读取�
 
 ## 正常日志顺序
 
-一个新工作区的首轮通常出现：
+一个从未创建 Agent 的新工作区，`SessionStart` 通常出现：
+
+```text
+session-prepare-skipped-agent-missing
+```
+
+已有 Agent 的工作区重新打开时通常出现：
+
+```text
+session-prepare-agent-found
+session-guidance-prepared 或 session-guidance-empty
+```
+
+新工作区的首条真实问题通常出现：
 
 ```text
 session-workspace-bound
@@ -425,7 +481,7 @@ codex plugin add letta-mem@rvaim-marketplace
 
 ### 第一句话会读取记忆吗？
 
-它会读取该工作区上一次成功 `Stop` 已经准备好的指导。若这是工作区第一次使用，没有上一轮指导，第一句话不会临时调用 Agent，也不会注入全部记忆。
+已有工作区 Agent 时，`SessionStart` 会提前让 Agent 准备指导；第一句话读取该指导。如果预热尚未完成，则读取该工作区最近一次成功 `Stop` 的指导，之后 `PreToolUse` 还会检查一次最新结果。若这是工作区第一次使用，没有 Agent 和历史指导，第一句话不会临时调用 Agent，也不会注入全部记忆。
 
 ### 为什么 Letta App 里看不到“读取记忆”的新 turn？
 
@@ -449,7 +505,7 @@ codex plugin add letta-mem@rvaim-marketplace
 
 ### 为什么只打开工作区没有创建 Agent？
 
-`SessionStart` 故意不连接 Letta。至少提交一条真实非空用户消息后，插件才创建或复用工作区 Agent。
+`SessionStart` 故意禁止创建 Agent。它只会复用按当前工作区标签找到的已有 Agent；至少提交一条真实非空用户消息后，插件才允许为新工作区创建 Agent。
 
 ### 如何停用？
 

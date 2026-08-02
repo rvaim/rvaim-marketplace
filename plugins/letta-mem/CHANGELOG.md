@@ -1,5 +1,15 @@
 # 变更日志
 
+## 2.8.0
+
+- 参考 `letta-ai/claude-subconscious` 恢复 `SessionStart` 记忆预热：找到已有工作区 Agent 后，在后台创建或恢复当前编码会话的 Conversation，并发送精简的 `<coding_session_start>`。
+- `SessionStart` 使用工作区标签精确发现 Agent；找不到时静默结束，严格禁止创建 Agent、更新 Agent 定义或创建 Conversation，避免 Claude Desktop 预加载未使用工作区时产生垃圾 Agent。
+- 启动事件只包含会话 ID、工作区路径、时间和新会话通知；检索方式、久远会话召回和最终指导选择仍全部交给 Letta Agent 及其原生能力。
+- 启动预热的最终 `assistant_message` 与 `Stop` 指导使用同一套消息 ID 引用和注入流程，不把 Agent 的分析、检索过程或工具状态传给编码助手。
+- 启动预热返回空内容时保留上一轮 `Stop` 的有效指导，不用缺少针对性问题时产生的空结果覆盖待注入上下文。
+- 同一编码会话 30 秒内的重复 `SessionStart` 会被抑制；预热使用工作区 Agent 运行锁，且不会把未收到真实用户消息的会话标记为已激活。
+- Agent system prompt 新增 `<coding_session_start>` 协议：只检索和准备已有记忆，不因启动通知本身创建长期记忆。
+
 ## 2.7.0
 
 - 读取流程改为消费上一轮 `Stop` 已完成的下一轮指导；`UserPromptSubmit` 和 `PreToolUse` 不再向 Letta Agent 发送当前问题、检索请求或任何新提示词，也不等待新的模型推理。

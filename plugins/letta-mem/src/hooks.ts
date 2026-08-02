@@ -15,6 +15,7 @@ import type {
 import {
   agentScopeKey,
   createAgentClient,
+  findExistingAgentId,
   openAgentSession,
   resolveAgentId,
   sendAgentUpdateWithResult,
@@ -23,6 +24,7 @@ import type {
   AgentClientFactory,
   AgentConversationMessage,
   AgentSession,
+  AgentUpdateResult,
 } from "./letta.js";
 import { errorDetail } from "./logger.js";
 import {
@@ -64,6 +66,7 @@ function validSessionId(input: HookInput): string | null {
 }
 
 type SessionWorkspaceSource = "bound" | "migrated" | "current";
+const SESSION_START_DEDUPLICATION_MS = 30_000;
 
 function resolveSessionWorkspace(
   config: RuntimeConfig,
@@ -121,6 +124,28 @@ function normalizeTranscriptPath(
   }
   if (isAbsolute(trimmed)) return resolve(trimmed);
   return resolve(cwd?.trim() || process.cwd(), trimmed);
+}
+
+function escapeXmlText(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&apos;",
+  })[character] ?? character);
+}
+
+function formatSessionStartForAgent(
+  sessionId: string,
+  workspacePath: string,
+): string {
+  return `<coding_session_start>
+<session_id>${escapeXmlText(sessionId)}</session_id>
+<workspace_path>${escapeXmlText(workspacePath)}</workspace_path>
+<timestamp>${new Date().toISOString()}</timestamp>
+<context>新的编码会话已经开始，后续将发送该会话的增量更新。</context>
+</coding_session_start>`;
 }
 
 function isRetryBlocked(config: RuntimeConfig): boolean {
@@ -517,6 +542,109 @@ async function readPreparedGuidance(
   );
 }
 
+async function savePreparedGuidance(
+  config: RuntimeConfig,
+  workspacePath: string,
+  sessionId: string,
+  agentId: string,
+  conversationId: string,
+  client: Awaited<ReturnType<AgentClientFactory>>,
+  turn: AgentUpdateResult,
+  log: LogFunction,
+  preserveExistingOnEmpty: boolean = false,
+): Promise<boolean> {
+  const trimmedGuidance = normalizedGuidance(
+    turn.guidance,
+    config.maxContextChars,
+  );
+  if (!trimmedGuidance && preserveExistingOnEmpty) {
+    log("info", "session-guidance-empty", sessionId);
+    return false;
+  }
+  let guidanceMessageId = turn.messageId;
+  if (trimmedGuidance && client.conversations) {
+    const page = await client.conversations.listMessages(
+      conversationId,
+      { order: "desc", limit: 100 },
+    );
+    const exactStreamMessage = guidanceMessageId
+      ? page.messages.find((candidate) => (
+          candidate.id === guidanceMessageId
+          && candidate.message_type === "assistant_message"
+          && messageContentText(candidate) === trimmedGuidance
+        ))
+      : undefined;
+    guidanceMessageId = exactStreamMessage?.id
+      ?? page.messages.find((candidate) => (
+        candidate.message_type === "assistant_message"
+        && messageContentText(candidate) === trimmedGuidance
+      ))?.id;
+  }
+  const guidanceRevision = sha256([
+    agentId,
+    workspacePath,
+    conversationId,
+    guidanceMessageId ?? "empty",
+    trimmedGuidance,
+  ].join("\0"));
+  saveContextSnapshot(config, {
+    version: 1,
+    agentId,
+    workspacePath,
+    revision: guidanceRevision,
+    updatedAt: new Date().toISOString(),
+    text: trimmedGuidance,
+  });
+  if (!trimmedGuidance || guidanceMessageId) {
+    saveGuidanceReference(config, {
+      version: 1,
+      agentId,
+      workspacePath,
+      conversationId,
+      ...(guidanceMessageId ? { messageId: guidanceMessageId } : {}),
+      revision: guidanceRevision,
+      empty: !trimmedGuidance,
+      updatedAt: new Date().toISOString(),
+    });
+    log(
+      "info",
+      trimmedGuidance ? "memory-guidance-prepared" : "memory-guidance-empty",
+      sessionId,
+    );
+    return Boolean(trimmedGuidance);
+  }
+  log("warn", "memory-guidance-message-missing", sessionId);
+  return false;
+}
+
+async function claimSessionStartPreparation(
+  config: RuntimeConfig,
+  workspacePath: string,
+  sessionId: string,
+): Promise<boolean> {
+  const now = Date.now();
+  let claimed = false;
+  const updated = await updateSessionState(
+    config,
+    workspacePath,
+    sessionId,
+    (state) => {
+      const previous = Date.parse(state.lastSessionStartPreparationAt ?? "");
+      if (
+        Number.isFinite(previous)
+        && now - previous < SESSION_START_DEDUPLICATION_MS
+      ) return state;
+      claimed = true;
+      return {
+        ...state,
+        lastSessionStartPreparationAt: new Date(now).toISOString(),
+      };
+    },
+    2_000,
+  );
+  return Boolean(updated && claimed);
+}
+
 export async function handleSessionStart(
   config: RuntimeConfig,
   input: HookInput,
@@ -567,6 +695,12 @@ export async function handleSessionStart(
                 state.lastSeenConversationMessageId,
             }
           : {}),
+        ...(state.lastSessionStartPreparationAt !== undefined
+          ? {
+              lastSessionStartPreparationAt:
+                state.lastSessionStartPreparationAt,
+            }
+          : {}),
         lastProcessedLine: Math.max(state.lastProcessedLine, forkTail),
         recentDigests: state.recentDigests,
         pendingAssistantDigests: state.pendingAssistantDigests ?? [],
@@ -581,7 +715,7 @@ export async function handlePrepareSession(
   config: RuntimeConfig,
   input: HookInput,
   log: LogFunction,
-  _clientFactory: AgentClientFactory = createAgentClient,
+  clientFactory: AgentClientFactory = createAgentClient,
 ): Promise<string> {
   const sessionId = validSessionId(input);
   if (!sessionId || config.disabled) return "";
@@ -590,14 +724,127 @@ export async function handlePrepareSession(
     sessionId,
     input.cwd,
   );
-  const state = loadSessionState(config, workspacePath, sessionId);
-  log(
-    "info",
-    state.activatedAt
-      ? "session-state-restored"
-      : "session-prepare-skipped-awaiting-prompt",
+  if (!await claimSessionStartPreparation(
+    config,
+    workspacePath,
     sessionId,
-  );
+  )) {
+    log("info", "session-prepare-skipped-duplicate", sessionId);
+    return "";
+  }
+
+  let agentSession: AgentSession | undefined;
+  let release: (() => void) | null = null;
+  try {
+    const client = await clientFactory(config);
+    const agentId = await findExistingAgentId(
+      config,
+      client,
+      workspacePath,
+      log,
+    );
+    if (!agentId) return "";
+
+    const binding = await bindSessionWorkspace(
+      config,
+      sessionId,
+      workspacePath,
+      2_000,
+    );
+    if (binding?.workspacePath !== workspacePath) {
+      log("warn", "session-prepare-skipped-workspace-changed", sessionId);
+      return "";
+    }
+
+    release = acquireLock(
+      agentRunLockPath(config, agentScopeKey(config, workspacePath)),
+    );
+    if (!release) {
+      log("info", "session-prepare-skipped-agent-busy", sessionId);
+      return "";
+    }
+
+    const state = loadSessionState(config, workspacePath, sessionId);
+    const resumableConversation = state.agentId === agentId
+      ? state.conversationId
+      : undefined;
+    let opened;
+    try {
+      opened = await openAgentSession(
+        client,
+        agentId,
+        resumableConversation,
+        workspacePath,
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error : String(error);
+      if (!resumableConversation || !isMissingLettaResource(detail)) {
+        throw error;
+      }
+      opened = await openAgentSession(
+        client,
+        agentId,
+        undefined,
+        workspacePath,
+      );
+      log("warn", "conversation-recreated", resumableConversation);
+    }
+    agentSession = opened.session;
+
+    const mapped = await updateSessionState(
+      config,
+      workspacePath,
+      sessionId,
+      (latest) => ({
+        ...latest,
+        agentId,
+        agentModel: config.model,
+        conversationId: opened.conversationId,
+        ...(!latest.lastSeenConversationMessageId && opened.latestMessageId
+          ? { lastSeenConversationMessageId: opened.latestMessageId }
+          : {}),
+      }),
+      2_000,
+    );
+    if (!mapped) throw new Error("无法保存 SessionStart 的 Letta 会话映射");
+
+    await syncConversationTitle(
+      config,
+      workspacePath,
+      sessionId,
+      client,
+      opened.conversationId,
+      resolveConversationTitle(input),
+      log,
+    );
+    const turn = await sendAgentUpdateWithResult(
+      opened.session,
+      formatSessionStartForAgent(sessionId, workspacePath),
+    );
+    const prepared = await savePreparedGuidance(
+      config,
+      workspacePath,
+      sessionId,
+      agentId,
+      opened.conversationId,
+      client,
+      turn,
+      log,
+      true,
+    );
+    if (prepared) log("info", "session-guidance-prepared", sessionId);
+  } catch (error) {
+    const detail = error instanceof Error ? errorDetail(error) : String(error);
+    log("warn", "session-prepare-failed", detail);
+  } finally {
+    try {
+      agentSession?.close();
+    } catch (error) {
+      const detail = error instanceof Error ? errorDetail(error) : String(error);
+      log("warn", "session-close-failed", detail);
+    }
+    release?.();
+  }
   return "";
 }
 
@@ -896,63 +1143,17 @@ async function processPendingUpdate(
         batch.events,
       );
       const turn = await sendAgentUpdateWithResult(agentSession, message);
-      const trimmedGuidance = normalizedGuidance(
-        turn.guidance,
-        config.maxContextChars,
-      );
-      let guidanceMessageId = turn.messageId;
-      if (trimmedGuidance && agentClient?.conversations) {
-        const page = await agentClient.conversations.listMessages(
-          activeConversationId,
-          { order: "desc", limit: 100 },
-        );
-        const exactStreamMessage = guidanceMessageId
-          ? page.messages.find((candidate) => (
-              candidate.id === guidanceMessageId
-              && candidate.message_type === "assistant_message"
-              && messageContentText(candidate) === trimmedGuidance
-            ))
-          : undefined;
-        guidanceMessageId = exactStreamMessage?.id
-          ?? page.messages.find((candidate) => (
-            candidate.message_type === "assistant_message"
-            && messageContentText(candidate) === trimmedGuidance
-          ))?.id;
-      }
-      const guidanceRevision = sha256([
+      if (!agentClient) throw new Error("Letta Agent 客户端尚未初始化");
+      await savePreparedGuidance(
+        config,
+        workspacePath,
+        sessionId,
         activeAgentId,
-        workspacePath,
         activeConversationId,
-        guidanceMessageId ?? "empty",
-        trimmedGuidance,
-      ].join("\0"));
-      saveContextSnapshot(config, {
-        version: 1,
-        agentId: activeAgentId,
-        workspacePath,
-        revision: guidanceRevision,
-        updatedAt: new Date().toISOString(),
-        text: trimmedGuidance,
-      });
-      if (!trimmedGuidance || guidanceMessageId) {
-        saveGuidanceReference(config, {
-          version: 1,
-          agentId: activeAgentId,
-          workspacePath,
-          conversationId: activeConversationId,
-          ...(guidanceMessageId ? { messageId: guidanceMessageId } : {}),
-          revision: guidanceRevision,
-          empty: !trimmedGuidance,
-          updatedAt: new Date().toISOString(),
-        });
-        log(
-          "info",
-          trimmedGuidance ? "memory-guidance-prepared" : "memory-guidance-empty",
-          sessionId,
-        );
-      } else {
-        log("warn", "memory-guidance-message-missing", sessionId);
-      }
+        agentClient,
+        turn,
+        log,
+      );
 
       const committed = await updateSessionState(
         config,
