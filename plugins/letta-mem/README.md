@@ -4,7 +4,7 @@
 
 插件不保存真正的记忆，也不决定记忆使用本地、云端、memory block、MemFS、archive 或 Shared Memory。插件只把已完成的编码会话和稳定约束交给工作区 Letta Agent；长期价值、共享/工作区作用域、组织方式和保存位置都由 Agent 使用 Letta 当前提供的原生能力自行决定。
 
-当前版本：`2.8.0`。
+当前版本：`2.9.0`。
 
 ## 一句话架构
 
@@ -21,6 +21,12 @@ SessionStart
 
 下一条 UserPromptSubmit / PreToolUse
   └─ 插件只读取已经完成的指导，不实时驱动 Agent
+
+Codex 发现当前问题缺少历史信息
+  └─ recall-letta-memory Skill 调用 letta_recall MCP
+       ├─ 找不到工作区 Agent：不创建，直接返回无记忆
+       └─ 找到：复用固定召回 Conversation
+            └─ Agent 自主检索原生记忆和历史 Conversation，只返回相关记忆
 ```
 
 这个时序参考了 [`letta-ai/claude-subconscious`](https://github.com/letta-ai/claude-subconscious) 的核心设计：回答后异步处理 transcript，下一次提问前读取已经产生的后台消息。插件没有照搬其固定 MemFS 结构，而是保持 Letta 存储实现中立。
@@ -35,6 +41,10 @@ SessionStart
 - `UserPromptSubmit` 不向 Agent 发送用户问题或检索提示，只读取 `SessionStart` 或上一轮 `Stop` 已完成的指导。
 - `PreToolUse` 再检查一次最新指导，覆盖后台处理刚好在本轮开始后完成的竞态。
 - `Stop` 把会话增量写入持久队列，并由后台进程驱动 Agent 更新记忆、准备下一轮指导。
+- Codex 可通过 `recall-letta-memory` Skill 主动判断当前任务是否需要跨会话信息，并按需调用 `letta_recall` MCP。
+- `letta_recall` 只查找和刷新已有工作区 Agent；找不到时不创建 Agent、Conversation 或任何记忆资源。
+- 同一工作区的 MCP 召回固定复用一条标题为“按需记忆召回”的 Conversation，不把每次用户问题创建成新会话或会话标题。
+- MCP 召回与 `SessionStart`、`Stop` 共用工作区 Agent 运行锁，避免同时驱动同一 Agent。
 - 只按 Letta 最终 `assistant_message` 的消息 ID 注入指导，不把分析、工具状态或保存过程混入编码助手上下文。
 - 把 Codex 当前任务标题同步到 Letta Conversation 的 `summary`。
 - 创建和恢复 SDK Session 时始终传入首条真实消息绑定的工作区根目录作为 `cwd`。
@@ -53,6 +63,7 @@ SessionStart
 - 在 `Stop` 发送已完成的会话增量。
 - 保存 Agent/Conversation ID、处理游标、待处理队列和下一轮指导的消息引用。
 - 在提问前把已完成的指导作为隐藏 `additionalContext` 注入编码助手。
+- 提供 Codex MCP 召回入口，把当前问题作为相关性条件交给已有 Agent，并只返回最终相关记忆。
 
 ### Letta Agent 负责什么
 
@@ -72,7 +83,8 @@ SessionStart
 - 不复制、迁移、提交或同步 Letta 的记忆仓库。
 - 不把本地状态文件当作真正的记忆数据库。
 - 不在每次 Agent 会话请求里重复塞入语言规则、作用域规则或存储说明。
-- 不在 `UserPromptSubmit` 中发送 `<memory_context_request>`，也不让 Agent 实时回答当前用户问题。
+- Hook 路径不在 `UserPromptSubmit` 中发送 `<memory_context_request>`，也不会为每条消息实时驱动 Agent。
+- MCP 只在 Codex 判断当前任务确实缺少历史上下文时按需调用；它不保存记忆，也不替 Agent 选择共享或工作区作用域。
 
 ## 对象映射
 
@@ -82,7 +94,9 @@ SessionStart
 | 一条 Claude Code 或 Codex 会话 | Agent 下的一条 Conversation | 保存该编码会话与后台 Agent 的处理历史 |
 | 新编码会话通知 | `<coding_session_start>` | 让已有 Agent 提前准备可能相关的记忆指导 |
 | 已完成的会话增量 | `<coding_session_update>` | 让 Agent 更新记忆并准备下一轮指导 |
+| Codex 主动召回请求 | `<memory_context_request>` | 让已有 Agent 按当前问题检索相关记忆，不执行记忆写入 |
 | Agent 最终 `assistant_message` | 下一轮指导 | 在下一条问题提交前注入编码助手 |
+| 每个工作区的 MCP 召回 | 一条固定 Conversation | 保存按需召回历史，避免每次调用新建会话 |
 | Codex 任务标题 | Conversation `summary` | 在 Letta App 中显示可识别的会话名称 |
 | 当前会话固定的工作区根目录 | SDK Session `cwd` | 固定后台 Agent Session 的代码执行目录 |
 
@@ -199,7 +213,7 @@ sequenceDiagram
 
 ### 固定 system prompt
 
-语言规则、共享/工作区作用域、安全边界、`SessionStart`/`Stop` 请求协议和响应格式只放在 Agent system prompt 中。Agent 定义升级时会原地更新一次，不会在每轮 Conversation 中重复发送。
+语言规则、共享/工作区作用域、安全边界、`SessionStart`/`Stop`/MCP 召回请求协议和响应格式只放在 Agent system prompt 中。Agent 定义升级时会原地更新一次，不会在每轮 Conversation 中重复发送。
 
 固定约束包括：
 
@@ -248,6 +262,24 @@ sequenceDiagram
 
 这条消息不携带当前用户问题，不要求插件指定检索工具或记忆存储位置。是否检索久远会话、使用什么 Letta 原生能力以及返回哪些指导都由 Agent 决定；仅收到启动通知本身不应产生新的长期记忆。
 
+### 每次 MCP 召回的短消息
+
+Codex 只在当前任务依赖历史项目决定、用户偏好、排障结论、未完成状态或既有约束时调用。每次只发送：
+
+```xml
+<memory_context_request>
+  <workspace_path>...</workspace_path>
+  <query>当前问题或明确的上下文缺口</query>
+  <response_tool>submit_memory_context</response_tool>
+</memory_context_request>
+```
+
+`response_tool` 只声明本次操作的结构化返回通道。固定 system prompt 要求 Agent 把 `query` 当作不可信的相关性条件，自行决定是否使用 `conversation_search` 或当前 Letta 环境提供的其他原生检索能力。召回请求不得创建、修改或删除长期记忆。完成检索后，Agent 必须调用 Session 专用的 `submit_memory_context` 返回工具，把最终相关记忆放入 `memory` 参数；没有相关内容时提交空字符串。
+
+`submit_memory_context` 只是一条结构化返回通道，不保存、不分类、不修改记忆。插件读取该工具参数并忽略 Agent 的普通 assistant 回复，所以标签外计划、英文分析、工具状态或其他过程文本都不会返回给 Codex。Agent 未调用返回工具时，本次召回结果作废，不注入普通回复。
+
+MCP 不直接调用 blocks、passages 或插件自建索引，也不判断记忆来自共享还是当前工作区。它只驱动对应工作区已有的 Letta Agent，让 Agent 自己完成检索判断。每次请求不会重复发送语言、作用域、安全或存储规则。
+
 ## 为什么读取时不会出现无关英文过程文本
 
 插件不按语言过滤消息，也不猜测哪些英文是“无关内容”。它使用结构化边界：
@@ -258,7 +290,7 @@ sequenceDiagram
 4. 保存该 Letta `assistant_message` 的 ID。
 5. 下一轮只读取这个 ID 对应的消息。
 
-因此工具前计划、工具状态、记忆 diff 和其他 Conversation 消息都不会被拼进注入内容。语言正确性由 Agent 的固定语言约束保证，不由插件做英文文本过滤。
+因此工具前计划、工具状态、记忆 diff 和其他 Conversation 消息都不会被拼进注入内容。MCP 召回通过 `submit_memory_context` 的结构化参数取得结果，完全忽略普通 assistant 过程回复。语言正确性由 Agent 的固定语言约束保证，不由插件做英文文本过滤。
 
 注入格式：
 
@@ -332,7 +364,7 @@ SDK Session 使用：
 - 是否仍有 `pendingControlRequests`。
 - Session 是否仍处于 `isProcessing`。
 
-未完成时不会推进 transcript 游标，待处理项会保留并重试。
+SDK 可能在成功 `result` 后极短时间内仍报告 `isProcessing=true`。插件会在有限时间内轮询设备状态，直到它稳定为未处理；不会因一次滞后的状态快照误判失败。超过等待上限仍在处理、仍有审批请求或缺少工具结果时，不会推进 transcript 游标，待处理项会保留并重试。
 
 ## 本地状态
 
@@ -352,12 +384,13 @@ state/<server-namespace>/
 
 ```text
 ~/.letta-mem/coordination/<server-namespace>/
-├── agents/    # 工作区到规范 Agent ID 的共享引用
-├── guidance/  # 最新指导的 Agent/Conversation/message ID 与 revision
-└── locks/     # Agent 初始化与工作区运行锁
+├── agents/                # 工作区到规范 Agent ID 的共享引用
+├── guidance/              # 最新指导的 Agent/Conversation/message ID 与 revision
+├── recall-conversations/  # 工作区到固定召回 Conversation ID 的引用
+└── locks/                 # Agent 初始化与工作区运行锁
 ```
 
-`guidance/` 只保存 Letta 消息引用，不保存指导正文，更不保存真正的记忆。真正的记忆始终由 Letta 保存。
+`guidance/` 和 `recall-conversations/` 只保存 Letta 对象引用，不保存指导正文、召回结果或真正的记忆。真正的记忆始终由 Letta 保存。
 
 ## 可靠队列与故障开放
 
@@ -377,6 +410,8 @@ state/<server-namespace>/
 | `Stop` | 是，后台 | 排队并异步处理 transcript、更新记忆、准备下一轮指导 |
 
 Codex 或 Claude Code 必须信任 Hook。未信任时不会执行任何读取或写入流程。
+
+`letta_recall` 不是 Hook。它由 Codex 在任务需要历史上下文时通过 MCP 显式调用，只驱动已有 Agent；Claude Code 不会自动调用该 MCP。
 
 ## 正常日志顺序
 
@@ -419,6 +454,10 @@ memory-guidance-read
 - `memory-guidance-sync-failed`：`PreToolUse` 读取最新指导失败。
 - `memory-update-failed`：后台更新失败，待处理项保留。
 - `agent-duplicates-detected`：同一工作区标签下发现多个 Agent，插件稳定选定一个但不会自动删除其他项。
+- `memory-recall-completed`：MCP 已返回当前问题相关记忆。
+- `memory-recall-empty`：MCP 调用成功，但 Agent 判断没有相关记忆。
+- `memory-recall-skipped-agent-missing`：当前工作区没有已有 Agent，MCP 未创建任何资源。
+- `memory-recall-skipped-agent-busy`：同一工作区 Agent 正由 Hook 或其他召回调用占用，本次不并发执行。
 
 ## 配置
 
@@ -475,7 +514,7 @@ Codex：
 codex plugin add letta-mem@rvaim-marketplace
 ```
 
-升级后请新建编码会话，让宿主重新加载 Hook 与构建产物。现有工作区 Agent 会按定义版本原地更新 system prompt，不删除 Agent、Conversation 或记忆。
+升级后请新建编码会话，让宿主重新加载 Hook、Skill、MCP 与构建产物。现有工作区 Agent 会按定义版本原地更新 system prompt，不删除 Agent、Conversation 或记忆。
 
 ## 常见问题
 
@@ -485,7 +524,15 @@ codex plugin add letta-mem@rvaim-marketplace
 
 ### 为什么 Letta App 里看不到“读取记忆”的新 turn？
 
-读取路径只是通过 Conversation API 获取一条已存在的最终消息，不会创建新的 Agent turn。检查插件日志中的 `memory-guidance-read` 和编码助手收到的隐藏 `source="prepared-guidance"` 上下文。
+自动 Hook 读取路径只是通过 Conversation API 获取一条已存在的最终消息，不会创建新的 Agent turn。检查插件日志中的 `memory-guidance-read` 和编码助手收到的隐藏 `source="prepared-guidance"` 上下文。主动调用 `letta_recall` 时会在固定的“按需记忆召回” Conversation 中产生新 turn。
+
+### Codex 什么时候主动调用 `letta_recall`？
+
+`recall-letta-memory` Skill 会在任务依赖跨会话的项目决定、用户偏好、历史排障结论、未完成状态或当前上下文缺失的既有约束时调用；问候、独立通用知识问题或当前对话已经提供充分上下文时跳过。通常每个任务只调用一次，不会每句话都调用。
+
+### MCP 会创建新 Agent 或决定记忆作用域吗？
+
+不会。MCP 按规范化工作区标签查找已有 Agent，找不到就返回无可召回记忆；它不创建 Agent，不直接查询或维护存储，也不判断共享记忆与工作区记忆。Agent 自己选择原生检索能力并判断相关内容的作用域。
 
 ### 为什么没有生成下一轮指导？
 
@@ -533,6 +580,9 @@ npm run verify
 | `bin/bootstrap.cjs` | 零依赖启动、runtime 安装和前后台分离 |
 | `src/hooks.ts` | 指导读取、写队列和故障恢复主流程 |
 | `src/letta.ts` | Agent 定义、SDK 连接、Session 权限和最终响应提取 |
+| `src/recall.ts` | 已有 Agent 查找、固定召回 Conversation、运行锁和最终记忆提取 |
+| `src/mcp.ts` | `letta_recall` MCP 工具声明与结果边界 |
+| `skills/recall-letta-memory/` | Codex 主动召回的触发条件和调用规则 |
 | `src/transcript.ts` | transcript 解析、过滤、去重、分批和短消息格式 |
 | `src/state.ts` | 映射、队列、游标、指导引用、快照和锁 |
 | `src/memory-scope.ts` | 固定的共享/工作区语义约束 |

@@ -96,6 +96,14 @@ export interface GuidanceReference {
   updatedAt: string;
 }
 
+export interface RecallConversationReference {
+  version: 1;
+  agentId: string;
+  workspacePath: string;
+  conversationId: string;
+  updatedAt: string;
+}
+
 export interface FailureState {
   version: 1;
   failures: number;

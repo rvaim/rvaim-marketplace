@@ -21,6 +21,7 @@ import type {
   FailureState,
   GuidanceReference,
   PendingUpdate,
+  RecallConversationReference,
   RuntimeConfig,
   SessionState,
   SessionWorkspaceBinding,
@@ -395,7 +396,7 @@ export function saveAgentReference(
     agentId,
     scopeKey,
     model,
-    definitionVersion: 8,
+    definitionVersion: 11,
     updatedAt: new Date().toISOString(),
   } satisfies AgentReference);
 }
@@ -483,6 +484,44 @@ export function saveGuidanceReference(
 ): void {
   writeJsonAtomic(
     guidanceReferencePath(config, reference.workspacePath),
+    reference,
+  );
+}
+
+function recallConversationReferencePath(
+  config: RuntimeConfig,
+  workspacePath: string,
+): string {
+  return join(
+    coordinationNamespaceDir(config),
+    "recall-conversations",
+    `${hash(workspacePath)}.json`,
+  );
+}
+
+export function loadRecallConversationReference(
+  config: RuntimeConfig,
+  workspacePath: string,
+): RecallConversationReference | null {
+  const value = readJson<RecallConversationReference>(
+    recallConversationReferencePath(config, workspacePath),
+  );
+  if (
+    value?.version !== 1
+    || value.workspacePath !== workspacePath
+    || typeof value.agentId !== "string"
+    || typeof value.conversationId !== "string"
+    || typeof value.updatedAt !== "string"
+  ) return null;
+  return value;
+}
+
+export function saveRecallConversationReference(
+  config: RuntimeConfig,
+  reference: RecallConversationReference,
+): void {
+  writeJsonAtomic(
+    recallConversationReferencePath(config, reference.workspacePath),
     reference,
   );
 }

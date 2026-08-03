@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "letta-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./bin/bootstrap.cjs",
+        "mcp"
+      ],
+      "cwd": "."
+    }
+  }
+}

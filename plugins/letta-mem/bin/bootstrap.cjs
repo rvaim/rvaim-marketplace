@@ -49,6 +49,7 @@ const ACTIONS = new Set([
   "prepare-runtime-background",
   "update-memory-background",
   "drain-background",
+  "mcp",
 ]);
 const LOCK_STALE_MS = 15 * 60 * 1_000;
 const LOCK_HEARTBEAT_MS = 30 * 1_000;
@@ -463,9 +464,40 @@ async function drainPending() {
   }
 }
 
+async function runMcpServer() {
+  const sdkEntry = await ensureRuntime();
+  const entry = join(PLUGIN_ROOT, "dist", "letta-mem-mcp.mjs");
+  if (!sdkEntry || !existsSync(entry)) {
+    log("mcp-runtime-unavailable");
+    process.exitCode = 1;
+    return;
+  }
+  const child = spawn(process.execPath, [entry], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      LETTA_MEM_SDK_ENTRY: sdkEntry,
+    },
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  const code = await new Promise((resolvePromise, rejectPromise) => {
+    child.once("error", rejectPromise);
+    child.once("close", (value) => resolvePromise(value ?? 1));
+  });
+  if (code !== 0) {
+    log("mcp-child-failed", String(code));
+    process.exitCode = code;
+  }
+}
+
 async function main() {
   const action = process.argv[2];
   if (!ACTIONS.has(action)) return;
+  if (action === "mcp") {
+    await runMcpServer();
+    return;
+  }
   if (/^(?:1|true)$/i.test(process.env.LETTA_MEM_DISABLED || "")) return;
   const input = await readStdin();
 

@@ -1,5 +1,18 @@
 # 变更日志
 
+## 2.9.0
+
+- 新增 Codex `letta-memory` MCP Server 和 `letta_recall` 工具，让编码助手在任务确实依赖历史决定、偏好、排障结论、未完成状态或既有约束时按当前问题主动召回记忆。
+- 新增 `recall-letta-memory` Skill，约束 Codex 通常每个任务只召回一次，并在问候、独立通用知识或当前上下文充分时跳过调用。
+- MCP 只按规范化工作区标签查找已有 Agent；找不到时不创建 Agent、Conversation 或任何记忆资源，也不直接查询 blocks、passages 或插件自建索引。
+- 同一工作区固定复用一条“按需记忆召回” Conversation，避免把每条用户消息创建成新 Conversation 或会话标题；本地只保存该 Conversation ID 引用。
+- `<memory_context_request>` 只包含 `workspace_path`、当前 `query` 和单行 `response_tool` 返回通道声明；语言、作用域、安全和存储规则仍只存在 Agent system prompt 中，不在每次调用重复发送。
+- Agent 自行选择 `conversation_search` 或当前 Letta 环境提供的其他原生检索能力，并自行区分共享记忆与工作区记忆；插件不指定存储位置或 backend。
+- MCP 召回 Session 新增只负责结构化返回的 `submit_memory_context` 工具；Agent 仍自主检索 Letta 原生记忆，插件只读取该工具的 `memory` 参数并忽略普通 assistant 回复，英文计划、分析或状态文本不会进入 Codex。未调用返回工具时宁可放弃本次结果，也不注入原始回复。
+- 召回与 `SessionStart`、`Stop` 共用工作区 Agent 运行锁，并按最终 Letta 消息 ID 提取结果，避免并发驱动 Agent或把检索过程混入返回内容。
+- 修复 Agent 已返回 `success=true/end_turn` 后 SDK 设备状态短暂滞留 `isProcessing=true` 导致成功 turn 被误判失败的问题；现在在有限时间内轮询到稳定状态，持续处理中、待审批或缺少 `tool_result` 仍会失败。
+- MCP 通过插件零依赖引导程序准备 Agent SDK runtime；新增内部召回测试和真实 MCP `listTools/callTool` 协议测试。
+
 ## 2.8.0
 
 - 参考 `letta-ai/claude-subconscious` 恢复 `SessionStart` 记忆预热：找到已有工作区 Agent 后，在后台创建或恢复当前编码会话的 Conversation，并发送精简的 `<coding_session_start>`。

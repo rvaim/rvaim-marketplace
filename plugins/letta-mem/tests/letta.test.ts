@@ -222,4 +222,62 @@ describe("Letta Agent 流式响应", () => {
     await expect(sendAgentUpdate(session, "测试丢失工具结果"))
       .rejects.toThrow("Letta Session 存在未完成工具调用: memory");
   });
+
+  it("成功结果后的短暂处理中状态会等待到真正结束", async () => {
+    let statusReads = 0;
+    const session: AgentSession = {
+      send: vi.fn(async () => {}),
+      async *stream() {
+        yield {
+          type: "assistant",
+          content: "召回到的记忆",
+          uuid: "message-after-settle",
+        };
+        yield { type: "result", success: true, stopReason: "end_turn" };
+      },
+      async bootstrapState() {
+        return { agentId: "agent-test", conversationId: "conversation-test" };
+      },
+      async getDeviceStatus() {
+        statusReads += 1;
+        return {
+          isProcessing: statusReads === 1,
+          pendingControlRequests: [],
+        };
+      },
+      close: vi.fn(),
+    };
+
+    await expect(sendAgentUpdateWithResult(
+      session,
+      "测试短暂状态延迟",
+      { deviceSettleTimeoutMs: 100, deviceSettlePollMs: 0 },
+    )).resolves.toEqual({
+      guidance: "召回到的记忆",
+      messageId: "message-after-settle",
+    });
+    expect(statusReads).toBe(2);
+  });
+
+  it("超过等待上限仍在处理时继续判定失败", async () => {
+    const session: AgentSession = {
+      send: vi.fn(async () => {}),
+      async *stream() {
+        yield { type: "result", success: true, stopReason: "end_turn" };
+      },
+      async bootstrapState() {
+        return { agentId: "agent-test", conversationId: "conversation-test" };
+      },
+      async getDeviceStatus() {
+        return { isProcessing: true, pendingControlRequests: [] };
+      },
+      close: vi.fn(),
+    };
+
+    await expect(sendAgentUpdateWithResult(
+      session,
+      "测试持续处理中",
+      { deviceSettleTimeoutMs: 0 },
+    )).rejects.toThrow("Letta Session 返回完成后仍在处理");
+  });
 });

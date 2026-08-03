@@ -1,0 +1,12 @@
+interface:
+  display_name: "召回 Letta 记忆"
+  short_description: "按当前问题主动召回已有工作区的长期记忆和历史会话上下文"
+  default_prompt: "使用 $recall-letta-memory 召回与当前任务相关的 Letta 记忆。"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "letta-memory"
+      description: "让已有工作区 Letta Agent 按当前问题召回相关记忆"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true
