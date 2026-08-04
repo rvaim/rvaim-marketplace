@@ -39,11 +39,11 @@ describe("新版 Letta 边界", () => {
     expect(hooks).toContain("UserPromptSubmit");
     expect(hooks).toContain("PreToolUse");
     expect(hooks).toContain("update-memory-background");
-    expect(readFileSync(join(pluginRoot, "bin", "bootstrap.cjs"), "utf8"))
-      .not.toContain("ensure-server");
+    expect(readFileSync(join(pluginRoot, "src", "app-server.ts"), "utf8"))
+      .toContain("npm install -g @letta-ai/letta-code");
   });
 
-  it("只直接依赖新版 Agent SDK，由 SDK 提供配套 Letta Code", () => {
+  it("只直接依赖新版 Agent SDK，但运行时要求用户安装 Letta Code CLI", () => {
     const packageJson = JSON.parse(
       readFileSync(join(pluginRoot, "package.json"), "utf8"),
     ) as {

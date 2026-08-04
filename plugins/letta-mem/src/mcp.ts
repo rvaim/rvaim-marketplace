@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
+import { isLettaSetupError } from "./app-server.js";
 import { readRuntimeConfig } from "./config.js";
 import { createLogger, errorDetail } from "./logger.js";
 import {
@@ -47,7 +48,7 @@ export function createRecallMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "letta-memory",
-    version: "2.9.0",
+    version: "2.10.0",
   });
 
   server.registerTool("letta_recall", {
@@ -98,7 +99,9 @@ export function createRecallMcpServer(
       return {
         content: [{
           type: "text",
-          text: "Letta 记忆召回失败，请检查 Letta App Server 与插件日志。",
+          text: isLettaSetupError(error)
+            ? error.message
+            : "Letta 记忆召回失败，请检查 Letta App Server 与插件日志。",
         }],
         isError: true,
       };

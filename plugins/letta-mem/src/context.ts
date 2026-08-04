@@ -9,6 +9,20 @@ import type { RuntimeConfig } from "./types.js";
 const TRUNCATION_MARK = "\n[上下文已截断]";
 const MAX_HOOK_OUTPUT_BYTES = 9_000;
 
+export function formatHookSystemMessage(
+  message: string,
+  existingOutput: string = "",
+): string {
+  const systemMessage = `letta-mem：${message.trim()}`.slice(0, 2_000);
+  if (!existingOutput) return JSON.stringify({ systemMessage });
+  try {
+    const parsed = JSON.parse(existingOutput) as Record<string, unknown>;
+    return JSON.stringify({ ...parsed, systemMessage });
+  } catch {
+    return JSON.stringify({ systemMessage });
+  }
+}
+
 export function normalizeWorkspacePath(cwd: string | undefined): string {
   const value = cwd?.trim();
   const path = resolve(value || process.cwd());

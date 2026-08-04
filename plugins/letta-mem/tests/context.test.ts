@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   claimCachedContext,
+  formatHookSystemMessage,
   normalizeWorkspacePath,
 } from "../src/context.js";
 import {
@@ -13,6 +14,12 @@ import {
 import type { RuntimeConfig } from "../src/types.js";
 
 const temporaryDirectories: string[] = [];
+
+it("将安装错误格式化为 Hook 可展示的 systemMessage", () => {
+  expect(JSON.parse(formatHookSystemMessage("请先安装 Letta"))).toEqual({
+    systemMessage: "letta-mem：请先安装 Letta",
+  });
+});
 
 function createConfig(): RuntimeConfig {
   const dataDir = mkdtempSync(join(tmpdir(), "letta-mem-context-"));
@@ -155,6 +162,6 @@ describe("上下文快照注入", () => {
     expect(normalizeWorkspacePath(nestedPath)).not.toBe(
       normalizeWorkspacePath(projectPath),
     );
-    expect(normalizeWorkspacePath(nestedPath)).toMatch(/packages\/feature$/);
+    expect(normalizeWorkspacePath(nestedPath)).toMatch(/packages[\\/]feature$/);
   });
 });

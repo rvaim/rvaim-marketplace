@@ -8,6 +8,8 @@ import {
   handleUpdateMemory,
 } from "./hooks.js";
 import { readRuntimeConfig } from "./config.js";
+import { formatHookSystemMessage } from "./context.js";
+import { isLettaSetupError } from "./app-server.js";
 import { createLogger, errorDetail } from "./logger.js";
 import type { HookAction, HookInput } from "./types.js";
 
@@ -65,6 +67,9 @@ async function main(): Promise<void> {
       output = await handleUpdateMemory(config, input, log);
     }
   } catch (error) {
+    if (isLettaSetupError(error)) {
+      output = formatHookSystemMessage(error.message);
+    }
     try {
       const config = readRuntimeConfig();
       const detail = error instanceof Error ? errorDetail(error) : String(error);
@@ -79,6 +84,7 @@ async function main(): Promise<void> {
 
 await main();
 
-// SDK 初始化异常可能遗留 App Server 句柄；业务完成后强制兜底退出。
-const exitTimer = setTimeout(() => process.exit(0), 50);
+// 结束一次性 Hook 进程中可能仍被 SDK 管理连接持有的套接字；
+// App Server 是独立的用户服务，退出该进程不会停止它。
+const exitTimer = setTimeout(() => process.exit(process.exitCode ?? 0), 50);
 exitTimer.unref();

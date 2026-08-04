@@ -14,6 +14,8 @@ import {
 } from "./state.js";
 import { MEMORY_LANGUAGE_POLICY } from "./memory-language.js";
 import { MEMORY_SCOPE_POLICY } from "./memory-scope.js";
+import { ensureAppServer } from "./app-server.js";
+import { createLogger } from "./logger.js";
 import type {
   LogFunction,
   RuntimeConfig,
@@ -162,18 +164,12 @@ interface AgentSdkModule {
   LettaAgentClient: new (options: AgentClientOptions) => AgentClient;
 }
 
-type AgentClientOptions =
-  | {
-      appServer: {
-        requestTimeoutMs: number;
-      };
-    }
-  | {
-      backend: "remote";
-      url: string;
-      authToken?: string;
-      requestTimeoutMs: number;
-    };
+type AgentClientOptions = {
+  backend: "remote";
+  url: string;
+  authToken?: string;
+  requestTimeoutMs: number;
+};
 
 export type AgentClientFactory = (
   config: RuntimeConfig,
@@ -233,26 +229,9 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function useSdkManagedAppServer(config: RuntimeConfig): boolean {
-  if (!config.autoStartServer || config.authToken) return false;
-  const parsed = new URL(config.serverUrl);
-  const hostname = parsed.hostname.toLowerCase();
-  const loopback = hostname === "localhost"
-    || hostname === "127.0.0.1"
-    || hostname === "[::1]";
-  return parsed.protocol === "http:" && loopback;
-}
-
 export function agentClientOptions(
   config: RuntimeConfig,
 ): AgentClientOptions {
-  if (useSdkManagedAppServer(config)) {
-    return {
-      appServer: {
-        requestTimeoutMs: config.requestTimeoutMs,
-      },
-    };
-  }
   return {
     backend: "remote",
     url: config.serverUrl,
@@ -275,6 +254,7 @@ async function loadSdkModule(): Promise<AgentSdkModule> {
 export async function createAgentClient(
   config: RuntimeConfig,
 ): Promise<AgentClient> {
+  await ensureAppServer(config, createLogger(config));
   const module = await loadSdkModule();
   const client = new module.LettaAgentClient(agentClientOptions(config));
   return {

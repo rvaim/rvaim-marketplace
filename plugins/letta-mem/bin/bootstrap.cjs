@@ -287,6 +287,7 @@ function runCommand(command, args, options = {}) {
       ...spawnOptions,
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
     });
     const collectStdout = (chunk) => {
       stdout = `${stdout}${String(chunk)}`.slice(-12_000);
@@ -457,10 +458,79 @@ function startBackgroundDrain() {
   startBackgroundAction("drain-background");
 }
 
+function nextPendingRetryAt() {
+  const stateRoot = join(DATA_DIR, "state");
+  if (!existsSync(stateRoot)) return null;
+  let selected = null;
+  try {
+    for (const namespaceName of readdirSync(stateRoot)) {
+      const namespacePath = join(stateRoot, namespaceName);
+      const failurePath = join(namespacePath, "failures.json");
+      const pendingPath = join(namespacePath, "pending");
+      if (!existsSync(pendingPath) || readdirSync(pendingPath).length === 0) {
+        continue;
+      }
+      const candidates = [];
+      if (existsSync(failurePath)) {
+        const failure = JSON.parse(readFileSync(failurePath, "utf8"));
+        if (typeof failure.retryAfter === "string") {
+          candidates.push(failure.retryAfter);
+        }
+      }
+      for (const name of readdirSync(pendingPath)) {
+        try {
+          const pending = JSON.parse(
+            readFileSync(join(pendingPath, name), "utf8"),
+          );
+          if (typeof pending.retryAfter === "string") {
+            candidates.push(pending.retryAfter);
+          }
+        } catch {
+          // 单个待处理项损坏时交给正式状态读取路径处理。
+        }
+      }
+      for (const value of candidates) {
+        const timestamp = Date.parse(value);
+        if (
+          Number.isFinite(timestamp)
+          && timestamp > Date.now()
+          && (selected === null || timestamp < selected)
+        ) {
+          selected = timestamp;
+        }
+      }
+    }
+  } catch (error) {
+    log("retry-scan-failed", error);
+  }
+  return selected;
+}
+
+async function waitForRetry(timestamp) {
+  const delayMs = Math.max(0, Math.min(timestamp - Date.now(), 5 * 60_000));
+  if (delayMs > 0) {
+    log("retry-worker-scheduled", new Date(timestamp).toISOString());
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs));
+  }
+}
+
 async function drainPending() {
-  const sdkEntry = await ensureRuntime();
-  if (sdkEntry) {
-    await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
+  const release = acquireInstallLock(join(DATA_DIR, "locks", "drain-worker.lock"));
+  if (!release) {
+    log("drain-worker-busy");
+    return;
+  }
+  try {
+    const sdkEntry = await ensureRuntime();
+    if (!sdkEntry) return;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
+      const retryAt = nextPendingRetryAt();
+      if (retryAt === null || attempt > 0) return;
+      await waitForRetry(retryAt);
+    }
+  } finally {
+    release();
   }
 }
 

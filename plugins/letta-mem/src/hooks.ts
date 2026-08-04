@@ -20,6 +20,7 @@ import {
   resolveAgentId,
   sendAgentUpdateWithResult,
 } from "./letta.js";
+import { isLettaSetupError } from "./app-server.js";
 import type {
   AgentClientFactory,
   AgentConversationMessage,
@@ -834,6 +835,7 @@ export async function handlePrepareSession(
     );
     if (prepared) log("info", "session-guidance-prepared", sessionId);
   } catch (error) {
+    if (isLettaSetupError(error)) throw error;
     const detail = error instanceof Error ? errorDetail(error) : String(error);
     log("warn", "session-prepare-failed", detail);
   } finally {
@@ -910,6 +912,7 @@ export async function handleInjectContext(
       "UserPromptSubmit",
     );
   } catch (error) {
+    if (isLettaSetupError(error)) throw error;
     const detail = error instanceof Error ? errorDetail(error) : String(error);
     log("warn", "memory-read-fallback", detail);
     return claimCachedContext(config, sessionId, workspacePath);
@@ -960,6 +963,7 @@ export async function handleSyncContext(
       "PreToolUse",
     );
   } catch (error) {
+    if (isLettaSetupError(error)) throw error;
     const detail = error instanceof Error ? errorDetail(error) : String(error);
     log("warn", "memory-guidance-sync-failed", detail);
     return "";

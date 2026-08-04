@@ -4,7 +4,7 @@
 
 插件不保存真正的记忆，也不决定记忆使用本地、云端、memory block、MemFS、archive 或 Shared Memory。插件只把已完成的编码会话和稳定约束交给工作区 Letta Agent；长期价值、共享/工作区作用域、组织方式和保存位置都由 Agent 使用 Letta 当前提供的原生能力自行决定。
 
-当前版本：`2.9.0`。
+当前版本：`2.10.0`。
 
 ## 一句话架构
 
@@ -328,11 +328,29 @@ Letta App 底栏显示的 `~/Documents` 等路径属于 App 自己打开的前�
 
 ## Letta 服务与存储
 
+### 前置要求
+
+本机使用前必须安装 Letta Code CLI：
+
+```text
+npm install -g @letta-ai/letta-code
+```
+
+安装后至少运行一次 `letta`，或使用 `letta --backend local connect ...` 完成本机模型供应商配置。插件只检查和启动 App Server，不代替用户安装 Letta，也不创建或修复模型供应商凭据。
+
 ### 默认模式
 
-当 `autoStartServer=true`、地址是本机回环地址且没有能力令牌时，插件使用 `@letta-ai/letta-agent-sdk` 的 `appServer` 模式。App Server 的启动和生命周期由 SDK 管理；插件不执行固定端口的 `letta server` 命令。
+当 `autoStartServer=true`、地址是本机回环地址且没有能力令牌时，插件先查找用户全局安装的 `letta`，再探测固定地址上的 App Server：
 
-SDK 默认本地模式与 Letta App 使用标准本地数据目录：
+- 服务已就绪时直接复用。
+- 服务未运行时执行 `letta --backend local app-server --listen <ws-address>`。
+- Claude Code、Codex 和并发 Hook 共用启动锁，只会有一个进程负责拉起服务。
+- App Server 作为隐藏的独立后台进程持续运行；Hook、MCP 或 Agent Session 结束时不会停止它。
+- 未安装 `letta`、端口上的服务不兼容或启动失败时，插件会向用户显示明确提示。
+
+Agent SDK 始终使用 `backend: "remote"` 连接该固定地址。代码中的 `session.close()` 只关闭当前 WebSocket/Agent Session，不会关闭 App Server。
+
+本地 App Server 与 Letta App 使用标准本地数据目录：
 
 ```text
 ~/.letta/lc-local-backend
@@ -346,7 +364,7 @@ SDK 默认本地模式与 Letta App 使用标准本地数据目录：
 - 地址不是本机回环地址
 - 配置了 `LETTA_APP_SERVER_TOKEN`
 
-连接方式只决定“如何到达 Letta”，不决定记忆保存在哪里。实际使用本地、云端或其他 backend 仍由 Letta 决定。
+这些模式下插件只连接现有服务，不尝试启动或停止它。连接方式只决定“如何到达 Letta”，不决定记忆保存在哪里。实际使用本地、云端或其他 backend 仍由 Letta 决定。
 
 ## 权限与完成判定
 
@@ -477,8 +495,8 @@ Claude Code 与 Codex 共用：
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `serverUrl` | `http://127.0.0.1:4500` | 用户管理的 App Server 地址；SDK 管理模式下只是兼容标识 |
-| `autoStartServer` | `true` | 对本机回环地址使用 SDK 管理 App Server |
+| `serverUrl` | `http://127.0.0.1:4500` | 常驻 App Server 地址 |
+| `autoStartServer` | `true` | 本机服务未运行时使用用户安装的 `letta` 隐藏启动常驻服务 |
 | `model` | `auto` | `auto` 不覆盖 Letta 的模型选择；显式值会更新工作区 Agent |
 
 环境变量：
@@ -489,6 +507,7 @@ Claude Code 与 Codex 共用：
 | `LETTA_APP_SERVER_URL` | 临时覆盖 App Server 地址 |
 | `LETTA_APP_SERVER_TOKEN` | 用户管理服务的能力令牌 |
 | `LETTA_MEM_AUTO_START_SERVER` | 接受 `true`、`false`、`1`、`0` |
+| `LETTA_MEM_LETTA_COMMAND` | 覆盖用户安装的 `letta` 可执行文件绝对路径 |
 | `LETTA_MEM_MODEL` | 临时覆盖模型句柄 |
 | `LETTA_MEM_DATA_DIR` | 开发环境运行状态目录 |
 | `LETTA_MEM_COORDINATION_DIR` | 跨宿主协调元数据目录 |
@@ -500,6 +519,12 @@ Claude Code 与 Codex 共用：
 旧版 `serverBackend`、`mixedMemory`、`sharedMemory` 及对应环境变量会被忽略。
 
 ## 安装与升级
+
+先安装 Letta Code CLI：
+
+```text
+npm install -g @letta-ai/letta-code
+```
 
 Claude Code：
 

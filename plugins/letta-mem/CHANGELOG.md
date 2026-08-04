@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2.10.0
+
+- 本机模式改为连接固定地址的常驻 Letta App Server；插件要求用户全局安装 `@letta-ai/letta-code`，服务未运行时使用用户的 `letta` 命令拉起，Hook 或 SDK Session 结束后不再停止服务。
+- App Server 启动恢复固定端口探活、协议能力校验和跨宿主启动锁；Windows 使用隐藏、脱离父进程的后台进程并写入独立日志，避免插件触发时弹出 Node 控制台窗口。
+- SDK 统一使用 `backend: "remote"` 连接 App Server；`session.close()` 只释放当前 Agent Session 和 WebSocket，不接管 Server 生命周期。
+- 未安装 Letta、端口服务不兼容或启动失败时，通过 Hook `systemMessage` 提供明确的安装或诊断提示；后台队列在退避到期后由单例 Worker 自动补跑一次。
+
 ## 2.9.0
 
 - 新增 Codex `letta-memory` MCP Server 和 `letta_recall` 工具，让编码助手在任务确实依赖历史决定、偏好、排障结论、未完成状态或既有约束时按当前问题主动召回记忆。

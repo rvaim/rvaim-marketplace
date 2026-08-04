@@ -218,9 +218,12 @@ describe("本地状态", () => {
     const namespacePath = join(config.dataDir, "state", config.namespace);
     const pendingPath = join(namespacePath, "pending");
     const pendingFile = join(pendingPath, readdirSync(pendingPath)[0] ?? "");
-    expect(statSync(namespacePath).mode & 0o777).toBe(0o700);
-    expect(statSync(pendingPath).mode & 0o777).toBe(0o700);
-    expect(statSync(pendingFile).mode & 0o777).toBe(0o600);
+    expect(existsSync(pendingFile)).toBe(true);
+    if (process.platform !== "win32") {
+      expect(statSync(namespacePath).mode & 0o777).toBe(0o700);
+      expect(statSync(pendingPath).mode & 0o777).toBe(0o700);
+      expect(statSync(pendingFile).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("同名 Claude 会话在不同工作区中拥有独立队列", () => {

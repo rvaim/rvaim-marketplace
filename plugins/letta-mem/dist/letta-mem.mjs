@@ -2,8 +2,8 @@
 
 // src/hooks.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute2, join as join4, resolve as resolve2 } from "node:path";
+import { homedir as homedir3 } from "node:os";
+import { isAbsolute as isAbsolute3, join as join5, resolve as resolve3 } from "node:path";
 
 // src/context.ts
 import { realpathSync } from "node:fs";
@@ -494,7 +494,7 @@ function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function delay(milliseconds) {
-  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
+  return new Promise((resolve5) => setTimeout(resolve5, milliseconds));
 }
 async function updateSessionState(config, workspacePath, sessionId, updater, waitMs = 0) {
   const deadline = Date.now() + waitMs;
@@ -516,6 +516,16 @@ async function updateSessionState(config, workspacePath, sessionId, updater, wai
 // src/context.ts
 var TRUNCATION_MARK = "\n[\u4E0A\u4E0B\u6587\u5DF2\u622A\u65AD]";
 var MAX_HOOK_OUTPUT_BYTES = 9e3;
+function formatHookSystemMessage(message, existingOutput = "") {
+  const systemMessage = `letta-mem\uFF1A${message.trim()}`.slice(0, 2e3);
+  if (!existingOutput) return JSON.stringify({ systemMessage });
+  try {
+    const parsed = JSON.parse(existingOutput);
+    return JSON.stringify({ ...parsed, systemMessage });
+  } catch {
+    return JSON.stringify({ systemMessage });
+  }
+}
 function normalizeWorkspacePath(cwd) {
   const value = cwd?.trim();
   const path = resolve(value || process.cwd());
@@ -669,8 +679,8 @@ function resolveConversationTitle(input) {
 
 // src/letta.ts
 import {
-  basename,
-  isAbsolute
+  basename as basename2,
+  isAbsolute as isAbsolute2
 } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -691,6 +701,316 @@ var MEMORY_SCOPE_POLICY = `\u8BB0\u5FC6\u4F5C\u7528\u57DF\u89C4\u5219\uFF1A
 - \u8BC1\u636E\u4E0D\u8DB3\u6216\u65E0\u6CD5\u786E\u5B9A\u9002\u7528\u8303\u56F4\u65F6\uFF0C\u9ED8\u8BA4\u9650\u5B9A\u4E3A\u5F53\u524D\u5DE5\u4F5C\u533A\uFF0C\u4E0D\u8981\u6269\u5927\u4E3A\u5171\u4EAB\u8BB0\u5FC6\u3002
 - \u53EF\u4EE5\u590D\u7528\u5176\u4ED6\u5DE5\u4F5C\u533A\u4E2D\u786E\u5B9E\u9002\u7528\u7684\u901A\u7528\u7ECF\u9A8C\uFF0C\u4F46\u4E0D\u5F97\u628A\u5176\u4ED6\u5DE5\u4F5C\u533A\u7684\u9879\u76EE\u4E8B\u5B9E\u3001\u51B3\u5B9A\u3001\u72B6\u6001\u6216\u5F85\u529E\u5F53\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4E8B\u5B9E\u3002
 - \u8C03\u7528\u65B9\u53EA\u63D0\u4F9B\u8FD9\u4E9B\u5224\u65AD\u7EA6\u675F\uFF0C\u4E0D\u4F1A\u66FF\u4F60\u9884\u5206\u7C7B\u4EFB\u4F55\u6D88\u606F\uFF1B\u6BCF\u9879\u8BB0\u5FC6\u7684\u6700\u7EC8\u4F5C\u7528\u57DF\u7531\u4F60\u6839\u636E\u8BED\u4E49\u3001workspace_path \u548C\u5DF2\u6709\u8BB0\u5FC6\u81EA\u884C\u5224\u65AD\u3002`;
+
+// src/app-server.ts
+import { createHash as createHash2 } from "node:crypto";
+import {
+  chmodSync as chmodSync2,
+  closeSync as closeSync2,
+  existsSync as existsSync3,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  renameSync as renameSync2,
+  statSync as statSync2
+} from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { basename, extname, isAbsolute, join as join3, resolve as resolve2 } from "node:path";
+import { spawn, spawnSync } from "node:child_process";
+var STARTUP_TIMEOUT_MS = 2e4;
+var READY_PROBE_TIMEOUT_MS = 1e3;
+var READY_POLL_INTERVAL_MS = 150;
+var MAX_SERVER_LOG_BYTES = 1e6;
+var SUPPORTED_APP_SERVER_PROTOCOL = 1;
+var LettaSetupError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "LettaSetupError";
+  }
+};
+function isLettaSetupError(error) {
+  return error instanceof LettaSetupError || error instanceof Error && error.name === "LettaSetupError";
+}
+function delay2(milliseconds) {
+  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
+}
+function automaticListenUrl(config) {
+  if (!config.autoStartServer || config.authToken) return null;
+  const parsed = new URL(config.serverUrl);
+  const hostname = parsed.hostname.toLowerCase();
+  const loopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+  if (parsed.protocol !== "http:" || !loopback || !parsed.port) return null;
+  return `ws://${parsed.host}`;
+}
+async function probeAppServer(serverUrl, timeoutMs) {
+  try {
+    const response = await fetch(`${serverUrl}/app-server-info`, {
+      method: "GET",
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (response.status !== 200) return { ready: false };
+    const info = await response.json();
+    const protocolCompatible = info.type === "app_server_info_response" && typeof info.request_id === "string" && info.request_id.length > 0 && info.success === true && typeof info.letta_code_version === "string" && info.protocol_version === SUPPORTED_APP_SERVER_PROTOCOL && info.capabilities?.agent_management === true && info.capabilities.conversation_management === true && info.capabilities.memory_management === true && info.capabilities.runtime_start === true && info.capabilities.split_channels === false;
+    if (protocolCompatible) return { ready: true };
+    return {
+      ready: false,
+      incompatible: `\u7AEF\u53E3\u4E0A\u7684\u670D\u52A1\u4E0D\u662F\u517C\u5BB9\u7684 Letta App Server\uFF08\u534F\u8BAE\u7248\u672C ${String(info.protocol_version ?? "\u672A\u77E5")}\uFF09`
+    };
+  } catch {
+    return { ready: false };
+  }
+}
+function commandFromPath(path) {
+  const extension = extname(path).toLowerCase();
+  if (process.platform === "win32" && [".cmd", ".bat"].includes(extension)) {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      argsPrefix: ["/d", "/s", "/c", path],
+      displayName: path
+    };
+  }
+  if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
+    return {
+      command: process.execPath,
+      argsPrefix: [path],
+      displayName: path
+    };
+  }
+  return { command: path, argsPrefix: [], displayName: path };
+}
+function commandCandidates(output) {
+  return output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+}
+function resolveLettaCommand() {
+  const configured = process.env.LETTA_MEM_LETTA_COMMAND?.trim();
+  if (configured) {
+    const path2 = isAbsolute(configured) ? configured : resolve2(configured);
+    return existsSync3(path2) ? commandFromPath(path2) : null;
+  }
+  const locator = process.platform === "win32" ? "where.exe" : "which";
+  const result = spawnSync(locator, ["letta"], {
+    encoding: "utf8",
+    shell: false,
+    windowsHide: true
+  });
+  if (result.status !== 0) return null;
+  const path = commandCandidates(result.stdout).find(existsSync3);
+  return path ? commandFromPath(path) : null;
+}
+function serverRuntimeRoot() {
+  return join3(homedir2(), ".letta-mem", "server");
+}
+function serverLockPath(serverUrl) {
+  const digest = createHash2("sha256").update(serverUrl).digest("hex").slice(0, 24);
+  return join3(serverRuntimeRoot(), "locks", `app-server-${digest}.lock`);
+}
+function appServerLogPath() {
+  return join3(serverRuntimeRoot(), "logs", "app-server.log");
+}
+function prepareServerLog() {
+  const path = appServerLogPath();
+  const directory = join3(serverRuntimeRoot(), "logs");
+  mkdirSync2(directory, { recursive: true, mode: 448 });
+  try {
+    chmodSync2(directory, 448);
+    if (existsSync3(path) && statSync2(path).size >= MAX_SERVER_LOG_BYTES) {
+      renameSync2(path, `${path}.1`);
+      chmodSync2(`${path}.1`, 384);
+    }
+  } catch {
+  }
+  return path;
+}
+function launchAppServer(executable, listenUrl) {
+  const logPath = prepareServerLog();
+  const descriptor = openSync2(logPath, "a", 384);
+  let child;
+  try {
+    const environment = { ...process.env };
+    delete environment.LETTA_APP_SERVER_TOKEN;
+    delete environment.LETTA_MEM_SDK_ENTRY;
+    delete environment.LETTA_MEM_LETTA_COMMAND;
+    child = spawn(
+      executable.command,
+      [
+        ...executable.argsPrefix,
+        "--backend",
+        "local",
+        "app-server",
+        "--listen",
+        listenUrl
+      ],
+      {
+        cwd: homedir2(),
+        detached: true,
+        env: environment,
+        shell: false,
+        stdio: ["ignore", descriptor, descriptor],
+        windowsHide: true
+      }
+    );
+  } finally {
+    closeSync2(descriptor);
+  }
+  try {
+    chmodSync2(logPath, 384);
+  } catch {
+  }
+  const exited = new Promise((resolvePromise) => {
+    child.once("error", (error) => {
+      resolvePromise(`\u65E0\u6CD5\u521B\u5EFA\u8FDB\u7A0B\uFF1A${error.message}`);
+    });
+    child.once("exit", (code, signal) => {
+      resolvePromise(
+        `\u8FDB\u7A0B\u63D0\u524D\u9000\u51FA\uFF1Acode=${String(code)} signal=${String(signal)}`
+      );
+    });
+  });
+  child.unref();
+  return {
+    ...child.pid === void 0 ? {} : { pid: child.pid },
+    exited
+  };
+}
+var DEFAULT_DEPENDENCIES = {
+  probe: probeAppServer,
+  resolveLettaCommand,
+  launch: launchAppServer,
+  acquireLock,
+  delay: delay2,
+  startupTimeoutMs: STARTUP_TIMEOUT_MS
+};
+async function waitUntilReady(serverUrl, dependencies, launched) {
+  const deadline = Date.now() + dependencies.startupTimeoutMs;
+  let exitDetail;
+  launched?.exited.then((detail) => {
+    exitDetail = detail;
+  }).catch((error) => {
+    exitDetail = String(error);
+  });
+  while (Date.now() < deadline) {
+    const probe = await dependencies.probe(
+      serverUrl,
+      READY_PROBE_TIMEOUT_MS
+    );
+    if (probe.ready || probe.incompatible) return probe;
+    if (exitDetail) return { ready: false, exitDetail };
+    await dependencies.delay(READY_POLL_INTERVAL_MS);
+  }
+  return { ready: false, ...exitDetail ? { exitDetail } : {} };
+}
+function installMessage() {
+  return "\u672A\u68C0\u6D4B\u5230 Letta Code CLI\u3002\u8BF7\u5148\u6267\u884C npm install -g @letta-ai/letta-code\uFF0C\u7136\u540E\u8FD0\u884C letta \u5B8C\u6210\u6A21\u578B\u914D\u7F6E\u3002";
+}
+async function ensureAppServer(config, log, overrides = {}) {
+  const listenUrl = automaticListenUrl(config);
+  if (!listenUrl) return "skipped";
+  const dependencies = { ...DEFAULT_DEPENDENCIES, ...overrides };
+  const executable = dependencies.resolveLettaCommand();
+  if (!executable) {
+    log("error", "letta-cli-missing");
+    throw new LettaSetupError(installMessage());
+  }
+  const initialProbe = await dependencies.probe(
+    config.serverUrl,
+    READY_PROBE_TIMEOUT_MS
+  );
+  if (initialProbe.ready) return "ready";
+  if (initialProbe.incompatible) {
+    throw new LettaSetupError(initialProbe.incompatible);
+  }
+  const release = dependencies.acquireLock(serverLockPath(config.serverUrl));
+  if (!release) {
+    const waited = await waitUntilReady(config.serverUrl, dependencies, null);
+    if (waited.ready) return "ready";
+    throw new LettaSetupError(
+      waited.incompatible ?? `\u5176\u4ED6\u8FDB\u7A0B\u542F\u52A8 Letta App Server \u8D85\u65F6\uFF0C\u8BF7\u68C0\u67E5 ${appServerLogPath()}`
+    );
+  }
+  try {
+    const afterLock = await dependencies.probe(
+      config.serverUrl,
+      READY_PROBE_TIMEOUT_MS
+    );
+    if (afterLock.ready) return "ready";
+    if (afterLock.incompatible) {
+      throw new LettaSetupError(afterLock.incompatible);
+    }
+    const launched = dependencies.launch(executable, listenUrl);
+    log(
+      "info",
+      "app-server-starting",
+      `${basename(executable.displayName)} ${listenUrl}${launched.pid ? ` pid=${launched.pid}` : ""}`
+    );
+    const waited = await waitUntilReady(
+      config.serverUrl,
+      dependencies,
+      launched
+    );
+    if (waited.ready) {
+      log("info", "app-server-started", listenUrl);
+      return "started";
+    }
+    const detail = waited.incompatible ?? waited.exitDetail ?? `\u7B49\u5F85 ${dependencies.startupTimeoutMs}ms \u540E\u4ECD\u672A\u5C31\u7EEA`;
+    log("error", "app-server-start-failed", detail);
+    throw new LettaSetupError(
+      `Letta App Server \u542F\u52A8\u5931\u8D25\uFF1A${detail}\u3002\u65E5\u5FD7\uFF1A${appServerLogPath()}`
+    );
+  } finally {
+    release();
+  }
+}
+
+// src/logger.ts
+import {
+  appendFileSync,
+  chmodSync as chmodSync3,
+  existsSync as existsSync4,
+  mkdirSync as mkdirSync3,
+  renameSync as renameSync3,
+  statSync as statSync3
+} from "node:fs";
+import { dirname as dirname2, join as join4 } from "node:path";
+var MAX_LOG_BYTES = 1e6;
+function sanitize(value, secrets) {
+  let sanitized = value;
+  for (const secret of secrets) {
+    if (secret) sanitized = sanitized.split(secret).join("[\u5DF2\u9690\u85CF]");
+  }
+  return sanitized.replace(/[\r\n]+/g, " ").replace(/Bearer\s+\S+/gi, "Bearer [\u5DF2\u9690\u85CF]").replace(/(_authToken\s*[=:]\s*)\S+/gi, "$1[\u5DF2\u9690\u85CF]").slice(0, 800);
+}
+function rotateIfNeeded(logPath) {
+  try {
+    if (existsSync4(logPath) && statSync3(logPath).size >= MAX_LOG_BYTES) {
+      renameSync3(logPath, `${logPath}.1`);
+      chmodSync3(`${logPath}.1`, 384);
+    }
+  } catch {
+  }
+}
+function createLogger(config) {
+  const logPath = join4(config.dataDir, "logs", "letta-mem.log");
+  const secrets = config.authToken ? [config.authToken] : [];
+  return (level, event, detail = "") => {
+    try {
+      mkdirSync3(dirname2(logPath), { recursive: true, mode: 448 });
+      chmodSync3(dirname2(logPath), 448);
+      rotateIfNeeded(logPath);
+      const suffix = detail ? ` ${sanitize(detail, secrets)}` : "";
+      appendFileSync(
+        logPath,
+        `${(/* @__PURE__ */ new Date()).toISOString()} ${level.toUpperCase()} ${sanitize(event, secrets)}${suffix}
+`,
+        { encoding: "utf8", mode: 384 }
+      );
+      chmodSync3(logPath, 384);
+    } catch {
+    }
+  };
+}
+function errorDetail(error) {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
+}
 
 // src/letta.ts
 var BASE_AGENT_TAGS = [
@@ -741,24 +1061,10 @@ ${MEMORY_LANGUAGE_POLICY}
 - \u4F7F\u7528\u5F53\u524D\u7528\u6237\u4E3B\u8981\u4F7F\u7528\u7684\u81EA\u7136\u8BED\u8A00\u7EC4\u7EC7\u8FD4\u56DE\u5185\u5BB9\uFF1B\u4EE3\u7801\u6807\u8BC6\u7B26\u3001\u5E93\u540D\u3001API \u540D\u3001\u6587\u4EF6\u8DEF\u5F84\u548C\u547D\u4EE4\u4FDD\u6301\u539F\u6837\u3002
 - \u4E0D\u8FD4\u56DE\u4FDD\u5B58\u8FC7\u7A0B\u3001\u5DE5\u5177\u8C03\u7528\u72B6\u6001\u6216\u201C\u8BB0\u5FC6\u5DF2\u66F4\u65B0\u201D\u7B49\u5185\u90E8\u72B6\u6001\u3002
 - \u6CA1\u6709\u76F8\u5173\u5185\u5BB9\u6216\u65B0\u589E\u4EF7\u503C\u65F6\u8FD4\u56DE\u7A7A\u5185\u5BB9\uFF0C\u4E0D\u8981\u5BD2\u6684\uFF0C\u4E0D\u8981\u89E3\u91CA\u5185\u90E8\u8FC7\u7A0B\u3002`;
-function delay2(milliseconds) {
-  return new Promise((resolve4) => setTimeout(resolve4, milliseconds));
-}
-function useSdkManagedAppServer(config) {
-  if (!config.autoStartServer || config.authToken) return false;
-  const parsed = new URL(config.serverUrl);
-  const hostname = parsed.hostname.toLowerCase();
-  const loopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
-  return parsed.protocol === "http:" && loopback;
+function delay3(milliseconds) {
+  return new Promise((resolve5) => setTimeout(resolve5, milliseconds));
 }
 function agentClientOptions(config) {
-  if (useSdkManagedAppServer(config)) {
-    return {
-      appServer: {
-        requestTimeoutMs: config.requestTimeoutMs
-      }
-    };
-  }
   return {
     backend: "remote",
     url: config.serverUrl,
@@ -769,12 +1075,13 @@ function agentClientOptions(config) {
 async function loadSdkModule() {
   const configuredEntry = process.env.LETTA_MEM_SDK_ENTRY?.trim();
   if (configuredEntry) {
-    const specifier = isAbsolute(configuredEntry) ? pathToFileURL(configuredEntry).href : configuredEntry;
+    const specifier = isAbsolute2(configuredEntry) ? pathToFileURL(configuredEntry).href : configuredEntry;
     return import(specifier);
   }
   return import("@letta-ai/letta-agent-sdk");
 }
 async function createAgentClient(config) {
+  await ensureAppServer(config, createLogger(config));
   const module = await loadSdkModule();
   const client = new module.LettaAgentClient(agentClientOptions(config));
   return {
@@ -789,7 +1096,7 @@ async function acquireAgentLock(config, scopeKey) {
   const deadline = Date.now() + 1e4;
   let release = acquireLock(agentLockPath(config, scopeKey));
   while (!release && Date.now() < deadline) {
-    await delay2(50);
+    await delay3(50);
     release = acquireLock(agentLockPath(config, scopeKey));
   }
   if (!release) throw new Error("Agent \u521D\u59CB\u5316\u6B63\u5728\u7531\u53E6\u4E00\u8FDB\u7A0B\u5904\u7406");
@@ -797,7 +1104,7 @@ async function acquireAgentLock(config, scopeKey) {
 }
 function workspaceIdentity(workspacePath) {
   const digest = sha256(workspacePath).slice(0, 24);
-  const label = (basename(workspacePath) || "root").replace(/\s+/g, " ").trim().slice(0, 64) || "workspace";
+  const label = (basename2(workspacePath) || "root").replace(/\s+/g, " ").trim().slice(0, 64) || "workspace";
   return {
     digest,
     label,
@@ -927,7 +1234,7 @@ async function resolveDefinedAgentId(config, client, definition, log) {
         ...config.model === "auto" ? {} : { model: config.model }
       });
     } catch (error) {
-      await delay2(250);
+      await delay3(250);
       const recovered = await findReusableAgent(client, definition, log);
       if (!recovered) throw error;
       if (!await prepareReusableAgent(config, client, recovered, definition)) {
@@ -999,7 +1306,7 @@ async function waitForSettledDeviceStatus(session, options) {
     if (status.pendingControlRequests.length > 0) return status;
     if (!status.isProcessing) return status;
     if (Date.now() >= deadline) return status;
-    await delay2(Math.min(pollMs, Math.max(0, deadline - Date.now())));
+    await delay3(Math.min(pollMs, Math.max(0, deadline - Date.now())));
   } while (true);
 }
 async function sendAgentUpdateWithResult(session, message, options = {}) {
@@ -1063,75 +1370,23 @@ async function sendAgentUpdateWithResult(session, message, options = {}) {
   };
 }
 
-// src/logger.ts
-import {
-  appendFileSync,
-  chmodSync as chmodSync2,
-  existsSync as existsSync3,
-  mkdirSync as mkdirSync2,
-  renameSync as renameSync2,
-  statSync as statSync2
-} from "node:fs";
-import { dirname as dirname2, join as join3 } from "node:path";
-var MAX_LOG_BYTES = 1e6;
-function sanitize(value, secrets) {
-  let sanitized = value;
-  for (const secret of secrets) {
-    if (secret) sanitized = sanitized.split(secret).join("[\u5DF2\u9690\u85CF]");
-  }
-  return sanitized.replace(/[\r\n]+/g, " ").replace(/Bearer\s+\S+/gi, "Bearer [\u5DF2\u9690\u85CF]").replace(/(_authToken\s*[=:]\s*)\S+/gi, "$1[\u5DF2\u9690\u85CF]").slice(0, 800);
-}
-function rotateIfNeeded(logPath) {
-  try {
-    if (existsSync3(logPath) && statSync2(logPath).size >= MAX_LOG_BYTES) {
-      renameSync2(logPath, `${logPath}.1`);
-      chmodSync2(`${logPath}.1`, 384);
-    }
-  } catch {
-  }
-}
-function createLogger(config) {
-  const logPath = join3(config.dataDir, "logs", "letta-mem.log");
-  const secrets = config.authToken ? [config.authToken] : [];
-  return (level, event, detail = "") => {
-    try {
-      mkdirSync2(dirname2(logPath), { recursive: true, mode: 448 });
-      chmodSync2(dirname2(logPath), 448);
-      rotateIfNeeded(logPath);
-      const suffix = detail ? ` ${sanitize(detail, secrets)}` : "";
-      appendFileSync(
-        logPath,
-        `${(/* @__PURE__ */ new Date()).toISOString()} ${level.toUpperCase()} ${sanitize(event, secrets)}${suffix}
-`,
-        { encoding: "utf8", mode: 384 }
-      );
-      chmodSync2(logPath, 384);
-    } catch {
-    }
-  };
-}
-function errorDetail(error) {
-  if (error instanceof Error) return `${error.name}: ${error.message}`;
-  return String(error);
-}
-
 // src/transcript.ts
 import {
-  closeSync as closeSync2,
+  closeSync as closeSync3,
   createReadStream,
-  existsSync as existsSync4,
+  existsSync as existsSync5,
   fstatSync,
-  openSync as openSync2
+  openSync as openSync3
 } from "node:fs";
 import { createInterface } from "node:readline";
 async function transcriptTailLineIndex(transcriptPath) {
-  if (!transcriptPath || !existsSync4(transcriptPath)) return -1;
+  if (!transcriptPath || !existsSync5(transcriptPath)) return -1;
   let descriptor;
   try {
-    descriptor = openSync2(transcriptPath, "r");
+    descriptor = openSync3(transcriptPath, "r");
     const byteSize = fstatSync(descriptor).size;
     if (byteSize === 0) {
-      closeSync2(descriptor);
+      closeSync3(descriptor);
       descriptor = void 0;
       return -1;
     }
@@ -1157,7 +1412,7 @@ async function transcriptTailLineIndex(transcriptPath) {
   } catch {
     if (descriptor !== void 0) {
       try {
-        closeSync2(descriptor);
+        closeSync3(descriptor);
       } catch {
       }
     }
@@ -1325,7 +1580,7 @@ async function readTranscriptIncrement(transcriptPath, startLine, recentDigests2
   let lineIndex = -1;
   let tailIncomplete = false;
   const boundedEnd = endLineIndex ?? Number.POSITIVE_INFINITY;
-  if (transcriptPath && existsSync4(transcriptPath) && boundedEnd >= 0) {
+  if (transcriptPath && existsSync5(transcriptPath) && boundedEnd >= 0) {
     const lines = createInterface({
       input: createReadStream(transcriptPath),
       crlfDelay: Infinity
@@ -1459,12 +1714,12 @@ async function activateSessionWorkspace(config, sessionId, cwd, log) {
 function normalizeTranscriptPath(value, cwd) {
   const trimmed = value?.trim();
   if (!trimmed) return void 0;
-  if (trimmed === "~") return homedir2();
+  if (trimmed === "~") return homedir3();
   if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
-    return join4(homedir2(), trimmed.slice(2));
+    return join5(homedir3(), trimmed.slice(2));
   }
-  if (isAbsolute2(trimmed)) return resolve2(trimmed);
-  return resolve2(cwd?.trim() || process.cwd(), trimmed);
+  if (isAbsolute3(trimmed)) return resolve3(trimmed);
+  return resolve3(cwd?.trim() || process.cwd(), trimmed);
 }
 function escapeXmlText(value) {
   return value.replace(/[&<>"']/g, (character) => ({
@@ -2006,6 +2261,7 @@ async function handlePrepareSession(config, input, log, clientFactory = createAg
     );
     if (prepared) log("info", "session-guidance-prepared", sessionId);
   } catch (error) {
+    if (isLettaSetupError(error)) throw error;
     const detail = error instanceof Error ? errorDetail(error) : String(error);
     log("warn", "session-prepare-failed", detail);
   } finally {
@@ -2074,6 +2330,7 @@ async function handleInjectContext(config, input, log = () => {
       "UserPromptSubmit"
     );
   } catch (error) {
+    if (isLettaSetupError(error)) throw error;
     const detail = error instanceof Error ? errorDetail(error) : String(error);
     log("warn", "memory-read-fallback", detail);
     return claimCachedContext(config, sessionId, workspacePath);
@@ -2117,6 +2374,7 @@ async function handleSyncContext(config, input, log, clientFactory = createAgent
       "PreToolUse"
     );
   } catch (error) {
+    if (isLettaSetupError(error)) throw error;
     const detail = error instanceof Error ? errorDetail(error) : String(error);
     log("warn", "memory-guidance-sync-failed", detail);
     return "";
@@ -2389,10 +2647,10 @@ async function handleUpdateMemory(config, input, log, clientFactory = createAgen
 }
 
 // src/config.ts
-import { createHash as createHash2 } from "node:crypto";
-import { existsSync as existsSync5, readFileSync as readFileSync2 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join5, resolve as resolve3 } from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import { existsSync as existsSync6, readFileSync as readFileSync2 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { isAbsolute as isAbsolute4, join as join6, resolve as resolve4 } from "node:path";
 var DEFAULT_SERVER_URL = "http://127.0.0.1:4500";
 var DEFAULT_MODEL = "auto";
 function firstNonEmpty(...values) {
@@ -2427,7 +2685,7 @@ function normalizeServerUrl(raw) {
 function namespaceFor(serverUrl, authToken = "") {
   const authScope = authToken ? `token:${authToken}` : "token:none";
   const source = `per-workspace-v1:app-server:${serverUrl}:${authScope}`;
-  return createHash2("sha256").update(source).digest("hex").slice(0, 20);
+  return createHash3("sha256").update(source).digest("hex").slice(0, 20);
 }
 function isEnabled(value) {
   return value === "1" || value?.toLowerCase() === "true";
@@ -2450,23 +2708,23 @@ function normalizeModel(value) {
 }
 function sharedConfigPath(env) {
   const configured = firstNonEmpty(env.LETTA_MEM_CONFIG_PATH);
-  if (!configured) return join5(homedir3(), ".letta-mem", "config.json");
-  if (configured === "~") return homedir3();
+  if (!configured) return join6(homedir4(), ".letta-mem", "config.json");
+  if (configured === "~") return homedir4();
   if (configured.startsWith("~/") || configured.startsWith("~\\")) {
-    return join5(homedir3(), configured.slice(2));
+    return join6(homedir4(), configured.slice(2));
   }
-  return isAbsolute3(configured) ? configured : resolve3(configured);
+  return isAbsolute4(configured) ? configured : resolve4(configured);
 }
 function normalizeLocalPath(value) {
-  if (value === "~") return homedir3();
+  if (value === "~") return homedir4();
   if (value.startsWith("~/") || value.startsWith("~\\")) {
-    return join5(homedir3(), value.slice(2));
+    return join6(homedir4(), value.slice(2));
   }
-  return isAbsolute3(value) ? value : resolve3(value);
+  return isAbsolute4(value) ? value : resolve4(value);
 }
 function readSharedConfig(env) {
   const path = sharedConfigPath(env);
-  if (!existsSync5(path)) return {};
+  if (!existsSync6(path)) return {};
   const value = JSON.parse(readFileSync2(path, "utf8"));
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("letta-mem \u5171\u4EAB\u914D\u7F6E\u5FC5\u987B\u662F JSON \u5BF9\u8C61");
@@ -2507,10 +2765,10 @@ function readRuntimeConfig(env = process.env) {
     env.CLAUDE_PLUGIN_DATA,
     env.PLUGIN_DATA,
     env.LETTA_MEM_DATA_DIR
-  ) ?? join5(homedir3(), ".letta-mem", "data", "development");
+  ) ?? join6(homedir4(), ".letta-mem", "data", "development");
   const coordinationDir = normalizeLocalPath(firstNonEmpty(
     env.LETTA_MEM_COORDINATION_DIR
-  ) ?? join5(homedir3(), ".letta-mem", "coordination"));
+  ) ?? join6(homedir4(), ".letta-mem", "coordination"));
   return {
     serverUrl,
     ...authToken ? { authToken } : {},
@@ -2579,6 +2837,9 @@ async function main() {
       output = await handleUpdateMemory(config, input, log);
     }
   } catch (error) {
+    if (isLettaSetupError(error)) {
+      output = formatHookSystemMessage(error.message);
+    }
     try {
       const config = readRuntimeConfig();
       const detail = error instanceof Error ? errorDetail(error) : String(error);
@@ -2589,5 +2850,5 @@ async function main() {
   if (output) process.stdout.write(output);
 }
 await main();
-var exitTimer = setTimeout(() => process.exit(0), 50);
+var exitTimer = setTimeout(() => process.exit(process.exitCode ?? 0), 50);
 exitTimer.unref();

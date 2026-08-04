@@ -26,16 +26,15 @@ function createConfig(
 }
 
 describe("Letta Agent SDK 连接", () => {
-  it("默认把 App Server 生命周期交给 SDK 且不传 backend", () => {
+  it("默认只连接常驻 App Server，不把生命周期交给 SDK", () => {
     const options = agentClientOptions(createConfig());
 
     expect(options).toEqual({
-      appServer: {
-        requestTimeoutMs: 1_000,
-      },
+      backend: "remote",
+      url: "http://127.0.0.1:4500",
+      requestTimeoutMs: 1_000,
     });
-    expect(options).not.toHaveProperty("backend");
-    expect(options).not.toHaveProperty("url");
+    expect(options).not.toHaveProperty("appServer");
   });
 
   it("显式关闭自动管理时连接用户提供的 App Server", () => {
