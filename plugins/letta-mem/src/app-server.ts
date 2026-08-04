@@ -124,23 +124,38 @@ async function probeAppServer(
   }
 }
 
-function commandFromPath(path: string): LettaCommand {
-  const extension = extname(path).toLowerCase();
-  if (process.platform === "win32" && [".cmd", ".bat"].includes(extension)) {
+export function commandFromPath(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+): LettaCommand {
+  let executablePath = path;
+  let extension = extname(executablePath).toLowerCase();
+  if (platform === "win32" && !extension) {
+    const commandShim = `${executablePath}.cmd`;
+    if (existsSync(commandShim)) {
+      executablePath = commandShim;
+      extension = ".cmd";
+    }
+  }
+  if (platform === "win32" && [".cmd", ".bat"].includes(extension)) {
     return {
       command: process.env.ComSpec || "cmd.exe",
-      argsPrefix: ["/d", "/s", "/c", path],
-      displayName: path,
+      argsPrefix: ["/d", "/s", "/c", executablePath],
+      displayName: executablePath,
     };
   }
   if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
     return {
       command: process.execPath,
-      argsPrefix: [path],
-      displayName: path,
+      argsPrefix: [executablePath],
+      displayName: executablePath,
     };
   }
-  return { command: path, argsPrefix: [], displayName: path };
+  return {
+    command: executablePath,
+    argsPrefix: [],
+    displayName: executablePath,
+  };
 }
 
 function commandCandidates(output: string): string[] {

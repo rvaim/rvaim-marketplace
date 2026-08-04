@@ -759,23 +759,35 @@ async function probeAppServer(serverUrl, timeoutMs) {
     return { ready: false };
   }
 }
-function commandFromPath(path) {
-  const extension = extname(path).toLowerCase();
-  if (process.platform === "win32" && [".cmd", ".bat"].includes(extension)) {
+function commandFromPath(path, platform = process.platform) {
+  let executablePath = path;
+  let extension = extname(executablePath).toLowerCase();
+  if (platform === "win32" && !extension) {
+    const commandShim = `${executablePath}.cmd`;
+    if (existsSync3(commandShim)) {
+      executablePath = commandShim;
+      extension = ".cmd";
+    }
+  }
+  if (platform === "win32" && [".cmd", ".bat"].includes(extension)) {
     return {
       command: process.env.ComSpec || "cmd.exe",
-      argsPrefix: ["/d", "/s", "/c", path],
-      displayName: path
+      argsPrefix: ["/d", "/s", "/c", executablePath],
+      displayName: executablePath
     };
   }
   if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
     return {
       command: process.execPath,
-      argsPrefix: [path],
-      displayName: path
+      argsPrefix: [executablePath],
+      displayName: executablePath
     };
   }
-  return { command: path, argsPrefix: [], displayName: path };
+  return {
+    command: executablePath,
+    argsPrefix: [],
+    displayName: executablePath
+  };
 }
 function commandCandidates(output) {
   return output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);

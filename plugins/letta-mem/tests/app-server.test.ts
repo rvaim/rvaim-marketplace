@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  commandFromPath,
   ensureAppServer,
   LettaSetupError,
 } from "../src/app-server.js";
@@ -60,6 +64,40 @@ function setup(
 }
 
 describe("常驻 Letta App Server", () => {
+  it("Windows 将 npm 的无扩展名 shim 映射到 letta.cmd", () => {
+    const directory = mkdtempSync(join(tmpdir(), "letta-command-"));
+    try {
+      const shim = join(directory, "letta");
+      writeFileSync(shim, "#!/bin/sh\n");
+      writeFileSync(`${shim}.cmd`, "@echo off\r\n");
+
+      expect(commandFromPath(shim, "win32")).toEqual({
+        command: process.env.ComSpec || "cmd.exe",
+        argsPrefix: ["/d", "/s", "/c", `${shim}.cmd`],
+        displayName: `${shim}.cmd`,
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("macOS 直接执行无扩展名 letta，不读取 Windows shim", () => {
+    const directory = mkdtempSync(join(tmpdir(), "letta-command-"));
+    try {
+      const shim = join(directory, "letta");
+      writeFileSync(shim, "#!/bin/sh\n");
+      writeFileSync(`${shim}.cmd`, "@echo off\r\n");
+
+      expect(commandFromPath(shim, "darwin")).toEqual({
+        command: shim,
+        argsPrefix: [],
+        displayName: shim,
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("要求本机自动启动模式存在用户安装的 letta 命令", async () => {
     const current = setup([]);
     current.dependencies.resolveLettaCommand = vi.fn(() => null);

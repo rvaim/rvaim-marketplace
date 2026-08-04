@@ -1,5 +1,9 @@
 # 变更日志
 
+## 2.10.1
+
+- 修复 Windows 全局 npm 同时生成 `letta` 与 `letta.cmd` 时错误执行无扩展名 shim、导致 App Server 启动报 `spawn ...\\letta ENOENT` 的问题。
+
 ## 2.10.0
 
 - 本机模式改为连接固定地址的常驻 Letta App Server；插件要求用户全局安装 `@letta-ai/letta-code`，服务未运行时使用用户的 `letta` 命令拉起，Hook 或 SDK Session 结束后不再停止服务。
