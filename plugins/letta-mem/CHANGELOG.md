@@ -1,5 +1,11 @@
 # 变更日志
 
+## 2.10.4
+
+- Windows 的短时后台 Hook worker 改由 `wscript.exe` 以隐藏窗口方式启动，不再用 `detached: true` 直接创建 Node 控制台进程，避免每次 Hook 触发时黑框闪现。
+- Hook 输入通过插件私有目录内的一次性文件传递并在 worker 读取后删除，避免 Windows 命令行长度限制；macOS/Linux 继续使用原有 Node 后台进程路径。
+- Letta App Server 仍为只启动一次的常驻服务，插件不会在 Hook 或 Agent Session 结束后关闭它。
+
 ## 2.10.3
 
 - Windows 启动 App Server 时不再执行 npm 的 `.cmd` 或无扩展名 shim，而是解析全局包中的 `letta.js` 并由 `node.exe` 直接隐藏启动，避免 shim 子进程创建可见控制台窗口。

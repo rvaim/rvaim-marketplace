@@ -27,6 +27,12 @@ const DATA_DIR = process.env.CLAUDE_PLUGIN_DATA
   || process.env.LETTA_MEM_DATA_DIR
   || join(homedir(), ".letta-mem", "data", "development");
 const LOG_PATH = join(DATA_DIR, "logs", "letta-mem.log");
+const BACKGROUND_INPUT_DIR = join(DATA_DIR, "background-input");
+const WINDOWS_HIDDEN_LAUNCHER = join(
+  PLUGIN_ROOT,
+  "bin",
+  "launch-hidden.vbs",
+);
 const ACTIONS = new Set([
   "session-state",
   "prepare-session-background",
@@ -220,7 +226,36 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+function backgroundInputPath() {
+  const markerIndex = process.argv.indexOf("--background-input");
+  if (markerIndex < 0 || !process.argv[markerIndex + 1]) return null;
+  const inputPath = resolve(process.argv[markerIndex + 1]);
+  const expectedDirectory = resolve(BACKGROUND_INPUT_DIR);
+  const comparableInputDirectory = process.platform === "win32"
+    ? dirname(inputPath).toLowerCase()
+    : dirname(inputPath);
+  const comparableExpectedDirectory = process.platform === "win32"
+    ? expectedDirectory.toLowerCase()
+    : expectedDirectory;
+  if (comparableInputDirectory !== comparableExpectedDirectory) {
+    throw new Error("后台输入文件不属于插件数据目录");
+  }
+  return inputPath;
+}
+
 async function readStdin() {
+  const inputPath = backgroundInputPath();
+  if (inputPath) {
+    try {
+      return readFileSync(inputPath);
+    } finally {
+      try {
+        unlinkSync(inputPath);
+      } catch {
+        // 文件可能已由并发清理逻辑移除。
+      }
+    }
+  }
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);
@@ -241,7 +276,78 @@ async function runHook(action, input) {
   return result.stdout;
 }
 
+function saveBackgroundInput(input) {
+  ensurePrivateDirectory(BACKGROUND_INPUT_DIR);
+  const now = Date.now();
+  for (const name of readdirSync(BACKGROUND_INPUT_DIR)) {
+    if (!name.startsWith("input-") || !name.endsWith(".bin")) continue;
+    const path = join(BACKGROUND_INPUT_DIR, name);
+    try {
+      if (now - statSync(path).mtimeMs > LOCK_STALE_MS) unlinkSync(path);
+    } catch {
+      // 并发 worker 可能已经消费该文件。
+    }
+  }
+
+  const inputPath = join(
+    BACKGROUND_INPUT_DIR,
+    `input-${randomUUID()}.bin`,
+  );
+  const descriptor = openSync(inputPath, "wx", 0o600);
+  try {
+    writeFileSync(descriptor, input);
+  } finally {
+    closeSync(descriptor);
+  }
+  try {
+    chmodSync(inputPath, 0o600);
+  } catch {
+    // Windows 权限由当前用户的数据目录边界保证。
+  }
+  return inputPath;
+}
+
 function startBackgroundAction(action, input = Buffer.from("")) {
+  if (process.platform === "win32") {
+    let inputPath = null;
+    try {
+      inputPath = saveBackgroundInput(input);
+      const child = spawn("wscript.exe", [
+        "//B",
+        "//Nologo",
+        WINDOWS_HIDDEN_LAUNCHER,
+        process.execPath,
+        __filename,
+        action,
+        "--background-input",
+        inputPath,
+      ], {
+        cwd: process.cwd(),
+        env: { ...process.env },
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.once("error", (error) => {
+        try {
+          if (inputPath) unlinkSync(inputPath);
+        } catch {
+          // 启动失败清理只处理本次精确文件。
+        }
+        log("background-start-failed", error);
+      });
+      child.unref();
+    } catch (error) {
+      try {
+        if (inputPath) unlinkSync(inputPath);
+      } catch {
+        // 启动失败清理只处理本次精确文件。
+      }
+      log("background-start-failed", error);
+    }
+    return;
+  }
+
   try {
     const child = spawn(process.execPath, [__filename, action], {
       cwd: process.cwd(),

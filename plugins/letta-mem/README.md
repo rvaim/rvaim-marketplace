@@ -4,7 +4,7 @@
 
 插件不保存真正的记忆，也不决定记忆使用本地、云端、memory block、MemFS、archive 或 Shared Memory。插件只把已完成的编码会话和稳定约束交给工作区 Letta Agent；长期价值、共享/工作区作用域、组织方式和保存位置都由 Agent 使用 Letta 当前提供的原生能力自行决定。
 
-当前版本：`2.10.3`。
+当前版本：`2.10.4`。
 
 ## 一句话架构
 
@@ -347,6 +347,7 @@ npm install -g @letta-ai/letta-code
 - Claude Code、Codex 和并发 Hook 共用启动锁，只会有一个进程负责拉起服务。
 - App Server 作为隐藏的独立后台进程持续运行；Hook、MCP 或 Agent Session 结束时不会停止它。
 - Windows 绕过 npm 的 `.cmd`/无扩展名 shim，直接使用 `node.exe` 启动全局包中的 `letta.js`，使 `windowsHide` 直接作用于真正的 App Server 进程；macOS/Linux 继续直接执行 `letta`。
+- Windows 的短时后台 Hook worker 通过 `wscript.exe` 隐藏启动，不直接创建 detached Node 控制台；macOS/Linux 仍使用原有 Node 后台启动方式。
 - 未安装 `letta`、端口上的服务不兼容或启动失败时，插件会向用户显示明确提示。
 
 Agent SDK 始终使用 `backend: "remote"` 连接该固定地址。代码中的 `session.close()` 只关闭当前 WebSocket/Agent Session，不会关闭 App Server。

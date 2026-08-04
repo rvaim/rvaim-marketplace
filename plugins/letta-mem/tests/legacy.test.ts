@@ -75,6 +75,23 @@ describe("新版 Letta 边界", () => {
     expect(buildScript).not.toContain("external:");
   });
 
+  it("Windows 后台 worker 使用无控制台启动器且不影响其他平台", () => {
+    const bootstrap = readFileSync(
+      join(pluginRoot, "bin", "bootstrap.cjs"),
+      "utf8",
+    );
+    const launcher = readFileSync(
+      join(pluginRoot, "bin", "launch-hidden.vbs"),
+      "utf8",
+    );
+
+    expect(bootstrap).toContain('process.platform === "win32"');
+    expect(bootstrap).toContain('spawn("wscript.exe"');
+    expect(bootstrap).toContain('"--background-input"');
+    expect(bootstrap).toContain("stdio: [\"pipe\", \"ignore\", \"ignore\"]");
+    expect(launcher).toContain("shell.Run(commandLine, 0, False)");
+  });
+
   it("源码不包含旧 API、Cloud 或模型供应商密钥配置", () => {
     const roots = ["src", "bin", "scripts", "hooks"];
     const combined = roots
