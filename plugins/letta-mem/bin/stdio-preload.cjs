@@ -6,6 +6,20 @@
 const { closeSync, openSync, readFileSync, writeSync } = require("node:fs");
 const { Readable } = require("node:stream");
 
+if (
+  process.platform === "win32"
+  && /^(?:1|true)$/i.test(
+    process.env.LETTA_MEM_HIDE_CHILD_WINDOWS || "",
+  )
+) {
+  const { ChildProcess } = require("node:child_process");
+  const originalSpawn = ChildProcess.prototype.spawn;
+  ChildProcess.prototype.spawn = function spawn(options) {
+    if (options && typeof options === "object") options.windowsHide = true;
+    return originalSpawn.call(this, options);
+  };
+}
+
 const stdinPath = process.env.LETTA_MEM_HOOK_STDIN_FILE;
 const stdoutPath = process.env.LETTA_MEM_HOOK_STDOUT_FILE;
 const stderrPath = process.env.LETTA_MEM_HOOK_STDERR_FILE;

@@ -1,5 +1,9 @@
 # 变更日志
 
+## 2.10.8
+
+- 真实可见窗口探针确认剩余黑框来自常驻 Letta Code App Server 启动的 `git.exe`，而不是同步 Hook 启动器；Windows App Server 现在预加载子进程策略，让其 Git/工具子进程统一使用 `windowsHide`，避免无控制台父进程为每个 Git 命令新建可见窗口。
+
 ## 2.10.7
 
 - 按真实 Codex 0.146.0 进程树重新修复 Windows Hook：`commandWindows` 不再先启动 `node hook-launcher.cjs`，而是由 Codex 已有的 PowerShell command runner 通过 `Start-Process -NoNewWindow -Wait -PassThru` 直接进入 GUI 子系统的 ConPTY 启动器，并返回启动器真实退出码。

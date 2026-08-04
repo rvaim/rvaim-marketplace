@@ -33,6 +33,11 @@ const WINDOWS_PROCESS_LAUNCHER = join(
   "bin",
   "letta-mem-launcher.exe",
 );
+const WINDOWS_CHILD_PROCESS_PRELOAD = join(
+  PLUGIN_ROOT,
+  "bin",
+  "stdio-preload.cjs",
+);
 
 interface AppServerInfo {
   type?: string;
@@ -302,8 +307,14 @@ function launchAppServer(
     delete environment.LETTA_MEM_LETTA_COMMAND;
     if (process.platform === "win32") {
       environment.LETTA_MEM_NODE_PATH = process.execPath;
+      environment.LETTA_MEM_HIDE_CHILD_WINDOWS = "1";
     }
+    const nodeArguments = process.platform === "win32"
+      && basename(executable.command).toLowerCase() === "node.exe"
+      ? ["--require", WINDOWS_CHILD_PROCESS_PRELOAD]
+      : [];
     const serverArguments = [
+      ...nodeArguments,
       ...executable.argsPrefix,
       "--backend",
       "local",

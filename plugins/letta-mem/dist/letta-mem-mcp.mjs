@@ -31247,6 +31247,11 @@ var WINDOWS_PROCESS_LAUNCHER = join2(
   "bin",
   "letta-mem-launcher.exe"
 );
+var WINDOWS_CHILD_PROCESS_PRELOAD = join2(
+  PLUGIN_ROOT,
+  "bin",
+  "stdio-preload.cjs"
+);
 var LettaSetupError = class extends Error {
   constructor(message) {
     super(message);
@@ -31411,8 +31416,11 @@ function launchAppServer(executable, listenUrl) {
     delete environment.LETTA_MEM_LETTA_COMMAND;
     if (process.platform === "win32") {
       environment.LETTA_MEM_NODE_PATH = process.execPath;
+      environment.LETTA_MEM_HIDE_CHILD_WINDOWS = "1";
     }
+    const nodeArguments = process.platform === "win32" && basename(executable.command).toLowerCase() === "node.exe" ? ["--require", WINDOWS_CHILD_PROCESS_PRELOAD] : [];
     const serverArguments = [
+      ...nodeArguments,
       ...executable.argsPrefix,
       "--backend",
       "local",
@@ -44420,7 +44428,7 @@ function resultText(result) {
 function createRecallMcpServer(handler = defaultRecallHandler) {
   const server2 = new McpServer({
     name: "letta-memory",
-    version: "2.10.7"
+    version: "2.10.8"
   });
   server2.registerTool("letta_recall", {
     title: "\u53EC\u56DE Letta \u8BB0\u5FC6",
