@@ -93,7 +93,7 @@ describe("新版 Letta 边界", () => {
     expect(launcher).toContain("shell.Run(commandLine, 0, False)");
   });
 
-  it("Hook 与 MCP 的第一层进程使用插件内无控制台入口", () => {
+  it("同步 Hook 保留标准入口且 MCP 使用插件内无控制台入口", () => {
     const hooks = JSON.parse(readFileSync(
       join(pluginRoot, "hooks", "hooks.json"),
       "utf8",
@@ -107,11 +107,10 @@ describe("新版 Letta 边界", () => {
       .flatMap((group) => group.hooks);
     expect(commands.length).toBeGreaterThan(0);
     for (const command of commands) {
-      expect(command.command).toContain("/bin/letta-mem-launcher\"");
-      expect(command.commandWindows)
-        .toContain("/bin/letta-mem-launcher.exe\"");
-      expect(command.command).not.toMatch(/\bnode(?:\.exe)?\b/i);
-      expect(command.commandWindows).not.toMatch(/\bnode(?:\.exe)?\b/i);
+      expect(command.command).toContain(
+        'node "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs"',
+      );
+      expect(command.commandWindows).toBeUndefined();
     }
 
     const mcp = JSON.parse(readFileSync(

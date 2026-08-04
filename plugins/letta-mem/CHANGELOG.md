@@ -1,5 +1,11 @@
 # 变更日志
 
+## 2.10.6
+
+- 撤回 2.10.5 将同步 Hook 接到 GUI launcher 的改动，恢复已验证的 `node bootstrap.cjs` 入口；修复 Codex Windows 将 `commandWindows` 中 `${CLAUDE_PLUGIN_ROOT}` 作为字面量交给 `cmd.exe /C`、导致 `SessionStart` 与 `UserPromptSubmit` 以 code 1 退出的问题。
+- 明确 Windows Hook 黑框发生在 Codex 创建的第一层 `cmd.exe`/shell；插件内 launcher 和 Node `windowsHide` 都无法反向隐藏该进程，完整修复必须由 Codex Hook command runner 在创建 shell 时设置 `CREATE_NO_WINDOW`。
+- MCP 继续使用插件内 GUI launcher，因为 MCP stdio command 由宿主直接启动且已经通过真实 `initialize`/`listTools` 测试；App Server 与后台 memory worker 的隐藏启动链保持不变。
+
 ## 2.10.5
 
 - Hook 与 MCP 的第一层进程不再由宿主直接启动控制台子系统的 `node.exe`；Windows 改由插件内置的 GUI 子系统启动器以 `CREATE_NO_WINDOW` 创建 Node，同时继承 stdin、stdout、stderr 并返回真实退出码。

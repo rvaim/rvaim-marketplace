@@ -346,7 +346,8 @@ npm install -g @letta-ai/letta-code
 - 服务未运行时执行 `letta --backend local server --listen <ws-address>`。
 - Claude Code、Codex 和并发 Hook 共用启动锁，只会有一个进程负责拉起服务。
 - App Server 作为隐藏的独立后台进程持续运行；Hook、MCP 或 Agent Session 结束时不会停止它。
-- Windows 的 Hook 与 MCP 第一层入口由插件内置的 GUI 子系统启动器创建 Node，并使用 `CREATE_NO_WINDOW` 透传 stdin、stdout、stderr；不会要求用户修改终端、Codex 或系统配置。macOS/Linux 使用同名 shell 入口继续直接执行 Node。
+- Windows 的 MCP 第一层入口由插件内置的 GUI 子系统启动器创建 Node，并使用 `CREATE_NO_WINDOW` 透传 stdin、stdout、stderr；macOS/Linux 使用同名 shell 入口继续直接执行 Node。
+- 同步 Hook 保留标准 `node bootstrap.cjs` 入口以维持 stdin、stdout、退出码和超时语义。Codex Windows 会先创建第一层 `cmd.exe`/shell；该进程不受插件内 launcher 或 Node `windowsHide` 控制，黑框的完整修复必须位于 Codex Hook command runner。
 - Windows 绕过 npm 的 `.cmd`/无扩展名 shim，直接使用 `node.exe` 启动全局包中的 `letta.js`，使 `windowsHide` 直接作用于真正的 App Server 进程；macOS/Linux 继续直接执行 `letta`。
 - Windows 的短时后台 Hook worker 通过 `wscript.exe` 隐藏启动，不直接创建 detached Node 控制台；macOS/Linux 仍使用原有 Node 后台启动方式。
 - 未安装 `letta`、端口上的服务不兼容或启动失败时，插件会向用户显示明确提示。
@@ -547,6 +548,10 @@ codex plugin add letta-mem@rvaim-marketplace
 升级后请新建编码会话，让宿主重新加载 Hook、Skill、MCP 与构建产物。现有工作区 Agent 会按定义版本原地更新 system prompt，不删除 Agent、Conversation 或记忆。
 
 ## 常见问题
+
+### 为什么 Codex Windows 执行 Hook 时仍可能闪黑框？
+
+Codex 在 Windows 上先通过 `cmd.exe /C` 等 shell 执行 command Hook，再由 shell 启动插件的 Node 入口。插件只能控制 Node 之后的 App Server 和后台 worker，无法反向修改 Codex 已经创建的第一层 shell。同步 Hook 又必须保留 stdin、stdout、退出码和超时语义，不能改成 VBS、detached 或普通异步任务。因此插件保留标准同步入口；根本修复需要 Codex 在创建 Hook shell 时使用 `CREATE_NO_WINDOW`。
 
 ### 第一句话会读取记忆吗？
 
