@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -90,6 +91,61 @@ describe("新版 Letta 边界", () => {
     expect(bootstrap).toContain('"--background-input"');
     expect(bootstrap).toContain("stdio: [\"pipe\", \"ignore\", \"ignore\"]");
     expect(launcher).toContain("shell.Run(commandLine, 0, False)");
+  });
+
+  it("Hook 与 MCP 的第一层进程使用插件内无控制台入口", () => {
+    const hooks = JSON.parse(readFileSync(
+      join(pluginRoot, "hooks", "hooks.json"),
+      "utf8",
+    )) as {
+      hooks: Record<string, Array<{
+        hooks: Array<{ command: string; commandWindows?: string }>;
+      }>>;
+    };
+    const commands = Object.values(hooks.hooks)
+      .flatMap((groups) => groups)
+      .flatMap((group) => group.hooks);
+    expect(commands.length).toBeGreaterThan(0);
+    for (const command of commands) {
+      expect(command.command).toContain("/bin/letta-mem-launcher\"");
+      expect(command.commandWindows)
+        .toContain("/bin/letta-mem-launcher.exe\"");
+      expect(command.command).not.toMatch(/\bnode(?:\.exe)?\b/i);
+      expect(command.commandWindows).not.toMatch(/\bnode(?:\.exe)?\b/i);
+    }
+
+    const mcp = JSON.parse(readFileSync(
+      join(pluginRoot, ".mcp.json"),
+      "utf8",
+    )) as {
+      mcpServers: Record<string, { command: string; args: string[] }>;
+    };
+    expect(mcp.mcpServers["letta-memory"]).toMatchObject({
+      command: "./bin/letta-mem-launcher",
+      args: ["mcp"],
+    });
+
+    const executable = readFileSync(
+      join(pluginRoot, "bin", "letta-mem-launcher.exe"),
+    );
+    expect(executable.subarray(0, 2).toString("ascii")).toBe("MZ");
+    const peOffset = executable.readInt32LE(0x3c);
+    const optionalHeaderOffset = peOffset + 24;
+    expect(executable.readUInt16LE(optionalHeaderOffset + 68)).toBe(2);
+
+    const launcherSource = readFileSync(
+      join(pluginRoot, "scripts", "windows-launcher.cs"),
+      "utf8",
+    );
+    expect(launcherSource).toContain("CreateNoWindow");
+    expect(launcherSource).toContain("StartfUseStdHandles");
+    expect(launcherSource).toContain('"bootstrap.cjs"');
+    const expectedSourceHash = readFileSync(
+      join(pluginRoot, "bin", "letta-mem-launcher.source.sha256"),
+      "ascii",
+    ).trim();
+    expect(createHash("sha256").update(launcherSource).digest("hex"))
+      .toBe(expectedSourceHash);
   });
 
   it("源码不包含旧 API、Cloud 或模型供应商密钥配置", () => {

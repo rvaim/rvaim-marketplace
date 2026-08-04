@@ -6,13 +6,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" session-state",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher\" session-state",
+            "commandWindows": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher.exe\" session-state",
             "timeout": 2,
             "statusMessage": "正在恢复 Letta 记忆状态"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-session-background",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher\" prepare-session-background",
+            "commandWindows": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher.exe\" prepare-session-background",
             "timeout": 2,
             "statusMessage": "正在让已有 Letta Agent 准备记忆"
           }
@@ -24,7 +26,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" inject-context",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher\" inject-context",
+            "commandWindows": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher.exe\" inject-context",
             "timeout": 40,
             "statusMessage": "正在读取 Letta 已准备的记忆指导"
           }
@@ -36,7 +39,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" sync-context",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher\" sync-context",
+            "commandWindows": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher.exe\" sync-context",
             "timeout": 10,
             "statusMessage": "正在检查 Letta 最新记忆指导"
           }
@@ -48,7 +52,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" update-memory-background",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher\" update-memory-background",
+            "commandWindows": "\"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-launcher.exe\" update-memory-background",
             "timeout": 10,
             "statusMessage": "正在后台更新 Letta 记忆"
           }

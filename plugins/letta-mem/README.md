@@ -346,6 +346,7 @@ npm install -g @letta-ai/letta-code
 - 服务未运行时执行 `letta --backend local server --listen <ws-address>`。
 - Claude Code、Codex 和并发 Hook 共用启动锁，只会有一个进程负责拉起服务。
 - App Server 作为隐藏的独立后台进程持续运行；Hook、MCP 或 Agent Session 结束时不会停止它。
+- Windows 的 Hook 与 MCP 第一层入口由插件内置的 GUI 子系统启动器创建 Node，并使用 `CREATE_NO_WINDOW` 透传 stdin、stdout、stderr；不会要求用户修改终端、Codex 或系统配置。macOS/Linux 使用同名 shell 入口继续直接执行 Node。
 - Windows 绕过 npm 的 `.cmd`/无扩展名 shim，直接使用 `node.exe` 启动全局包中的 `letta.js`，使 `windowsHide` 直接作用于真正的 App Server 进程；macOS/Linux 继续直接执行 `letta`。
 - Windows 的短时后台 Hook worker 通过 `wscript.exe` 隐藏启动，不直接创建 detached Node 控制台；macOS/Linux 仍使用原有 Node 后台启动方式。
 - 未安装 `letta`、端口上的服务不兼容或启动失败时，插件会向用户显示明确提示。
@@ -595,6 +596,8 @@ LETTA_MEM_DISABLED=1
 
 要求 Node.js `>= 22.19.0`。
 
+修改 Windows 启动器源码后，执行 `npm run build:windows-launcher`，使用系统自带的 .NET Framework C# 编译器重新生成 `bin/letta-mem-launcher.exe`、记录源码哈希，并验证它是 Windows GUI 子系统程序。运行插件不需要单独安装 .NET SDK，也不会在插件目录外生成启动器。
+
 ```bash
 cd plugins/letta-mem
 npm ci
@@ -606,7 +609,9 @@ npm run verify
 | 文件 | 作用 |
 | --- | --- |
 | `hooks/hooks.json` | Hook 声明、超时和状态提示 |
+| `bin/letta-mem-launcher` / `bin/letta-mem-launcher.exe` | macOS/Linux 与 Windows 的统一无控制台入口；Windows 版本透传 stdio 与退出码 |
 | `bin/bootstrap.cjs` | 零依赖启动和前后台分离；Agent Client 已包含在 `dist` |
+| `scripts/windows-launcher.cs` | Windows GUI 子系统启动器源码 |
 | `src/hooks.ts` | 指导读取、写队列和故障恢复主流程 |
 | `src/letta.ts` | Agent 定义、SDK 连接、Session 权限和最终响应提取 |
 | `src/recall.ts` | 已有 Agent 查找、固定召回 Conversation、运行锁和最终记忆提取 |

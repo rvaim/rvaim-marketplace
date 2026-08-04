@@ -1,6 +1,6 @@
 {
   "name": "letta-mem",
-  "version": "2.10.4",
+  "version": "2.10.5",
   "description": "将编码会话与记忆作用域约束交给 Letta Agent 自主管理持久记忆",
   "type": "module",
   "private": true,
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:windows-launcher": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-launcher.ps1",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

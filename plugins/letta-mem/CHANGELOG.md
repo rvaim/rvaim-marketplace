@@ -1,5 +1,12 @@
 # 变更日志
 
+## 2.10.5
+
+- Hook 与 MCP 的第一层进程不再由宿主直接启动控制台子系统的 `node.exe`；Windows 改由插件内置的 GUI 子系统启动器以 `CREATE_NO_WINDOW` 创建 Node，同时继承 stdin、stdout、stderr 并返回真实退出码。
+- Hook 使用 `commandWindows` 明确选择 `letta-mem-launcher.exe`；MCP 使用无扩展名的统一入口，Windows 自动选择同名 `.exe`，macOS/Linux 继续执行同名 shell 启动脚本。
+- `npm run build:windows-launcher` 会从已提交的 C# 源码重新生成启动器、记录源码哈希并校验 PE Subsystem 为 Windows GUI；真实 MCP 清单入口已通过 `initialize` 与 `listTools` 回归测试。
+- 该修复完全位于插件目录，不创建插件外 wrapper，不修改 Codex、终端、注册表或用户环境配置。
+
 ## 2.10.4
 
 - Windows 的短时后台 Hook worker 改由 `wscript.exe` 以隐藏窗口方式启动，不再用 `detached: true` 直接创建 Node 控制台进程，避免每次 Hook 触发时黑框闪现。

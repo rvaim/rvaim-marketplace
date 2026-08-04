@@ -4,7 +4,7 @@ import {
   getDefaultEnvironment,
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,12 +24,24 @@ afterEach(async () => {
 });
 
 describe("letta-memory MCP", () => {
-  it("零安装 bootstrap 可直接完成 stdio initialize", async () => {
+  it("插件清单入口可直接完成 stdio initialize", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "letta-mem-mcp-bootstrap-"));
     temporaryDirectories.push(dataDir);
+    const manifest = JSON.parse(readFileSync(
+      join(pluginRoot, ".mcp.json"),
+      "utf8",
+    )) as {
+      mcpServers: Record<string, {
+        command: string;
+        args: string[];
+        cwd?: string;
+      }>;
+    };
+    const server = manifest.mcpServers["letta-memory"];
+    if (!server) throw new Error(".mcp.json 缺少 letta-memory 配置");
     const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [join(pluginRoot, "bin", "bootstrap.cjs"), "mcp"],
+      command: server.command,
+      args: server.args,
       cwd: pluginRoot,
       env: {
         ...getDefaultEnvironment(),
