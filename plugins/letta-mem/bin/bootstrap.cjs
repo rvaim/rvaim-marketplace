@@ -34,7 +34,6 @@ const WINDOWS_PROCESS_LAUNCHER = join(
   "letta-mem-launcher.exe",
 );
 const ACTIONS = new Set([
-  "session-state",
   "prepare-session-background",
   "prepare-session-worker",
   "inject-context",
@@ -234,6 +233,7 @@ function startBackgroundAction(action, input = Buffer.from("")) {
       // 后台进程提前退出时忽略管道错误。
     });
     child.stdin.end(input);
+    child.stdin.unref();
     child.unref();
   } catch (error) {
     log("background-start-failed", error);
@@ -354,17 +354,13 @@ async function main() {
     return;
   }
 
-  if (action === "session-state") {
-    await runHook("session-start", input);
-    return;
-  }
-
   if (action === "prepare-session-background") {
     startBackgroundAction("prepare-session-worker", input);
     return;
   }
 
   if (action === "prepare-session-worker") {
+    await runHook("session-start", input);
     await runHook("prepare-session", input);
     await runHook("drain-pending", Buffer.from("{}"));
     return;
@@ -372,7 +368,7 @@ async function main() {
 
   if (action === "update-memory-background") {
     await runHook("enqueue-memory", input);
-    startBackgroundDrain();
+    if (process.platform !== "win32") startBackgroundDrain();
     return;
   }
 

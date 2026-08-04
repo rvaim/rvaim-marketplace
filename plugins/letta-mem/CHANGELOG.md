@@ -1,5 +1,10 @@
 # 变更日志
 
+## 2.10.9
+
+- 将两个并发的 SessionStart Hook 合并为一次真正的 fire-and-forget 启动：Windows 原生 Hook 启动器新增 `--background` 模式，通过临时输入文件把 worker 与 Codex 标准句柄、PowerShell `-Wait` 进程树彻底分离；worker 内部先同步会话状态再准备记忆，SessionStart 超时预算保持 2 秒。
+- Stop Hook 只同步完成本地 transcript 入队，随后通过同一原生后台模式启动 drain worker；修复后台子进程反向拖住 Hook，导致 10 秒后仍超时的问题。
+
 ## 2.10.8
 
 - 真实可见窗口探针确认剩余黑框来自常驻 Letta Code App Server 启动的 `git.exe`，而不是同步 Hook 启动器；Windows App Server 现在预加载子进程策略，让其 Git/工具子进程统一使用 `windowsHide`，避免无控制台父进程为每个 Git 命令新建可见窗口。

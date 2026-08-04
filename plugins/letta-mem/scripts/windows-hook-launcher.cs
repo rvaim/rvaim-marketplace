@@ -14,6 +14,8 @@ internal static class Program
     private const uint CreateNoWindow = 0x08000000;
     private const uint CreateUnicodeEnvironment = 0x00000400;
     private const uint CreateSuspended = 0x00000004;
+    private const uint CreateBreakawayFromJob = 0x01000000;
+    private const uint CreateNewProcessGroup = 0x00000200;
     private const uint JobObjectLimitSilentBreakawayOk = 0x00001000;
     private const uint JobObjectLimitKillOnJobClose = 0x00002000;
     private const uint Infinite = 0xFFFFFFFF;
@@ -236,21 +238,24 @@ internal static class Program
     [STAThread]
     private static int Main(string[] arguments)
     {
+        bool background = arguments.Length >= 2
+            && arguments[0] == "--background";
+        int firstArgument = background ? 1 : 0;
         string nodePath;
         var nodeArguments = new List<string>();
         if (
-            arguments.Length >= 2
-            && File.Exists(arguments[0])
-            && File.Exists(arguments[1])
+            arguments.Length - firstArgument >= 2
+            && File.Exists(arguments[firstArgument])
+            && File.Exists(arguments[firstArgument + 1])
         )
         {
-            nodePath = Path.GetFullPath(arguments[0]);
-            for (int index = 1; index < arguments.Length; index += 1)
+            nodePath = Path.GetFullPath(arguments[firstArgument]);
+            for (int index = firstArgument + 1; index < arguments.Length; index += 1)
             {
                 nodeArguments.Add(arguments[index]);
             }
         }
-        else if (arguments.Length >= 1)
+        else if (arguments.Length - firstArgument >= 1)
         {
             nodePath = ResolveNodeExecutable();
             if (nodePath == null)
@@ -267,7 +272,10 @@ internal static class Program
                 return 1;
             }
             nodeArguments.Add(bootstrapPath);
-            nodeArguments.AddRange(arguments);
+            for (int index = firstArgument; index < arguments.Length; index += 1)
+            {
+                nodeArguments.Add(arguments[index]);
+            }
         }
         else
         {
@@ -283,12 +291,16 @@ internal static class Program
         string stdinPath = Path.Combine(temporaryDirectory, "letta-mem-hook-stdin-" + token + ".tmp");
         string stdoutPath = Path.Combine(temporaryDirectory, "letta-mem-hook-stdout-" + token + ".tmp");
         string stderrPath = Path.Combine(temporaryDirectory, "letta-mem-hook-stderr-" + token + ".tmp");
+        bool deleteInput = true;
 
         try
         {
             File.WriteAllBytes(stdinPath, ReadAll(GetStdHandle(StdInputHandle)));
-            File.WriteAllBytes(stdoutPath, new byte[0]);
-            File.WriteAllBytes(stderrPath, new byte[0]);
+            if (!background)
+            {
+                File.WriteAllBytes(stdoutPath, new byte[0]);
+                File.WriteAllBytes(stderrPath, new byte[0]);
+            }
 
             string preloadPath = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
@@ -308,15 +320,29 @@ internal static class Program
                 AppendArgument(commandLine, argument);
             }
 
-            IntPtr environment = BuildEnvironmentBlock(new Dictionary<string, string>
+            var environmentOverrides = new Dictionary<string, string>
             {
                 { "LETTA_MEM_HOOK_STDIN_FILE", stdinPath },
-                { "LETTA_MEM_HOOK_STDOUT_FILE", stdoutPath },
-                { "LETTA_MEM_HOOK_STDERR_FILE", stderrPath },
                 { "LETTA_MEM_NODE_PATH", nodePath },
-            });
+            };
+            if (background)
+            {
+                environmentOverrides["LETTA_MEM_DELETE_HOOK_STDIN_FILE"] = "1";
+            }
+            else
+            {
+                environmentOverrides["LETTA_MEM_HOOK_STDOUT_FILE"] = stdoutPath;
+                environmentOverrides["LETTA_MEM_HOOK_STDERR_FILE"] = stderrPath;
+            }
+            IntPtr environment = BuildEnvironmentBlock(environmentOverrides);
             try
             {
+                if (background)
+                {
+                    if (!RunDetached(nodePath, commandLine, environment)) return 1;
+                    deleteInput = false;
+                    return 0;
+                }
                 return RunHeadless(
                     nodePath,
                     commandLine,
@@ -336,10 +362,53 @@ internal static class Program
         }
         finally
         {
-            DeleteFile(stdinPath);
+            if (deleteInput) DeleteFile(stdinPath);
             DeleteFile(stdoutPath);
             DeleteFile(stderrPath);
         }
+    }
+
+    private static bool RunDetached(
+        string applicationName,
+        StringBuilder commandLine,
+        IntPtr environment)
+    {
+        var startup = new StartupInfoEx();
+        startup.startupInfo.cb = Marshal.SizeOf(typeof(StartupInfo));
+        ProcessInformation process;
+        uint flags = CreateNoWindow
+            | CreateUnicodeEnvironment
+            | CreateNewProcessGroup
+            | CreateBreakawayFromJob;
+        bool created = CreateProcess(
+            applicationName,
+            new StringBuilder(commandLine.ToString()),
+            IntPtr.Zero,
+            IntPtr.Zero,
+            false,
+            flags,
+            environment,
+            null,
+            ref startup,
+            out process);
+        if (!created && Marshal.GetLastWin32Error() == 5)
+        {
+            created = CreateProcess(
+                applicationName,
+                new StringBuilder(commandLine.ToString()),
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                flags & ~CreateBreakawayFromJob,
+                environment,
+                null,
+                ref startup,
+                out process);
+        }
+        if (!created) return false;
+        CloseHandle(process.thread);
+        CloseHandle(process.process);
+        return true;
     }
 
     private static int RunHeadless(

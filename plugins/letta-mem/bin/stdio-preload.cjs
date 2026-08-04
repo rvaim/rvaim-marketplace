@@ -3,7 +3,13 @@
 // 改写自 letta-ai/claude-subconscious 的 stdio-preload.cjs（MIT）；
 // 上游归属与许可见 ../NOTICE.md 和 ../LICENSE。
 
-const { closeSync, openSync, readFileSync, writeSync } = require("node:fs");
+const {
+  closeSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeSync,
+} = require("node:fs");
 const { Readable } = require("node:stream");
 
 if (
@@ -35,6 +41,16 @@ if (stdinPath) {
     });
   } catch {
     // 启动器会负责记录进程失败；预加载层保持故障开放。
+  } finally {
+    if (/^(?:1|true)$/i.test(
+      process.env.LETTA_MEM_DELETE_HOOK_STDIN_FILE || "",
+    )) {
+      try {
+        unlinkSync(stdinPath);
+      } catch {
+        // 后台输入已由其他清理路径处理时无需报错。
+      }
+    }
   }
 }
 

@@ -6,17 +6,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" session-state",
-            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"session-state\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
-            "timeout": 2,
-            "statusMessage": "正在恢复 Letta 记忆状态"
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-session-background",
-            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"prepare-session-background\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
+            "commandWindows": "$null = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList @(\"--background\", \"prepare-session-worker\") -NoNewWindow; exit 0",
             "timeout": 2,
-            "statusMessage": "正在让已有 Letta Agent 准备记忆"
+            "statusMessage": "正在后台准备 Letta 记忆"
           }
         ]
       }
@@ -53,7 +46,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" update-memory-background",
-            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"update-memory-background\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
+            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"update-memory-background\" -NoNewWindow -Wait -PassThru; if ($p.ExitCode -ne 0) { exit $p.ExitCode }; $null = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList @(\"--background\", \"drain-background\") -NoNewWindow; exit 0",
             "timeout": 10,
             "statusMessage": "正在后台更新 Letta 记忆"
           }

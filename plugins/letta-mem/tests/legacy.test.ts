@@ -61,6 +61,8 @@ describe("新版 Letta 边界", () => {
     expect(claudeManifest).not.toHaveProperty("userConfig");
     expect(codexManifest).not.toHaveProperty("hooks");
     expect(hooks).toContain("prepare-session-background");
+    expect(hooks).not.toContain('ArgumentList \"session-state\"');
+    expect(hooks).toContain('"timeout": 2');
     expect(hooks).toContain("UserPromptSubmit");
     expect(hooks).toContain("PreToolUse");
     expect(hooks).toContain("update-memory-background");
@@ -130,7 +132,7 @@ describe("新版 Letta 边界", () => {
     expect(hooks).not.toContain("handleUpdateMemory");
   });
 
-  it("同步 Hook 使用 ConPTY 无窗口入口且 MCP 保留长连接入口", () => {
+  it("SessionStart 后台返回，其余同步 Hook 保留 ConPTY 与真实退出码", () => {
     const hooks = JSON.parse(readFileSync(
       join(pluginRoot, "hooks", "hooks.json"),
       "utf8",
@@ -139,8 +141,18 @@ describe("新版 Letta 边界", () => {
         hooks: Array<{ command: string; commandWindows?: string }>;
       }>>;
     };
-    const commands = Object.values(hooks.hooks)
-      .flatMap((groups) => groups)
+    const sessionStartCommands = (hooks.hooks.SessionStart ?? [])
+      .flatMap((group) => group.hooks);
+    expect(sessionStartCommands).toHaveLength(1);
+    expect(sessionStartCommands[0]?.commandWindows).toContain(
+      'Start-Process -FilePath "${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe"',
+    );
+    expect(sessionStartCommands[0]?.commandWindows).toContain("--background");
+    expect(sessionStartCommands[0]?.commandWindows).not.toContain("-Wait");
+
+    const commands = Object.entries(hooks.hooks)
+      .filter(([event]) => event !== "SessionStart")
+      .flatMap(([, groups]) => groups)
       .flatMap((group) => group.hooks);
     expect(commands.length).toBeGreaterThan(0);
     for (const command of commands) {
@@ -311,6 +323,55 @@ describe("新版 Letta 边界", () => {
       expect(result.status).toBe(7);
       expect(result.stdout).toBe("stdout:PowerShell 管道 <&>");
       expect(result.stderr).toBe("stderr:PowerShell 管道 <&>");
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "Windows 原生后台模式快速返回并保留 stdin",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "letta-mem-hook-background-"));
+      const fixture = join(directory, "background.cjs");
+      const resultPath = join(directory, "result.json");
+      try {
+        writeFileSync(
+          fixture,
+          [
+            'const { writeFileSync } = require("node:fs");',
+            '(async () => {',
+            '  const chunks = [];',
+            '  for await (const chunk of process.stdin) chunks.push(chunk);',
+            '  await new Promise((resolve) => setTimeout(resolve, 500));',
+            '  writeFileSync(process.argv[2], Buffer.concat(chunks));',
+            '})();',
+          ].join("\n"),
+          "utf8",
+        );
+        const input = JSON.stringify({ text: "后台输入 中文 <&>" });
+        const startedAt = Date.now();
+        const result = spawnSync(
+          join(pluginRoot, "bin", "letta-mem-hook-launcher.exe"),
+          ["--background", process.execPath, fixture, resultPath],
+          {
+            encoding: "utf8",
+            env: { ...process.env, TEMP: directory, TMP: directory },
+            input,
+            windowsHide: true,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe(0);
+        expect(Date.now() - startedAt).toBeLessThan(2_000);
+        const deadline = Date.now() + 5_000;
+        while (!existsSync(resultPath) && Date.now() < deadline) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+        }
+        expect(readFileSync(resultPath, "utf8")).toBe(input);
+        expect(readdirSync(directory).filter(
+          (name) => name.startsWith("letta-mem-hook-") && name.endsWith(".tmp"),
+        )).toEqual([]);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     },
   );
 
