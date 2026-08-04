@@ -849,7 +849,6 @@ export async function handlePrepareSession(
   }
   return "";
 }
-
 export async function handleInjectContext(
   config: RuntimeConfig,
   input: HookInput,
@@ -1263,23 +1262,6 @@ export async function handleDrainPending(
       }
     }
     if (!progressed) break;
-  }
-  return "";
-}
-
-export async function handleUpdateMemory(
-  config: RuntimeConfig,
-  input: HookInput,
-  log: LogFunction,
-  clientFactory: AgentClientFactory = createAgentClient,
-): Promise<string> {
-  try {
-    await handleEnqueueMemory(config, input, log);
-    await handleDrainPending(config, log, clientFactory);
-  } catch (error) {
-    recordFailure(config);
-    const detail = error instanceof Error ? errorDetail(error) : String(error);
-    log("error", "memory-update-failed", detail);
   }
   return "";
 }

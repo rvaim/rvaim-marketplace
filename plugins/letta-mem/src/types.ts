@@ -4,8 +4,7 @@ export type HookAction =
   | "inject-context"
   | "sync-context"
   | "enqueue-memory"
-  | "drain-pending"
-  | "update-memory";
+  | "drain-pending";
 
 export interface HookInput {
   session_id?: string;

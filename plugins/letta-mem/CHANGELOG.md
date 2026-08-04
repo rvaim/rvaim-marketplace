@@ -2,9 +2,12 @@
 
 ## 2.10.6
 
-- 撤回 2.10.5 将同步 Hook 接到 GUI launcher 的改动，恢复已验证的 `node bootstrap.cjs` 入口；修复 Codex Windows 将 `commandWindows` 中 `${CLAUDE_PLUGIN_ROOT}` 作为字面量交给 `cmd.exe /C`、导致 `SessionStart` 与 `UserPromptSubmit` 以 code 1 退出的问题。
-- 明确 Windows Hook 黑框发生在 Codex 创建的第一层 `cmd.exe`/shell；插件内 launcher 和 Node `windowsHide` 都无法反向隐藏该进程，完整修复必须由 Codex Hook command runner 在创建 shell 时设置 `CREATE_NO_WINDOW`。
-- MCP 继续使用插件内 GUI launcher，因为 MCP stdio command 由宿主直接启动且已经通过真实 `initialize`/`listTools` 测试；App Server 与后台 memory worker 的隐藏启动链保持不变。
+- 同步 Hook 保留单一跨平台 `command`，不再使用 Codex Windows 无法展开 `${CLAUDE_PLUGIN_ROOT}` 的 `commandWindows`；入口改为 `node hook-launcher.cjs`，修复 `SessionStart` 与 `UserPromptSubmit` 以 code 1 退出的问题。
+- 参考 `letta-ai/claude-subconscious` 的 Windows 方案，为同步 Hook 新增无 `STARTF_USESTDHANDLES` 的 ConPTY + `CREATE_NO_WINDOW` GUI 启动器，并通过预加载脚本与一次性文件透传 stdin、stdout、stderr 和退出码，消除 Windows 11 / Windows Terminal 黑框闪现。
+- 新增真实二进制回归测试，验证 ConPTY 启动器的 stdin、stdout、stderr、非零退出码、PE GUI Subsystem 和源码哈希；macOS/Linux 由同一个包装入口直接加载原 bootstrap。
+- 删除旧同步 `update-memory` 动作及其生产组合函数；Stop Hook 只保留“同步入队、后台排空”的现行路径，未知动作不再隐式执行记忆更新。
+- Windows 后台 worker 复用现有 GUI launcher 与 stdin 管道，删除 `wscript.exe`、VBS 和后台输入临时文件兼容链；同步 Hook 缺少 ConPTY 二进制时直接报错，不再回退到可能闪窗的 Node 启动。
+- MCP 继续使用插件内 GUI launcher，因为 MCP stdio command 由宿主直接启动且已经通过真实 `initialize`/`listTools` 测试；App Server 启动链保持不变。
 
 ## 2.10.5
 

@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, extname, join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -76,24 +85,35 @@ describe("新版 Letta 边界", () => {
     expect(buildScript).not.toContain("external:");
   });
 
-  it("Windows 后台 worker 使用无控制台启动器且不影响其他平台", () => {
+  it("Windows 后台 worker 复用 GUI 启动器且不保留 VBS 兼容链", () => {
     const bootstrap = readFileSync(
       join(pluginRoot, "bin", "bootstrap.cjs"),
       "utf8",
     );
-    const launcher = readFileSync(
-      join(pluginRoot, "bin", "launch-hidden.vbs"),
-      "utf8",
-    );
 
     expect(bootstrap).toContain('process.platform === "win32"');
-    expect(bootstrap).toContain('spawn("wscript.exe"');
-    expect(bootstrap).toContain('"--background-input"');
+    expect(bootstrap).toContain('"letta-mem-launcher.exe"');
+    expect(bootstrap).toContain("WINDOWS_PROCESS_LAUNCHER");
     expect(bootstrap).toContain("stdio: [\"pipe\", \"ignore\", \"ignore\"]");
-    expect(launcher).toContain("shell.Run(commandLine, 0, False)");
+    expect(bootstrap).not.toContain("wscript.exe");
+    expect(bootstrap).not.toContain("--background-input");
+    expect(existsSync(join(pluginRoot, "bin", "launch-hidden.vbs"))).toBe(false);
   });
 
-  it("同步 Hook 保留标准入口且 MCP 使用插件内无控制台入口", () => {
+  it("生产入口不再暴露旧同步 update-memory 动作", () => {
+    const bootstrap = readFileSync(
+      join(pluginRoot, "bin", "bootstrap.cjs"),
+      "utf8",
+    );
+    const cli = readFileSync(join(pluginRoot, "src", "cli.ts"), "utf8");
+    const hooks = readFileSync(join(pluginRoot, "src", "hooks.ts"), "utf8");
+
+    expect(bootstrap).not.toContain('"update-memory",');
+    expect(cli).not.toContain('"update-memory"');
+    expect(hooks).not.toContain("handleUpdateMemory");
+  });
+
+  it("同步 Hook 使用 ConPTY 无窗口入口且 MCP 保留长连接入口", () => {
     const hooks = JSON.parse(readFileSync(
       join(pluginRoot, "hooks", "hooks.json"),
       "utf8",
@@ -108,10 +128,26 @@ describe("新版 Letta 边界", () => {
     expect(commands.length).toBeGreaterThan(0);
     for (const command of commands) {
       expect(command.command).toContain(
-        'node "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs"',
+        'node "${CLAUDE_PLUGIN_ROOT}/bin/hook-launcher.cjs"',
       );
       expect(command.commandWindows).toBeUndefined();
     }
+
+    const hookWrapper = readFileSync(
+      join(pluginRoot, "bin", "hook-launcher.cjs"),
+      "utf8",
+    );
+    const preload = readFileSync(
+      join(pluginRoot, "bin", "stdio-preload.cjs"),
+      "utf8",
+    );
+    expect(hookWrapper).toContain('"letta-mem-hook-launcher.exe"');
+    expect(hookWrapper).toContain('stdio: "inherit"');
+    expect(hookWrapper.match(/require\(bootstrapPath\)/g)).toHaveLength(1);
+    expect(hookWrapper).not.toContain("existsSync");
+    expect(preload).toContain("LETTA_MEM_HOOK_STDIN_FILE");
+    expect(preload).toContain("LETTA_MEM_HOOK_STDOUT_FILE");
+    expect(preload).toContain("LETTA_MEM_HOOK_STDERR_FILE");
 
     const mcp = JSON.parse(readFileSync(
       join(pluginRoot, ".mcp.json"),
@@ -145,7 +181,68 @@ describe("新版 Letta 边界", () => {
     ).trim();
     expect(createHash("sha256").update(launcherSource).digest("hex"))
       .toBe(expectedSourceHash);
+
+    const hookExecutable = readFileSync(
+      join(pluginRoot, "bin", "letta-mem-hook-launcher.exe"),
+    );
+    expect(hookExecutable.subarray(0, 2).toString("ascii")).toBe("MZ");
+    const hookPeOffset = hookExecutable.readInt32LE(0x3c);
+    const hookOptionalHeaderOffset = hookPeOffset + 24;
+    expect(hookExecutable.readUInt16LE(hookOptionalHeaderOffset + 68)).toBe(2);
+
+    const hookLauncherSource = readFileSync(
+      join(pluginRoot, "scripts", "windows-hook-launcher.cs"),
+      "utf8",
+    );
+    expect(hookLauncherSource).toContain("CreatePseudoConsole");
+    expect(hookLauncherSource).toContain("CreateNoWindow");
+    expect(hookLauncherSource).not.toContain("StartfUseStdHandles");
+    const expectedHookSourceHash = readFileSync(
+      join(pluginRoot, "bin", "letta-mem-hook-launcher.source.sha256"),
+      "ascii",
+    ).trim();
+    expect(createHash("sha256").update(hookLauncherSource).digest("hex"))
+      .toBe(expectedHookSourceHash);
   });
+
+  it.runIf(process.platform === "win32")(
+    "Windows ConPTY 启动器透传 stdin、stdout、stderr 和退出码",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "letta-mem-hook-launcher-"));
+      const fixture = join(directory, "fixture.cjs");
+      try {
+        writeFileSync(
+          fixture,
+          [
+            '(async () => {',
+            '  const chunks = [];',
+            '  for await (const chunk of process.stdin) chunks.push(chunk);',
+            '  const input = Buffer.concat(chunks).toString("utf8");',
+            '  process.stdout.write(`stdout:${input}`);',
+            '  process.stderr.write(`stderr:${input}`);',
+            '  process.exitCode = 7;',
+            '})();',
+          ].join("\n"),
+          "utf8",
+        );
+        const result = spawnSync(
+          join(pluginRoot, "bin", "letta-mem-hook-launcher.exe"),
+          [process.execPath, fixture],
+          {
+            encoding: "utf8",
+            input: "测试输入",
+            windowsHide: true,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe(7);
+        expect(result.stdout).toBe("stdout:测试输入");
+        expect(result.stderr).toBe("stderr:测试输入");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("源码不包含旧 API、Cloud 或模型供应商密钥配置", () => {
     const roots = ["src", "bin", "scripts", "hooks"];

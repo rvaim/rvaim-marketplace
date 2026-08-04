@@ -14738,17 +14738,6 @@ async function handleDrainPending(config, log, clientFactory = createAgentClient
   }
   return "";
 }
-async function handleUpdateMemory(config, input, log, clientFactory = createAgentClient) {
-  try {
-    await handleEnqueueMemory(config, input, log);
-    await handleDrainPending(config, log, clientFactory);
-  } catch (error) {
-    recordFailure(config);
-    const detail = error instanceof Error ? errorDetail(error) : String(error);
-    log("error", "memory-update-failed", detail);
-  }
-  return "";
-}
 
 // src/config.ts
 import { createHash as createHash3 } from "node:crypto";
@@ -14912,7 +14901,7 @@ async function readInput() {
   return parsed && typeof parsed === "object" ? parsed : {};
 }
 function parseAction(value) {
-  if (value === "session-start" || value === "prepare-session" || value === "inject-context" || value === "sync-context" || value === "enqueue-memory" || value === "drain-pending" || value === "update-memory") {
+  if (value === "session-start" || value === "prepare-session" || value === "inject-context" || value === "sync-context" || value === "enqueue-memory" || value === "drain-pending") {
     return value;
   }
   return null;
@@ -14935,10 +14924,8 @@ async function main() {
       output = await handleSyncContext(config, input, log);
     } else if (action === "enqueue-memory") {
       output = await handleEnqueueMemory(config, input, log);
-    } else if (action === "drain-pending") {
-      output = await handleDrainPending(config, log);
     } else {
-      output = await handleUpdateMemory(config, input, log);
+      output = await handleDrainPending(config, log);
     }
   } catch (error) {
     if (isLettaSetupError(error)) {

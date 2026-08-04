@@ -347,9 +347,9 @@ npm install -g @letta-ai/letta-code
 - Claude Code、Codex 和并发 Hook 共用启动锁，只会有一个进程负责拉起服务。
 - App Server 作为隐藏的独立后台进程持续运行；Hook、MCP 或 Agent Session 结束时不会停止它。
 - Windows 的 MCP 第一层入口由插件内置的 GUI 子系统启动器创建 Node，并使用 `CREATE_NO_WINDOW` 透传 stdin、stdout、stderr；macOS/Linux 使用同名 shell 入口继续直接执行 Node。
-- 同步 Hook 保留标准 `node bootstrap.cjs` 入口以维持 stdin、stdout、退出码和超时语义。Codex Windows 会先创建第一层 `cmd.exe`/shell；该进程不受插件内 launcher 或 Node `windowsHide` 控制，黑框的完整修复必须位于 Codex Hook command runner。
+- 同步 Hook 使用单一跨平台 `node hook-launcher.cjs` 入口。Windows 包装器把有限的 Hook 输入交给 ConPTY GUI 启动器，由 `CREATE_NO_WINDOW` 且不设置 `STARTF_USESTDHANDLES` 的 Node 进程执行 bootstrap，再通过一次性文件和预加载脚本回传 stdout、stderr 与退出码；macOS/Linux 直接加载 bootstrap。
 - Windows 绕过 npm 的 `.cmd`/无扩展名 shim，直接使用 `node.exe` 启动全局包中的 `letta.js`，使 `windowsHide` 直接作用于真正的 App Server 进程；macOS/Linux 继续直接执行 `letta`。
-- Windows 的短时后台 Hook worker 通过 `wscript.exe` 隐藏启动，不直接创建 detached Node 控制台；macOS/Linux 仍使用原有 Node 后台启动方式。
+- Windows 的短时后台 Hook worker 复用插件 GUI 启动器和 stdin 管道，不再依赖 `wscript.exe`、VBS 或后台输入临时文件；macOS/Linux 直接启动 Node 后台进程。
 - 未安装 `letta`、端口上的服务不兼容或启动失败时，插件会向用户显示明确提示。
 
 Agent SDK 始终使用 `backend: "remote"` 连接该固定地址。代码中的 `session.close()` 只关闭当前 WebSocket/Agent Session，不会关闭 App Server。
@@ -601,7 +601,7 @@ LETTA_MEM_DISABLED=1
 
 要求 Node.js `>= 22.19.0`。
 
-修改 Windows 启动器源码后，执行 `npm run build:windows-launcher`，使用系统自带的 .NET Framework C# 编译器重新生成 `bin/letta-mem-launcher.exe`、记录源码哈希，并验证它是 Windows GUI 子系统程序。运行插件不需要单独安装 .NET SDK，也不会在插件目录外生成启动器。
+修改 Windows 启动器源码后，执行 `npm run build:windows-launcher`，使用系统自带的 .NET Framework C# 编译器重新生成 MCP 的 `bin/letta-mem-launcher.exe` 与同步 Hook 的 `bin/letta-mem-hook-launcher.exe`、记录各自源码哈希，并验证它们都是 Windows GUI 子系统程序。运行插件不需要单独安装 .NET SDK，也不会在插件目录外生成启动器。
 
 ```bash
 cd plugins/letta-mem
@@ -614,9 +614,12 @@ npm run verify
 | 文件 | 作用 |
 | --- | --- |
 | `hooks/hooks.json` | Hook 声明、超时和状态提示 |
-| `bin/letta-mem-launcher` / `bin/letta-mem-launcher.exe` | macOS/Linux 与 Windows 的统一无控制台入口；Windows 版本透传 stdio 与退出码 |
+| `bin/letta-mem-launcher` / `bin/letta-mem-launcher.exe` | MCP 的跨平台入口；Windows GUI 版本同时供后台 worker 复用，并透传 stdio 与退出码 |
+| `bin/hook-launcher.cjs` / `bin/letta-mem-hook-launcher.exe` | 同步 Hook 的跨平台包装入口与 Windows ConPTY 无窗口启动器 |
+| `bin/stdio-preload.cjs` | Windows ConPTY Hook 的 stdin、stdout、stderr 临时文件桥接 |
 | `bin/bootstrap.cjs` | 零依赖启动和前后台分离；Agent Client 已包含在 `dist` |
 | `scripts/windows-launcher.cs` | Windows GUI 子系统启动器源码 |
+| `scripts/windows-hook-launcher.cs` | Windows 同步 Hook 的 ConPTY GUI 启动器源码 |
 | `src/hooks.ts` | 指导读取、写队列和故障恢复主流程 |
 | `src/letta.ts` | Agent 定义、SDK 连接、Session 权限和最终响应提取 |
 | `src/recall.ts` | 已有 Agent 查找、固定召回 Conversation、运行锁和最终记忆提取 |

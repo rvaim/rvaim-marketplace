@@ -5,7 +5,6 @@ import {
   handlePrepareSession,
   handleSessionStart,
   handleSyncContext,
-  handleUpdateMemory,
 } from "./hooks.js";
 import { readRuntimeConfig } from "./config.js";
 import { formatHookSystemMessage } from "./context.js";
@@ -35,7 +34,6 @@ function parseAction(value: string | undefined): HookAction | null {
     || value === "sync-context"
     || value === "enqueue-memory"
     || value === "drain-pending"
-    || value === "update-memory"
   ) {
     return value;
   }
@@ -61,10 +59,8 @@ async function main(): Promise<void> {
       output = await handleSyncContext(config, input, log);
     } else if (action === "enqueue-memory") {
       output = await handleEnqueueMemory(config, input, log);
-    } else if (action === "drain-pending") {
-      output = await handleDrainPending(config, log);
     } else {
-      output = await handleUpdateMemory(config, input, log);
+      output = await handleDrainPending(config, log);
     }
   } catch (error) {
     if (isLettaSetupError(error)) {

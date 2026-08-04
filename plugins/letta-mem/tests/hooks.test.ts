@@ -16,7 +16,6 @@ import {
   handlePrepareSession,
   handleSessionStart,
   handleSyncContext,
-  handleUpdateMemory as updateMemory,
 } from "../src/hooks.js";
 import type {
   AgentClient,
@@ -99,12 +98,13 @@ async function handleEnqueueMemory(
 
 async function handleUpdateMemory(
   config: RuntimeConfig,
-  input: Parameters<typeof updateMemory>[1],
+  input: Parameters<typeof enqueueMemory>[1],
   log: LogFunction,
   clientFactory?: AgentClientFactory,
 ): Promise<string> {
   await activateSession(config, input);
-  return updateMemory(config, input, log, clientFactory);
+  await enqueueMemory(config, input, log);
+  return handleDrainPending(config, log, clientFactory);
 }
 
 function createTranscript(
