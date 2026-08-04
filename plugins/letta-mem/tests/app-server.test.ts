@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   commandFromPath,
   ensureAppServer,
+  findWindowsCommandsOnPath,
   LettaSetupError,
 } from "../src/app-server.js";
 import type { AppServerDependencies } from "../src/app-server.js";
@@ -64,6 +65,20 @@ function setup(
 }
 
 describe("常驻 Letta App Server", () => {
+  it("Windows 直接扫描 PATH，不调用 where.exe 或 shell", () => {
+    const directory = mkdtempSync(join(tmpdir(), "letta-command-path-"));
+    try {
+      const shim = join(directory, "letta.cmd");
+      writeFileSync(shim, "@echo off\r\n");
+      expect(findWindowsCommandsOnPath("letta", {
+        Path: directory,
+        PATHEXT: ".EXE;.CMD",
+      })).toEqual([shim]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("Windows 绕过 npm shim，直接用 node.exe 启动 letta.js", () => {
     const directory = mkdtempSync(join(tmpdir(), "letta-command-"));
     try {

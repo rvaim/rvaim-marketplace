@@ -9,8 +9,16 @@ import {
   statSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  resolve,
+} from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { acquireLock } from "./state.js";
 import type { LogFunction, RuntimeConfig } from "./types.js";
 
@@ -19,6 +27,12 @@ const READY_PROBE_TIMEOUT_MS = 1_000;
 const READY_POLL_INTERVAL_MS = 150;
 const MAX_SERVER_LOG_BYTES = 1_000_000;
 const SUPPORTED_APP_SERVER_PROTOCOL = 1;
+const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const WINDOWS_PROCESS_LAUNCHER = join(
+  PLUGIN_ROOT,
+  "bin",
+  "letta-mem-launcher.exe",
+);
 
 interface AppServerInfo {
   type?: string;
@@ -173,6 +187,46 @@ function commandCandidates(output: string): string[] {
     .filter(Boolean);
 }
 
+function environmentValue(
+  environment: NodeJS.ProcessEnv,
+  name: string,
+): string | undefined {
+  const key = Object.keys(environment)
+    .find((candidate) => candidate.toUpperCase() === name.toUpperCase());
+  return key ? environment[key] : undefined;
+}
+
+export function findWindowsCommandsOnPath(
+  command: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const pathValue = environmentValue(environment, "PATH") ?? "";
+  const configuredExtensions = (environmentValue(environment, "PATHEXT")
+    ?? ".COM;.EXE;.BAT;.CMD")
+    .split(";")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  const extensions = Array.from(new Set([
+    ...configuredExtensions,
+    ".cmd",
+    ".bat",
+    ".ps1",
+    "",
+  ]));
+  const candidates: string[] = [];
+  for (const rawDirectory of pathValue.split(";")) {
+    const directory = rawDirectory.trim().replace(/^"|"$/g, "");
+    if (!directory) continue;
+    for (const extension of extensions) {
+      const candidate = join(directory, `${command}${extension}`);
+      if (existsSync(candidate) && !candidates.includes(candidate)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+  return candidates;
+}
+
 function resolveLettaCommand(): LettaCommand | null {
   const configured = process.env.LETTA_MEM_LETTA_COMMAND?.trim();
   if (configured) {
@@ -180,7 +234,15 @@ function resolveLettaCommand(): LettaCommand | null {
     return existsSync(path) ? commandFromPath(path) : null;
   }
 
-  const locator = process.platform === "win32" ? "where.exe" : "which";
+  if (process.platform === "win32") {
+    for (const path of findWindowsCommandsOnPath("letta")) {
+      const command = commandFromPath(path);
+      if (command) return command;
+    }
+    return null;
+  }
+
+  const locator = "which";
   const result = spawnSync(locator, ["letta"], {
     encoding: "utf8",
     shell: false,
@@ -238,16 +300,31 @@ function launchAppServer(
     const environment = { ...process.env };
     delete environment.LETTA_APP_SERVER_TOKEN;
     delete environment.LETTA_MEM_LETTA_COMMAND;
+    if (process.platform === "win32") {
+      environment.LETTA_MEM_NODE_PATH = process.execPath;
+    }
+    const serverArguments = [
+      ...executable.argsPrefix,
+      "--backend",
+      "local",
+      "server",
+      "--listen",
+      listenUrl,
+    ];
+    if (process.platform === "win32" && !existsSync(WINDOWS_PROCESS_LAUNCHER)) {
+      throw new Error(
+        `Windows 静默启动器缺失：${WINDOWS_PROCESS_LAUNCHER}`,
+      );
+    }
+    const command = process.platform === "win32"
+      ? WINDOWS_PROCESS_LAUNCHER
+      : executable.command;
+    const args = process.platform === "win32"
+      ? ["--exec", executable.command, ...serverArguments]
+      : serverArguments;
     child = spawn(
-      executable.command,
-      [
-        ...executable.argsPrefix,
-        "--backend",
-        "local",
-        "server",
-        "--listen",
-        listenUrl,
-      ],
+      command,
+      args,
       {
         cwd: homedir(),
         detached: true,

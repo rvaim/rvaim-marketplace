@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -10,7 +12,12 @@ internal static class Program
 {
     private const uint ExtendedStartupInfoPresent = 0x00080000;
     private const uint CreateNoWindow = 0x08000000;
+    private const uint CreateUnicodeEnvironment = 0x00000400;
+    private const uint CreateSuspended = 0x00000004;
+    private const uint JobObjectLimitSilentBreakawayOk = 0x00001000;
+    private const uint JobObjectLimitKillOnJobClose = 0x00002000;
     private const uint Infinite = 0xFFFFFFFF;
+    private const int JobObjectExtendedLimitInformation = 9;
     private const int StdInputHandle = -10;
     private const int StdOutputHandle = -11;
     private const int StdErrorHandle = -12;
@@ -68,6 +75,42 @@ internal static class Program
         public IntPtr thread;
         public uint processId;
         public uint threadId;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong readOperationCount;
+        public ulong writeOperationCount;
+        public ulong otherOperationCount;
+        public ulong readTransferCount;
+        public ulong writeTransferCount;
+        public ulong otherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BasicLimitInformation
+    {
+        public long perProcessUserTimeLimit;
+        public long perJobUserTimeLimit;
+        public uint limitFlags;
+        public UIntPtr minimumWorkingSetSize;
+        public UIntPtr maximumWorkingSetSize;
+        public uint activeProcessLimit;
+        public UIntPtr affinity;
+        public uint priorityClass;
+        public uint schedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ExtendedLimitInformation
+    {
+        public BasicLimitInformation basicLimitInformation;
+        public IoCounters ioInfo;
+        public UIntPtr processMemoryLimit;
+        public UIntPtr jobMemoryLimit;
+        public UIntPtr peakProcessMemoryUsed;
+        public UIntPtr peakJobMemoryUsed;
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -167,15 +210,76 @@ internal static class Program
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateJobObject(
+        IntPtr jobAttributes,
+        string name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetInformationJobObject(
+        IntPtr job,
+        int informationClass,
+        IntPtr information,
+        uint informationLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(
+        IntPtr job,
+        IntPtr process);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint ResumeThread(IntPtr thread);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool TerminateProcess(IntPtr process, uint exitCode);
+
     [STAThread]
     private static int Main(string[] arguments)
     {
-        if (arguments.Length < 2 || !File.Exists(arguments[0])) return 1;
+        string nodePath;
+        var nodeArguments = new List<string>();
+        if (
+            arguments.Length >= 2
+            && File.Exists(arguments[0])
+            && File.Exists(arguments[1])
+        )
+        {
+            nodePath = Path.GetFullPath(arguments[0]);
+            for (int index = 1; index < arguments.Length; index += 1)
+            {
+                nodeArguments.Add(arguments[index]);
+            }
+        }
+        else if (arguments.Length >= 1)
+        {
+            nodePath = ResolveNodeExecutable();
+            if (nodePath == null)
+            {
+                WriteDiagnostic("Letta memory Hook launcher could not find node.exe on PATH.\n");
+                return 1;
+            }
+            string bootstrapPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "bootstrap.cjs");
+            if (!File.Exists(bootstrapPath))
+            {
+                WriteDiagnostic("Letta memory Hook bootstrap.cjs is missing.\n");
+                return 1;
+            }
+            nodeArguments.Add(bootstrapPath);
+            nodeArguments.AddRange(arguments);
+        }
+        else
+        {
+            WriteDiagnostic("Letta memory Hook launcher requires an action.\n");
+            return 1;
+        }
 
         string token = System.Diagnostics.Process.GetCurrentProcess().Id
             + "-"
             + Guid.NewGuid().ToString("N");
         string temporaryDirectory = Path.GetTempPath();
+        CleanupStaleTemporaryFiles(temporaryDirectory);
         string stdinPath = Path.Combine(temporaryDirectory, "letta-mem-hook-stdin-" + token + ".tmp");
         string stdoutPath = Path.Combine(temporaryDirectory, "letta-mem-hook-stdout-" + token + ".tmp");
         string stderrPath = Path.Combine(temporaryDirectory, "letta-mem-hook-stderr-" + token + ".tmp");
@@ -185,29 +289,50 @@ internal static class Program
             File.WriteAllBytes(stdinPath, ReadAll(GetStdHandle(StdInputHandle)));
             File.WriteAllBytes(stdoutPath, new byte[0]);
             File.WriteAllBytes(stderrPath, new byte[0]);
-            Environment.SetEnvironmentVariable("LETTA_MEM_HOOK_STDIN_FILE", stdinPath);
-            Environment.SetEnvironmentVariable("LETTA_MEM_HOOK_STDOUT_FILE", stdoutPath);
-            Environment.SetEnvironmentVariable("LETTA_MEM_HOOK_STDERR_FILE", stderrPath);
 
             string preloadPath = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "stdio-preload.cjs");
-            if (!File.Exists(preloadPath)) return 1;
-
-            var commandLine = new StringBuilder();
-            AppendArgument(commandLine, arguments[0]);
-            AppendArgument(commandLine, "--require");
-            AppendArgument(commandLine, preloadPath);
-            for (int index = 1; index < arguments.Length; index += 1)
+            if (!File.Exists(preloadPath))
             {
-                AppendArgument(commandLine, arguments[index]);
+                WriteDiagnostic("Letta memory Hook stdio-preload.cjs is missing.\n");
+                return 1;
             }
 
-            return RunHeadless(
-                arguments[0],
-                commandLine,
-                stdoutPath,
-                stderrPath);
+            var commandLine = new StringBuilder();
+            AppendArgument(commandLine, nodePath);
+            AppendArgument(commandLine, "--require");
+            AppendArgument(commandLine, preloadPath);
+            foreach (string argument in nodeArguments)
+            {
+                AppendArgument(commandLine, argument);
+            }
+
+            IntPtr environment = BuildEnvironmentBlock(new Dictionary<string, string>
+            {
+                { "LETTA_MEM_HOOK_STDIN_FILE", stdinPath },
+                { "LETTA_MEM_HOOK_STDOUT_FILE", stdoutPath },
+                { "LETTA_MEM_HOOK_STDERR_FILE", stderrPath },
+                { "LETTA_MEM_NODE_PATH", nodePath },
+            });
+            try
+            {
+                return RunHeadless(
+                    nodePath,
+                    commandLine,
+                    environment,
+                    stdoutPath,
+                    stderrPath);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(environment);
+            }
+        }
+        catch (Exception error)
+        {
+            WriteDiagnostic("Letta memory Hook launcher failed: " + error.Message + "\n");
+            return 1;
         }
         finally
         {
@@ -220,6 +345,7 @@ internal static class Program
     private static int RunHeadless(
         string applicationName,
         StringBuilder commandLine,
+        IntPtr environment,
         string stdoutPath,
         string stderrPath)
     {
@@ -230,6 +356,7 @@ internal static class Program
         IntPtr pseudoConsole = IntPtr.Zero;
         IntPtr attributeList = IntPtr.Zero;
         IntPtr boxedPseudoConsole = IntPtr.Zero;
+        IntPtr terminationJob = IntPtr.Zero;
         ProcessInformation process = new ProcessInformation();
         Thread drainThread = null;
 
@@ -281,18 +408,35 @@ internal static class Program
             startup.startupInfo.cb = Marshal.SizeOf(typeof(StartupInfoEx));
             startup.attributeList = attributeList;
 
+            terminationJob = CreateTerminationJob();
+            if (terminationJob == IntPtr.Zero) return 1;
+
             bool created = CreateProcess(
                 applicationName,
                 commandLine,
                 IntPtr.Zero,
                 IntPtr.Zero,
                 false,
-                ExtendedStartupInfoPresent | CreateNoWindow,
-                IntPtr.Zero,
+                ExtendedStartupInfoPresent
+                    | CreateNoWindow
+                    | CreateUnicodeEnvironment
+                    | CreateSuspended,
+                environment,
                 null,
                 ref startup,
                 out process);
             if (!created) return 1;
+
+            if (!AssignProcessToJobObject(terminationJob, process.process))
+            {
+                TerminateProcess(process.process, 1);
+                return 1;
+            }
+            if (ResumeThread(process.thread) == UInt32.MaxValue)
+            {
+                TerminateProcess(process.process, 1);
+                return 1;
+            }
 
             CloseHandle(process.thread);
             process.thread = IntPtr.Zero;
@@ -317,6 +461,7 @@ internal static class Program
             CloseIfPresent(pseudoOutputWrite);
             CloseIfPresent(pseudoInputRead);
             CloseIfPresent(pseudoInputWrite);
+            CloseIfPresent(terminationJob);
             CloseIfPresent(process.thread);
             CloseIfPresent(process.process);
             if (attributeList != IntPtr.Zero)
@@ -360,6 +505,142 @@ internal static class Program
         }
     }
 
+    private static IntPtr CreateTerminationJob()
+    {
+        IntPtr job = CreateJobObject(IntPtr.Zero, null);
+        if (job == IntPtr.Zero) return IntPtr.Zero;
+
+        var information = new ExtendedLimitInformation();
+        information.basicLimitInformation.limitFlags =
+            JobObjectLimitKillOnJobClose
+            | JobObjectLimitSilentBreakawayOk;
+        int size = Marshal.SizeOf(typeof(ExtendedLimitInformation));
+        IntPtr pointer = Marshal.AllocHGlobal(size);
+        try
+        {
+            Marshal.StructureToPtr(information, pointer, false);
+            if (!SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                pointer,
+                (uint)size))
+            {
+                CloseHandle(job);
+                return IntPtr.Zero;
+            }
+            return job;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(pointer);
+        }
+    }
+
+    private static IntPtr BuildEnvironmentBlock(
+        IDictionary<string, string> overrides)
+    {
+        var values = new SortedDictionary<string, string>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            string key = entry.Key as string;
+            if (String.IsNullOrEmpty(key)) continue;
+            values[key] = Convert.ToString(entry.Value) ?? "";
+        }
+        foreach (KeyValuePair<string, string> entry in overrides)
+        {
+            values[entry.Key] = entry.Value;
+        }
+
+        var block = new StringBuilder();
+        foreach (KeyValuePair<string, string> entry in values)
+        {
+            block.Append(entry.Key);
+            block.Append('=');
+            block.Append(entry.Value);
+            block.Append('\0');
+        }
+        block.Append('\0');
+        return Marshal.StringToHGlobalUni(block.ToString());
+    }
+
+    private static string ResolveNodeExecutable()
+    {
+        foreach (string variable in new[] { "LETTA_MEM_NODE_PATH", "NODE" })
+        {
+            string configured = Environment.GetEnvironmentVariable(variable);
+            if (
+                !String.IsNullOrWhiteSpace(configured)
+                && Path.IsPathRooted(configured)
+                && File.Exists(configured)
+            )
+            {
+                return Path.GetFullPath(configured);
+            }
+        }
+
+        string pathValue = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (string rawDirectory in pathValue.Split(Path.PathSeparator))
+        {
+            string directory = rawDirectory.Trim().Trim('"');
+            if (directory.Length == 0) continue;
+            string candidate;
+            try
+            {
+                candidate = Path.GetFullPath(Path.Combine(directory, "node.exe"));
+            }
+            catch
+            {
+                continue;
+            }
+            if (File.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private static void CleanupStaleTemporaryFiles(string directory)
+    {
+        DateTime cutoff = DateTime.UtcNow.AddDays(-1);
+        foreach (string prefix in new[]
+        {
+            "letta-mem-hook-stdin-",
+            "letta-mem-hook-stdout-",
+            "letta-mem-hook-stderr-",
+        })
+        {
+            try
+            {
+                foreach (string path in Directory.GetFiles(directory, prefix + "*.tmp"))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(path) < cutoff) File.Delete(path);
+                    }
+                    catch
+                    {
+                        // 其他 Hook 仍在使用或文件已被并发清理时忽略。
+                    }
+                }
+            }
+            catch
+            {
+                // 临时目录枚举失败不能阻止当前 Hook。
+            }
+        }
+    }
+
+    private static void WriteDiagnostic(string message)
+    {
+        try
+        {
+            WriteAll(GetStdHandle(StdErrorHandle), Encoding.UTF8.GetBytes(message));
+        }
+        catch
+        {
+            // 父进程已关闭 stderr 时无处返回诊断信息。
+        }
+    }
+
     private static byte[] ReadAll(IntPtr input)
     {
         using (var output = new MemoryStream())
@@ -399,24 +680,30 @@ internal static class Program
         try
         {
             byte[] data = File.ReadAllBytes(path);
-            int offset = 0;
-            while (offset < data.Length)
-            {
-                var chunk = new byte[data.Length - offset];
-                Buffer.BlockCopy(data, offset, chunk, 0, chunk.Length);
-                uint bytesWritten;
-                if (!WriteFile(
-                    output,
-                    chunk,
-                    (uint)chunk.Length,
-                    out bytesWritten,
-                    IntPtr.Zero) || bytesWritten == 0) return;
-                offset += (int)bytesWritten;
-            }
+            WriteAll(output, data);
         }
         catch
         {
             // 父进程已退出或关闭句柄时无需继续转发。
+        }
+    }
+
+    private static void WriteAll(IntPtr output, byte[] data)
+    {
+        int offset = 0;
+        while (offset < data.Length)
+        {
+            int count = Math.Min(64 * 1024, data.Length - offset);
+            var chunk = new byte[count];
+            Buffer.BlockCopy(data, offset, chunk, 0, count);
+            uint bytesWritten;
+            if (!WriteFile(
+                output,
+                chunk,
+                (uint)chunk.Length,
+                out bytesWritten,
+                IntPtr.Zero) || bytesWritten == 0) return;
+            offset += (int)bytesWritten;
         }
     }
 
@@ -462,13 +749,19 @@ internal static class Program
 
     private static void DeleteFile(string path)
     {
-        try
+        for (int attempt = 0; attempt < 10; attempt += 1)
         {
-            if (File.Exists(path)) File.Delete(path);
-        }
-        catch
-        {
-            // 仅清理本次调用创建的精确临时文件。
+            try
+            {
+                if (!File.Exists(path)) return;
+                File.Delete(path);
+                return;
+            }
+            catch
+            {
+                // 进程退出后杀毒软件或流关闭可能短暂持有文件。
+                if (attempt < 9) Thread.Sleep(20);
+            }
         }
     }
 

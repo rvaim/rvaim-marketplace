@@ -31012,8 +31012,16 @@ import {
   statSync as statSync2
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname as dirname2, extname, isAbsolute, join as join2, resolve } from "node:path";
+import {
+  basename,
+  dirname as dirname2,
+  extname,
+  isAbsolute,
+  join as join2,
+  resolve
+} from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 // src/state.ts
 import { createHash, randomUUID } from "node:crypto";
@@ -31233,6 +31241,12 @@ var READY_PROBE_TIMEOUT_MS = 1e3;
 var READY_POLL_INTERVAL_MS = 150;
 var MAX_SERVER_LOG_BYTES = 1e6;
 var SUPPORTED_APP_SERVER_PROTOCOL = 1;
+var PLUGIN_ROOT = resolve(dirname2(fileURLToPath(import.meta.url)), "..");
+var WINDOWS_PROCESS_LAUNCHER = join2(
+  PLUGIN_ROOT,
+  "bin",
+  "letta-mem-launcher.exe"
+);
 var LettaSetupError = class extends Error {
   constructor(message) {
     super(message);
@@ -31309,13 +31323,47 @@ function commandFromPath(path2, platform = process.platform) {
 function commandCandidates(output) {
   return output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
 }
+function environmentValue(environment, name) {
+  const key = Object.keys(environment).find((candidate) => candidate.toUpperCase() === name.toUpperCase());
+  return key ? environment[key] : void 0;
+}
+function findWindowsCommandsOnPath(command, environment = process.env) {
+  const pathValue = environmentValue(environment, "PATH") ?? "";
+  const configuredExtensions = (environmentValue(environment, "PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const extensions = Array.from(/* @__PURE__ */ new Set([
+    ...configuredExtensions,
+    ".cmd",
+    ".bat",
+    ".ps1",
+    ""
+  ]));
+  const candidates = [];
+  for (const rawDirectory of pathValue.split(";")) {
+    const directory = rawDirectory.trim().replace(/^"|"$/g, "");
+    if (!directory) continue;
+    for (const extension of extensions) {
+      const candidate = join2(directory, `${command}${extension}`);
+      if (existsSync2(candidate) && !candidates.includes(candidate)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+  return candidates;
+}
 function resolveLettaCommand() {
   const configured = process.env.LETTA_MEM_LETTA_COMMAND?.trim();
   if (configured) {
     const path2 = isAbsolute(configured) ? configured : resolve(configured);
     return existsSync2(path2) ? commandFromPath(path2) : null;
   }
-  const locator = process.platform === "win32" ? "where.exe" : "which";
+  if (process.platform === "win32") {
+    for (const path2 of findWindowsCommandsOnPath("letta")) {
+      const command = commandFromPath(path2);
+      if (command) return command;
+    }
+    return null;
+  }
+  const locator = "which";
   const result = spawnSync(locator, ["letta"], {
     encoding: "utf8",
     shell: false,
@@ -31361,16 +31409,27 @@ function launchAppServer(executable, listenUrl) {
     const environment = { ...process.env };
     delete environment.LETTA_APP_SERVER_TOKEN;
     delete environment.LETTA_MEM_LETTA_COMMAND;
+    if (process.platform === "win32") {
+      environment.LETTA_MEM_NODE_PATH = process.execPath;
+    }
+    const serverArguments = [
+      ...executable.argsPrefix,
+      "--backend",
+      "local",
+      "server",
+      "--listen",
+      listenUrl
+    ];
+    if (process.platform === "win32" && !existsSync2(WINDOWS_PROCESS_LAUNCHER)) {
+      throw new Error(
+        `Windows \u9759\u9ED8\u542F\u52A8\u5668\u7F3A\u5931\uFF1A${WINDOWS_PROCESS_LAUNCHER}`
+      );
+    }
+    const command = process.platform === "win32" ? WINDOWS_PROCESS_LAUNCHER : executable.command;
+    const args = process.platform === "win32" ? ["--exec", executable.command, ...serverArguments] : serverArguments;
     child = spawn(
-      executable.command,
-      [
-        ...executable.argsPrefix,
-        "--backend",
-        "local",
-        "server",
-        "--listen",
-        listenUrl
-      ],
+      command,
+      args,
       {
         cwd: homedir(),
         detached: true,
@@ -44361,7 +44420,7 @@ function resultText(result) {
 function createRecallMcpServer(handler = defaultRecallHandler) {
   const server2 = new McpServer({
     name: "letta-memory",
-    version: "2.10.4"
+    version: "2.10.7"
   });
   server2.registerTool("letta_recall", {
     title: "\u53EC\u56DE Letta \u8BB0\u5FC6",

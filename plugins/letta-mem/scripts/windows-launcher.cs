@@ -107,10 +107,28 @@ internal static class Program
     [STAThread]
     private static int Main(string[] arguments)
     {
-        string bootstrapPath = Path.GetFullPath(Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory,
-            "bootstrap.cjs"));
-        if (!File.Exists(bootstrapPath)) return 1;
+        string applicationName;
+        var childArguments = new List<string>();
+        if (arguments.Length >= 2 && arguments[0] == "--exec")
+        {
+            applicationName = Path.GetFullPath(arguments[1]);
+            if (!File.Exists(applicationName)) return 1;
+            for (int index = 2; index < arguments.Length; index += 1)
+            {
+                childArguments.Add(arguments[index]);
+            }
+        }
+        else
+        {
+            string bootstrapPath = Path.GetFullPath(Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "bootstrap.cjs"));
+            if (!File.Exists(bootstrapPath)) return 1;
+            applicationName = ResolveNodeExecutable();
+            if (applicationName == null) return 1;
+            childArguments.Add(bootstrapPath);
+            childArguments.AddRange(arguments);
+        }
 
         var inheritedHandles = new List<IntPtr>();
         ProcessInformation process = new ProcessInformation();
@@ -138,15 +156,14 @@ internal static class Program
             startup.stdError = error;
 
             var commandLine = new StringBuilder();
-            AppendArgument(commandLine, "node.exe");
-            AppendArgument(commandLine, bootstrapPath);
-            foreach (string argument in arguments)
+            AppendArgument(commandLine, applicationName);
+            foreach (string argument in childArguments)
             {
                 AppendArgument(commandLine, argument);
             }
 
             bool created = CreateProcess(
-                null,
+                applicationName,
                 commandLine,
                 IntPtr.Zero,
                 IntPtr.Zero,
@@ -173,6 +190,40 @@ internal static class Program
                 CloseHandle(handle);
             }
         }
+    }
+
+    private static string ResolveNodeExecutable()
+    {
+        foreach (string variable in new[] { "LETTA_MEM_NODE_PATH", "NODE" })
+        {
+            string configured = Environment.GetEnvironmentVariable(variable);
+            if (
+                !String.IsNullOrWhiteSpace(configured)
+                && Path.IsPathRooted(configured)
+                && File.Exists(configured)
+            )
+            {
+                return Path.GetFullPath(configured);
+            }
+        }
+
+        string pathValue = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (string rawDirectory in pathValue.Split(Path.PathSeparator))
+        {
+            string directory = rawDirectory.Trim().Trim('"');
+            if (directory.Length == 0) continue;
+            string candidate;
+            try
+            {
+                candidate = Path.GetFullPath(Path.Combine(directory, "node.exe"));
+            }
+            catch
+            {
+                continue;
+            }
+            if (File.Exists(candidate)) return candidate;
+        }
+        return null;
     }
 
     private static IntPtr PrepareStandardHandle(

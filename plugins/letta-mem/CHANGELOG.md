@@ -1,5 +1,13 @@
 # 变更日志
 
+## 2.10.7
+
+- 按真实 Codex 0.146.0 进程树重新修复 Windows Hook：`commandWindows` 不再先启动 `node hook-launcher.cjs`，而是由 Codex 已有的 PowerShell command runner 通过 `Start-Process -NoNewWindow -Wait -PassThru` 直接进入 GUI 子系统的 ConPTY 启动器，并返回启动器真实退出码。
+- bootstrap 改为在同一个 Node 进程内导入 `letta-mem-hook-runtime.mjs` 和 MCP 入口，不再为同步 Hook 或 MCP 再创建第二个 Node；Windows Letta CLI 定位改为直接扫描 `PATH`，不再启动 `where.exe`。
+- ConPTY 启动器新增 Unicode 环境块、绝对 Node 路径解析、24 小时崩溃残留文件清理，以及 `KILL_ON_JOB_CLOSE + SILENT_BREAKAWAY_OK` Job Object：同步 Node 会随 Hook 超时终止，明确 detached 的后台 worker 仍可继续运行。
+- App Server 在 Windows 上通过 GUI 启动器的 `--exec` 模式创建真实 Letta/Node 进程，不再由 Hook Node 直接启动控制台程序；后台 worker 显式传递当前 Node 的绝对路径。
+- 扩充真实 Windows 二进制回归：覆盖中文和特殊字符大输入、含空格与非 ASCII 路径、stdout/stderr、非零退出码、超时终止、临时文件清理及后台子进程脱离父 Hook。
+
 ## 2.10.6
 
 - 同步 Hook 保留单一跨平台 `command`，不再使用 Codex Windows 无法展开 `${CLAUDE_PLUGIN_ROOT}` 的 `commandWindows`；入口改为 `node hook-launcher.cjs`，修复 `SessionStart` 与 `UserPromptSubmit` 以 code 1 退出的问题。

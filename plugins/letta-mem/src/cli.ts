@@ -1,80 +1,30 @@
 import {
-  handleDrainPending,
-  handleEnqueueMemory,
-  handleInjectContext,
-  handlePrepareSession,
-  handleSessionStart,
-  handleSyncContext,
-} from "./hooks.js";
-import { readRuntimeConfig } from "./config.js";
-import { formatHookSystemMessage } from "./context.js";
-import { isLettaSetupError } from "./app-server.js";
-import { createLogger, errorDetail } from "./logger.js";
-import type { HookAction, HookInput } from "./types.js";
+  executeHookAction,
+  MAX_HOOK_INPUT_BYTES,
+  recoverHookError,
+} from "./hook-runtime.js";
 
-async function readInput(): Promise<HookInput> {
+async function readInput(): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of process.stdin) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
     size += buffer.length;
-    if (size > 2_000_000) throw new Error("Hook 输入超过 2 MB 限制");
+    if (size > MAX_HOOK_INPUT_BYTES) {
+      throw new Error("Hook 输入超过 2 MB 限制");
+    }
     chunks.push(buffer);
   }
-  if (chunks.length === 0) return {};
-  const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as HookInput;
-  return parsed && typeof parsed === "object" ? parsed : {};
-}
-
-function parseAction(value: string | undefined): HookAction | null {
-  if (
-    value === "session-start"
-    || value === "prepare-session"
-    || value === "inject-context"
-    || value === "sync-context"
-    || value === "enqueue-memory"
-    || value === "drain-pending"
-  ) {
-    return value;
-  }
-  return null;
+  return Buffer.concat(chunks);
 }
 
 async function main(): Promise<void> {
   let output = "";
   try {
-    const action = parseAction(process.argv[2]);
-    if (!action) return;
-    const config = readRuntimeConfig();
-    const log = createLogger(config);
-    const input = await readInput();
-
-    if (action === "session-start") {
-      output = await handleSessionStart(config, input);
-    } else if (action === "prepare-session") {
-      output = await handlePrepareSession(config, input, log);
-    } else if (action === "inject-context") {
-      output = await handleInjectContext(config, input, log);
-    } else if (action === "sync-context") {
-      output = await handleSyncContext(config, input, log);
-    } else if (action === "enqueue-memory") {
-      output = await handleEnqueueMemory(config, input, log);
-    } else {
-      output = await handleDrainPending(config, log);
-    }
+    output = await executeHookAction(process.argv[2], await readInput());
   } catch (error) {
-    if (isLettaSetupError(error)) {
-      output = formatHookSystemMessage(error.message);
-    }
-    try {
-      const config = readRuntimeConfig();
-      const detail = error instanceof Error ? errorDetail(error) : String(error);
-      createLogger(config)("error", "hook-failed", detail);
-    } catch {
-      // 配置或日志本身失败时也必须静默放行。
-    }
+    output = recoverHookError(error);
   }
-
   if (output) process.stdout.write(output);
 }
 

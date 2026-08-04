@@ -19,6 +19,7 @@ const {
 } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
+const { pathToFileURL } = require("node:url");
 const { spawn } = require("node:child_process");
 
 const PLUGIN_ROOT = resolve(__dirname, "..");
@@ -188,61 +189,25 @@ function acquireInstallLock(lockPath) {
   }
 }
 
-function runCommand(command, args, options = {}) {
-  return new Promise((resolvePromise) => {
-    const { input = "", ...spawnOptions } = options;
-    let stdout = "";
-    let stderr = "";
-    const child = spawn(command, args, {
-      ...spawnOptions,
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    const collectStdout = (chunk) => {
-      stdout = `${stdout}${String(chunk)}`.slice(-12_000);
-    };
-    const collectStderr = (chunk) => {
-      stderr = `${stderr}${String(chunk)}`.slice(-12_000);
-    };
-    child.stdout.on("data", collectStdout);
-    child.stderr.on("data", collectStderr);
-    child.stdin.on("error", () => {
-      // 子进程提前退出时忽略管道错误，保持故障开放。
-    });
-    child.on("error", (error) => resolvePromise({
-      code: -1,
-      stdout: "",
-      diagnostics: String(error),
-    }));
-    child.on("close", (code) => resolvePromise({
-      code: code ?? -1,
-      stdout,
-      diagnostics: `${stdout}${stderr}`,
-    }));
-    child.stdin.end(input);
-  });
-}
-
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);
 }
 
+let hookRuntimePromise;
+
 async function runHook(action, input) {
-  const entry = join(PLUGIN_ROOT, "dist", "letta-mem.mjs");
-  if (!existsSync(entry)) return "";
-  const result = await runCommand(process.execPath, [entry, action], {
-    cwd: process.cwd(),
-    env: { ...process.env },
-    input,
-  });
-  if (result.code !== 0) {
-    log("hook-child-failed", `${action} ${result.diagnostics}`);
-    return "";
+  const entry = join(PLUGIN_ROOT, "dist", "letta-mem-hook-runtime.mjs");
+  if (!existsSync(entry)) {
+    throw new Error(`Hook runtime is missing: ${entry}`);
   }
-  return result.stdout;
+  hookRuntimePromise ||= import(pathToFileURL(entry).href);
+  const runtime = await hookRuntimePromise;
+  if (typeof runtime.executeHookAction !== "function") {
+    throw new Error("Hook runtime does not export executeHookAction");
+  }
+  return runtime.executeHookAction(action, input);
 }
 
 function startBackgroundAction(action, input = Buffer.from("")) {
@@ -255,7 +220,12 @@ function startBackgroundAction(action, input = Buffer.from("")) {
       : [__filename, action];
     const child = spawn(command, childArguments, {
       cwd: process.cwd(),
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        ...(process.platform === "win32"
+          ? { LETTA_MEM_NODE_PATH: process.execPath }
+          : {}),
+      },
       detached: true,
       stdio: ["pipe", "ignore", "ignore"],
       windowsHide: true,
@@ -355,20 +325,7 @@ async function runMcpServer() {
     process.exitCode = 1;
     return;
   }
-  const child = spawn(process.execPath, [entry], {
-    cwd: process.cwd(),
-    env: { ...process.env },
-    stdio: "inherit",
-    windowsHide: true,
-  });
-  const code = await new Promise((resolvePromise, rejectPromise) => {
-    child.once("error", rejectPromise);
-    child.once("close", (value) => resolvePromise(value ?? 1));
-  });
-  if (code !== 0) {
-    log("mcp-child-failed", String(code));
-    process.exitCode = code;
-  }
+  await import(pathToFileURL(entry).href);
 }
 
 async function main() {
@@ -425,4 +382,14 @@ async function main() {
   }
 }
 
-main().catch((error) => log("bootstrap-failed", error));
+main().then(() => {
+  if (process.argv[2] === "mcp") return;
+  const exitTimer = setTimeout(() => process.exit(process.exitCode ?? 0), 50);
+  exitTimer.unref();
+}).catch((error) => {
+  log("bootstrap-failed", error);
+  process.stderr.write(`Letta memory bootstrap failed: ${sanitize(error)}\n`);
+  process.exitCode = 1;
+  const exitTimer = setTimeout(() => process.exit(1), 50);
+  exitTimer.unref();
+});

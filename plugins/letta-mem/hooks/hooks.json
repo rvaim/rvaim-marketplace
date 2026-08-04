@@ -6,13 +6,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/hook-launcher.cjs\" session-state",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" session-state",
+            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"session-state\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
             "timeout": 2,
             "statusMessage": "正在恢复 Letta 记忆状态"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/hook-launcher.cjs\" prepare-session-background",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" prepare-session-background",
+            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"prepare-session-background\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
             "timeout": 2,
             "statusMessage": "正在让已有 Letta Agent 准备记忆"
           }
@@ -24,7 +26,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/hook-launcher.cjs\" inject-context",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" inject-context",
+            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"inject-context\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
             "timeout": 40,
             "statusMessage": "正在读取 Letta 已准备的记忆指导"
           }
@@ -36,7 +39,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/hook-launcher.cjs\" sync-context",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" sync-context",
+            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"sync-context\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
             "timeout": 10,
             "statusMessage": "正在检查 Letta 最新记忆指导"
           }
@@ -48,7 +52,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/hook-launcher.cjs\" update-memory-background",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs\" update-memory-background",
+            "commandWindows": "$p = Start-Process -FilePath \"${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe\" -ArgumentList \"update-memory-background\" -NoNewWindow -Wait -PassThru; exit $p.ExitCode",
             "timeout": 10,
             "statusMessage": "正在后台更新 Letta 记忆"
           }

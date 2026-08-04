@@ -4,6 +4,7 @@
 // 上游归属与许可见 ../NOTICE.md 和 ../LICENSE。
 
 const { closeSync, openSync, readFileSync, writeSync } = require("node:fs");
+const { Readable } = require("node:stream");
 
 const stdinPath = process.env.LETTA_MEM_HOOK_STDIN_FILE;
 const stdoutPath = process.env.LETTA_MEM_HOOK_STDOUT_FILE;
@@ -12,9 +13,12 @@ const stderrPath = process.env.LETTA_MEM_HOOK_STDERR_FILE;
 if (stdinPath) {
   try {
     const input = readFileSync(stdinPath);
-    process.stdin.pause();
-    if (input.length > 0) process.stdin.unshift(input);
-    process.nextTick(() => process.stdin.push(null));
+    const restoredInput = Readable.from(input.length > 0 ? [input] : []);
+    Object.defineProperty(process, "stdin", {
+      configurable: true,
+      enumerable: true,
+      value: restoredInput,
+    });
   } catch {
     // 启动器会负责记录进程失败；预加载层保持故障开放。
   }

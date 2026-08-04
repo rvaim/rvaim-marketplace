@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 const outputs = [
   "dist/letta-mem.mjs",
   "dist/letta-mem-mcp.mjs",
+  "dist/letta-mem-hook-runtime.mjs",
 ];
 
 const shared = {
@@ -28,6 +29,11 @@ await Promise.all([
     ...shared,
     entryPoints: ["src/mcp-cli.ts"],
     outfile: "dist/letta-mem-mcp.mjs",
+  }),
+  build({
+    ...shared,
+    entryPoints: ["src/hook-runtime.ts"],
+    outfile: "dist/letta-mem-hook-runtime.mjs",
   }),
 ]);
 

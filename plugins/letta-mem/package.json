@@ -1,6 +1,6 @@
 {
   "name": "letta-mem",
-  "version": "2.10.6",
+  "version": "2.10.7",
   "description": "将编码会话与记忆作用域约束交给 Letta Agent 自主管理持久记忆",
   "type": "module",
   "private": true,
@@ -13,6 +13,7 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:windows-hook": "node scripts/verify-windows-hook-launcher.mjs",
     "verify": "npm run check && npm test && npm run build"
   },
   "dependencies": {

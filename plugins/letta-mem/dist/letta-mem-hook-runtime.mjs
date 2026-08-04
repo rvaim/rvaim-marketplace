@@ -15000,30 +15000,8 @@ async function executeHookAction(actionValue, rawInput) {
   }
   return output;
 }
-
-// src/cli.ts
-async function readInput() {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of process.stdin) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-    size += buffer.length;
-    if (size > MAX_HOOK_INPUT_BYTES) {
-      throw new Error("Hook \u8F93\u5165\u8D85\u8FC7 2 MB \u9650\u5236");
-    }
-    chunks.push(buffer);
-  }
-  return Buffer.concat(chunks);
-}
-async function main() {
-  let output = "";
-  try {
-    output = await executeHookAction(process.argv[2], await readInput());
-  } catch (error) {
-    output = recoverHookError(error);
-  }
-  if (output) process.stdout.write(output);
-}
-await main();
-var exitTimer = setTimeout(() => process.exit(process.exitCode ?? 0), 50);
-exitTimer.unref();
+export {
+  MAX_HOOK_INPUT_BYTES,
+  executeHookAction,
+  recoverHookError
+};
