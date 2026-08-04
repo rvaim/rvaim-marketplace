@@ -1,5 +1,11 @@
 # 变更日志
 
+## 2.10.2
+
+- 将仅用于 `backend: "remote"` 的 Agent Client 构建进插件 `dist`，移除 Hook/MCP 启动阶段的 runtime `npm ci` 自举、安装锁和 `LETTA_MEM_SDK_ENTRY` 注入。
+- 修复首次启动或升级后 MCP 因 runtime 安装超时/死锁而在 `initialize` 前关闭连接的问题，并停止继续生成数百 MB 的 `~/.letta-mem/data/*/runtime` 缓存。
+- 新增真实 stdio `bootstrap.cjs mcp → initialize → listTools` 回归测试。
+
 ## 2.10.1
 
 - 修复 Windows 全局 npm 同时生成 `letta` 与 `letta.cmd` 时错误执行无扩展名 shim、导致 App Server 启动报 `spawn ...\\letta ENOENT` 的问题。

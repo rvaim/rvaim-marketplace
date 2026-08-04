@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "letta-mem",
-  "version": "2.10.1",
+  "version": "2.10.2",
   "description": "将 Claude Code 会话与记忆作用域约束交给 Letta Agent，由 Letta 原生能力自主管理持久记忆。",
   "author": {
     "name": "rvaim",

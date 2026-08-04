@@ -4,7 +4,7 @@
 
 插件不保存真正的记忆，也不决定记忆使用本地、云端、memory block、MemFS、archive 或 Shared Memory。插件只把已完成的编码会话和稳定约束交给工作区 Letta Agent；长期价值、共享/工作区作用域、组织方式和保存位置都由 Agent 使用 Letta 当前提供的原生能力自行决定。
 
-当前版本：`2.10.1`。
+当前版本：`2.10.2`。
 
 ## 一句话架构
 
@@ -350,6 +350,8 @@ npm install -g @letta-ai/letta-code
 
 Agent SDK 始终使用 `backend: "remote"` 连接该固定地址。代码中的 `session.close()` 只关闭当前 WebSocket/Agent Session，不会关闭 App Server。
 
+远程 Agent Client 已随插件构建到 `dist`。Hook 和 MCP 启动时不会在 `~/.letta-mem/data` 下执行 `npm ci` 或生成数百 MB 的 Node runtime；旧版本已经生成的 `runtime` 目录不会被插件自动删除。
+
 本地 App Server 与 Letta App 使用标准本地数据目录：
 
 ```text
@@ -602,7 +604,7 @@ npm run verify
 | 文件 | 作用 |
 | --- | --- |
 | `hooks/hooks.json` | Hook 声明、超时和状态提示 |
-| `bin/bootstrap.cjs` | 零依赖启动、runtime 安装和前后台分离 |
+| `bin/bootstrap.cjs` | 零依赖启动和前后台分离；Agent Client 已包含在 `dist` |
 | `src/hooks.ts` | 指导读取、写队列和故障恢复主流程 |
 | `src/letta.ts` | Agent 定义、SDK 连接、Session 权限和最终响应提取 |
 | `src/recall.ts` | 已有 Agent 查找、固定召回 Conversation、运行锁和最终记忆提取 |

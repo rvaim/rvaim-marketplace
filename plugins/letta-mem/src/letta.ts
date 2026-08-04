@@ -1,8 +1,5 @@
-import {
-  basename,
-  isAbsolute,
-} from "node:path";
-import { pathToFileURL } from "node:url";
+import { LettaAgentClient as SdkLettaAgentClient } from "@letta-ai/letta-agent-sdk/client";
+import { basename } from "node:path";
 import {
   acquireLock,
   agentLockPath,
@@ -160,16 +157,16 @@ export interface AgentSessionOverrides {
   tools?: AgentSessionTool[];
 }
 
-interface AgentSdkModule {
-  LettaAgentClient: new (options: AgentClientOptions) => AgentClient;
-}
-
 type AgentClientOptions = {
   backend: "remote";
   url: string;
   authToken?: string;
   requestTimeoutMs: number;
 };
+
+const PortableAgentClient = SdkLettaAgentClient as unknown as new (
+  options: AgentClientOptions,
+) => AgentClient;
 
 export type AgentClientFactory = (
   config: RuntimeConfig,
@@ -240,23 +237,11 @@ export function agentClientOptions(
   };
 }
 
-async function loadSdkModule(): Promise<AgentSdkModule> {
-  const configuredEntry = process.env.LETTA_MEM_SDK_ENTRY?.trim();
-  if (configuredEntry) {
-    const specifier = isAbsolute(configuredEntry)
-      ? pathToFileURL(configuredEntry).href
-      : configuredEntry;
-    return import(specifier) as Promise<AgentSdkModule>;
-  }
-  return import("@letta-ai/letta-agent-sdk") as Promise<AgentSdkModule>;
-}
-
 export async function createAgentClient(
   config: RuntimeConfig,
 ): Promise<AgentClient> {
   await ensureAppServer(config, createLogger(config));
-  const module = await loadSdkModule();
-  const client = new module.LettaAgentClient(agentClientOptions(config));
+  const client = new PortableAgentClient(agentClientOptions(config));
   return {
     createAgent: (options) => client.createAgent(options),
     createSession: (agentId, options) => client.createSession(agentId, options),

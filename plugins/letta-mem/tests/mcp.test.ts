@@ -1,16 +1,52 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import {
+  getDefaultEnvironment,
+  StdioClientTransport,
+} from "@modelcontextprotocol/sdk/client/stdio.js";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { LettaSetupError } from "../src/app-server.js";
 import { createRecallMcpServer } from "../src/mcp.js";
 
 const cleanups: Array<() => Promise<void>> = [];
+const temporaryDirectories: string[] = [];
+const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 describe("letta-memory MCP", () => {
+  it("零安装 bootstrap 可直接完成 stdio initialize", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "letta-mem-mcp-bootstrap-"));
+    temporaryDirectories.push(dataDir);
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [join(pluginRoot, "bin", "bootstrap.cjs"), "mcp"],
+      cwd: pluginRoot,
+      env: {
+        ...getDefaultEnvironment(),
+        LETTA_MEM_DATA_DIR: dataDir,
+        LETTA_MEM_COORDINATION_DIR: join(dataDir, "coordination"),
+      },
+      stderr: "pipe",
+    });
+    const client = new Client({ name: "letta-mem-bootstrap-test", version: "1.0.0" });
+    await client.connect(transport);
+    cleanups.push(async () => client.close());
+
+    const tools = await client.listTools();
+    expect(tools.tools.map((tool) => tool.name)).toContain("letta_recall");
+    expect(existsSync(join(dataDir, "runtime"))).toBe(false);
+  });
+
   it("通过 MCP 协议公开并执行 letta_recall", async () => {
     const calls: Array<{ query: string; workspacePath: string }> = [];
     const server = createRecallMcpServer(async (query, workspacePath) => {

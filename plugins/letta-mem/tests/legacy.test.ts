@@ -60,6 +60,19 @@ describe("新版 Letta 边界", () => {
     expect(directDependencies).not.toContain("@letta-ai/letta-code-sdk");
     expect(directDependencies).not.toContain("@letta-ai/letta-client");
     expect(directDependencies).not.toContain("letta-client");
+
+    const bootstrap = readFileSync(
+      join(pluginRoot, "bin", "bootstrap.cjs"),
+      "utf8",
+    );
+    const buildScript = readFileSync(
+      join(pluginRoot, "scripts", "build.mjs"),
+      "utf8",
+    );
+    expect(bootstrap).not.toContain("npm ci");
+    expect(bootstrap).not.toContain("ensureRuntime");
+    expect(bootstrap).not.toContain("LETTA_MEM_SDK_ENTRY");
+    expect(buildScript).not.toContain("external:");
   });
 
   it("源码不包含旧 API、Cloud 或模型供应商密钥配置", () => {

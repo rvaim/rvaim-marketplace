@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
-const { createHash, randomUUID } = require("node:crypto");
+const { randomUUID } = require("node:crypto");
 const {
   appendFileSync,
   chmodSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -20,7 +19,6 @@ const {
 } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
-const { pathToFileURL } = require("node:url");
 const { spawn } = require("node:child_process");
 
 const PLUGIN_ROOT = resolve(__dirname, "..");
@@ -28,25 +26,14 @@ const DATA_DIR = process.env.CLAUDE_PLUGIN_DATA
   || process.env.PLUGIN_DATA
   || process.env.LETTA_MEM_DATA_DIR
   || join(homedir(), ".letta-mem", "data", "development");
-const RUNTIME_ROOT = join(DATA_DIR, "runtime");
-const PLUGIN_SDK_ENTRY = join(
-  PLUGIN_ROOT,
-  "node_modules",
-  "@letta-ai",
-  "letta-agent-sdk",
-  "dist",
-  "index.js",
-);
 const LOG_PATH = join(DATA_DIR, "logs", "letta-mem.log");
 const ACTIONS = new Set([
   "session-state",
   "prepare-session-background",
   "prepare-session-worker",
-  "prepare-runtime",
   "inject-context",
   "sync-context",
   "update-memory",
-  "prepare-runtime-background",
   "update-memory-background",
   "drain-background",
   "mcp",
@@ -101,87 +88,6 @@ function nodeIsSupported() {
     .split(".")
     .map((value) => Number.parseInt(value, 10));
   return major > 22 || (major === 22 && minor >= 19);
-}
-
-function manifestHash() {
-  const packageJson = readFileSync(join(PLUGIN_ROOT, "package.json"));
-  const packageLock = readFileSync(join(PLUGIN_ROOT, "package-lock.json"));
-  return createHash("sha256")
-    .update(packageJson)
-    .update(packageLock)
-    .digest("hex");
-}
-
-function runtimePaths(expectedHash) {
-  const generation = [
-    expectedHash.slice(0, 24),
-    process.versions.node,
-    process.platform,
-    process.arch,
-  ].join("-").replace(/[^a-zA-Z0-9._-]/g, "_");
-  const runtimeDir = join(RUNTIME_ROOT, generation);
-  return {
-    runtimeDir,
-    installLock: join(DATA_DIR, "locks", `runtime-${generation}.lock`),
-    stampPath: join(runtimeDir, ".letta-mem-runtime.json"),
-    sdkEntry: join(
-      runtimeDir,
-      "node_modules",
-      "@letta-ai",
-      "letta-agent-sdk",
-      "dist",
-      "index.js",
-    ),
-  };
-}
-
-async function sdkEntryUsable(entry) {
-  if (!existsSync(entry)) return false;
-  try {
-    await import(`${pathToFileURL(entry).href}?probe=${randomUUID()}`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function runtimeReady(paths, expectedHash) {
-  try {
-    const stamp = JSON.parse(readFileSync(paths.stampPath, "utf8"));
-    return stamp.version === 2
-      && stamp.manifestHash === expectedHash
-      && stamp.node === process.versions.node
-      && stamp.platform === process.platform
-      && stamp.arch === process.arch
-      && await sdkEntryUsable(paths.sdkEntry);
-  } catch {
-    return false;
-  }
-}
-
-function pluginRuntimeReady() {
-  try {
-    const pluginManifest = JSON.parse(
-      readFileSync(join(PLUGIN_ROOT, "package.json"), "utf8"),
-    );
-    const sdkManifest = JSON.parse(
-      readFileSync(
-        join(
-          PLUGIN_ROOT,
-          "node_modules",
-          "@letta-ai",
-          "letta-agent-sdk",
-          "package.json",
-        ),
-        "utf8",
-      ),
-    );
-    return existsSync(PLUGIN_SDK_ENTRY)
-      && pluginManifest.dependencies?.["@letta-ai/letta-agent-sdk"]
-        === sdkManifest.version;
-  } catch {
-    return false;
-  }
 }
 
 function acquireInstallLock(lockPath) {
@@ -314,118 +220,18 @@ function runCommand(command, args, options = {}) {
   });
 }
 
-async function ensureRuntime() {
-  if (!nodeIsSupported()) {
-    log("runtime-node-unsupported", process.versions.node);
-    return null;
-  }
-
-  // 宿主可能已为 marketplace 插件准备依赖，优先复用以避免重复安装。
-  if (pluginRuntimeReady() && await sdkEntryUsable(PLUGIN_SDK_ENTRY)) {
-    return PLUGIN_SDK_ENTRY;
-  }
-
-  let expectedHash;
-  try {
-    expectedHash = manifestHash();
-  } catch (error) {
-    log("runtime-manifest-missing", error);
-    return null;
-  }
-  const paths = runtimePaths(expectedHash);
-  if (await runtimeReady(paths, expectedHash)) return paths.sdkEntry;
-
-  const release = acquireInstallLock(paths.installLock);
-  if (!release) {
-    log("runtime-install-busy");
-    return null;
-  }
-
-  try {
-    if (await runtimeReady(paths, expectedHash)) return paths.sdkEntry;
-    ensurePrivateDirectory(paths.runtimeDir);
-    copyFileSync(
-      join(PLUGIN_ROOT, "package.json"),
-      join(paths.runtimeDir, "package.json"),
-    );
-    copyFileSync(
-      join(PLUGIN_ROOT, "package-lock.json"),
-      join(paths.runtimeDir, "package-lock.json"),
-    );
-    chmodSync(join(paths.runtimeDir, "package.json"), 0o600);
-    chmodSync(join(paths.runtimeDir, "package-lock.json"), 0o600);
-
-    const npmArguments = [
-      "ci",
-      "--omit=dev",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-    ];
-    const npmCommand = process.platform === "win32"
-      ? process.env.ComSpec || "cmd.exe"
-      : "npm";
-    const npmCommandArguments = process.platform === "win32"
-      ? ["/d", "/s", "/c", "npm", ...npmArguments]
-      : npmArguments;
-    const npmEnvironment = {
-      ...process.env,
-      npm_config_loglevel: "error",
-    };
-    delete npmEnvironment.LETTA_APP_SERVER_TOKEN;
-    const result = await runCommand(
-      npmCommand,
-      npmCommandArguments,
-      {
-        cwd: paths.runtimeDir,
-        env: npmEnvironment,
-      },
-    );
-    if (result.code !== 0 || !await sdkEntryUsable(paths.sdkEntry)) {
-      log("runtime-install-failed", result.diagnostics);
-      return null;
-    }
-
-    const temporary = `${paths.stampPath}.tmp-${process.pid}-${randomUUID()}`;
-    writeFileSync(
-      temporary,
-      `${JSON.stringify({
-        version: 2,
-        manifestHash: expectedHash,
-        node: process.versions.node,
-        platform: process.platform,
-        arch: process.arch,
-        installedAt: new Date().toISOString(),
-      }, null, 2)}\n`,
-      { encoding: "utf8", mode: 0o600 },
-    );
-    chmodSync(temporary, 0o600);
-    renameSync(temporary, paths.stampPath);
-    chmodSync(paths.stampPath, 0o600);
-    log("runtime-installed");
-    return paths.sdkEntry;
-  } catch (error) {
-    log("runtime-install-failed", error);
-    return null;
-  } finally {
-    release();
-  }
-}
-
 async function readStdin() {
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);
 }
 
-async function runHook(action, input, sdkEntry) {
+async function runHook(action, input) {
   const entry = join(PLUGIN_ROOT, "dist", "letta-mem.mjs");
   if (!existsSync(entry)) return "";
-  const env = { ...process.env };
-  if (sdkEntry) env.LETTA_MEM_SDK_ENTRY = sdkEntry;
   const result = await runCommand(process.execPath, [entry, action], {
     cwd: process.cwd(),
-    env,
+    env: { ...process.env },
     input,
   });
   if (result.code !== 0) {
@@ -521,10 +327,8 @@ async function drainPending() {
     return;
   }
   try {
-    const sdkEntry = await ensureRuntime();
-    if (!sdkEntry) return;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
+      await runHook("drain-pending", Buffer.from("{}"));
       const retryAt = nextPendingRetryAt();
       if (retryAt === null || attempt > 0) return;
       await waitForRetry(retryAt);
@@ -535,19 +339,15 @@ async function drainPending() {
 }
 
 async function runMcpServer() {
-  const sdkEntry = await ensureRuntime();
   const entry = join(PLUGIN_ROOT, "dist", "letta-mem-mcp.mjs");
-  if (!sdkEntry || !existsSync(entry)) {
-    log("mcp-runtime-unavailable");
+  if (!existsSync(entry)) {
+    log("mcp-entry-unavailable");
     process.exitCode = 1;
     return;
   }
   const child = spawn(process.execPath, [entry], {
     cwd: process.cwd(),
-    env: {
-      ...process.env,
-      LETTA_MEM_SDK_ENTRY: sdkEntry,
-    },
+    env: { ...process.env },
     stdio: "inherit",
     windowsHide: true,
   });
@@ -564,6 +364,11 @@ async function runMcpServer() {
 async function main() {
   const action = process.argv[2];
   if (!ACTIONS.has(action)) return;
+  if (!nodeIsSupported()) {
+    log("runtime-node-unsupported", process.versions.node);
+    process.exitCode = 1;
+    return;
+  }
   if (action === "mcp") {
     await runMcpServer();
     return;
@@ -572,8 +377,7 @@ async function main() {
   const input = await readStdin();
 
   if (action === "inject-context" || action === "sync-context") {
-    const sdkEntry = await ensureRuntime();
-    const output = await runHook(action, input, sdkEntry);
+    const output = await runHook(action, input);
     if (output && Buffer.byteLength(output, "utf8") <= 10_000) {
       process.stdout.write(output);
     } else if (output) {
@@ -584,7 +388,7 @@ async function main() {
   }
 
   if (action === "session-state") {
-    await runHook("session-start", input, null);
+    await runHook("session-start", input);
     return;
   }
 
@@ -594,20 +398,13 @@ async function main() {
   }
 
   if (action === "prepare-session-worker") {
-    const sdkEntry = await ensureRuntime();
-    if (!sdkEntry) return;
-    await runHook("prepare-session", input, sdkEntry);
-    await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
-    return;
-  }
-
-  if (action === "prepare-runtime-background") {
-    startBackgroundDrain();
+    await runHook("prepare-session", input);
+    await runHook("drain-pending", Buffer.from("{}"));
     return;
   }
 
   if (action === "update-memory-background") {
-    await runHook("enqueue-memory", input, null);
+    await runHook("enqueue-memory", input);
     startBackgroundDrain();
     return;
   }
@@ -617,15 +414,8 @@ async function main() {
     return;
   }
 
-  if (action === "prepare-runtime") {
-    await drainPending();
-    return;
-  }
-
-  await runHook("enqueue-memory", input, null);
-  const sdkEntry = await ensureRuntime();
-  if (!sdkEntry) return;
-  await runHook("drain-pending", Buffer.from("{}"), sdkEntry);
+  await runHook("enqueue-memory", input);
+  await runHook("drain-pending", Buffer.from("{}"));
 }
 
 main().catch((error) => log("bootstrap-failed", error));

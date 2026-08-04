@@ -225,7 +225,6 @@ function launchAppServer(
   try {
     const environment = { ...process.env };
     delete environment.LETTA_APP_SERVER_TOKEN;
-    delete environment.LETTA_MEM_SDK_ENTRY;
     delete environment.LETTA_MEM_LETTA_COMMAND;
     child = spawn(
       executable.command,
