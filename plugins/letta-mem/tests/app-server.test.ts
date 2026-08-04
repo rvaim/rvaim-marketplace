@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   commandFromPath,
@@ -64,17 +64,33 @@ function setup(
 }
 
 describe("常驻 Letta App Server", () => {
-  it("Windows 将 npm 的无扩展名 shim 映射到 letta.cmd", () => {
+  it("Windows 绕过 npm shim，直接用 node.exe 启动 letta.js", () => {
     const directory = mkdtempSync(join(tmpdir(), "letta-command-"));
     try {
       const shim = join(directory, "letta");
+      const node = join(directory, "node.exe");
+      const cliEntry = join(
+        directory,
+        "node_modules",
+        "@letta-ai",
+        "letta-code",
+        "letta.js",
+      );
       writeFileSync(shim, "#!/bin/sh\n");
       writeFileSync(`${shim}.cmd`, "@echo off\r\n");
+      writeFileSync(node, "");
+      mkdirSync(dirname(cliEntry), { recursive: true });
+      writeFileSync(cliEntry, "");
 
       expect(commandFromPath(shim, "win32")).toEqual({
-        command: process.env.ComSpec || "cmd.exe",
-        argsPrefix: ["/d", "/s", "/c", `${shim}.cmd`],
-        displayName: `${shim}.cmd`,
+        command: node,
+        argsPrefix: [cliEntry],
+        displayName: cliEntry,
+      });
+      expect(commandFromPath(`${shim}.cmd`, "win32")).toEqual({
+        command: node,
+        argsPrefix: [cliEntry],
+        displayName: cliEntry,
       });
     } finally {
       rmSync(directory, { recursive: true, force: true });

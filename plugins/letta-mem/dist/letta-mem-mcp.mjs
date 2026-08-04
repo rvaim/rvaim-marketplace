@@ -31012,7 +31012,7 @@ import {
   statSync as statSync2
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, extname, isAbsolute, join as join2, resolve } from "node:path";
+import { basename, dirname as dirname2, extname, isAbsolute, join as join2, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 // src/state.ts
@@ -31272,33 +31272,38 @@ async function probeAppServer(serverUrl, timeoutMs) {
   }
 }
 function commandFromPath(path2, platform = process.platform) {
-  let executablePath = path2;
-  let extension = extname(executablePath).toLowerCase();
-  if (platform === "win32" && !extension) {
-    const commandShim = `${executablePath}.cmd`;
-    if (existsSync2(commandShim)) {
-      executablePath = commandShim;
-      extension = ".cmd";
-    }
-  }
-  if (platform === "win32" && [".cmd", ".bat"].includes(extension)) {
+  const extension = extname(path2).toLowerCase();
+  if (platform === "win32" && ["", ".cmd", ".bat", ".ps1"].includes(extension)) {
+    const npmPrefix = dirname2(path2);
+    const cliEntry = join2(
+      npmPrefix,
+      "node_modules",
+      "@letta-ai",
+      "letta-code",
+      "letta.js"
+    );
+    if (!existsSync2(cliEntry)) return null;
+    const bundledNode = join2(npmPrefix, "node.exe");
     return {
-      command: process.env.ComSpec || "cmd.exe",
-      argsPrefix: ["/d", "/s", "/c", executablePath],
-      displayName: executablePath
+      command: existsSync2(bundledNode) ? bundledNode : process.execPath,
+      argsPrefix: [cliEntry],
+      displayName: cliEntry
     };
   }
   if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
     return {
       command: process.execPath,
-      argsPrefix: [executablePath],
-      displayName: executablePath
+      argsPrefix: [path2],
+      displayName: path2
     };
   }
+  if (platform === "win32" && ![".exe", ".com"].includes(extension)) {
+    return null;
+  }
   return {
-    command: executablePath,
+    command: path2,
     argsPrefix: [],
-    displayName: executablePath
+    displayName: path2
   };
 }
 function commandCandidates(output) {
@@ -31307,8 +31312,8 @@ function commandCandidates(output) {
 function resolveLettaCommand() {
   const configured = process.env.LETTA_MEM_LETTA_COMMAND?.trim();
   if (configured) {
-    const path3 = isAbsolute(configured) ? configured : resolve(configured);
-    return existsSync2(path3) ? commandFromPath(path3) : null;
+    const path2 = isAbsolute(configured) ? configured : resolve(configured);
+    return existsSync2(path2) ? commandFromPath(path2) : null;
   }
   const locator = process.platform === "win32" ? "where.exe" : "which";
   const result = spawnSync(locator, ["letta"], {
@@ -31317,8 +31322,12 @@ function resolveLettaCommand() {
     windowsHide: true
   });
   if (result.status !== 0) return null;
-  const path2 = commandCandidates(result.stdout).find(existsSync2);
-  return path2 ? commandFromPath(path2) : null;
+  for (const path2 of commandCandidates(result.stdout)) {
+    if (!existsSync2(path2)) continue;
+    const command = commandFromPath(path2);
+    if (command) return command;
+  }
+  return null;
 }
 function serverRuntimeRoot() {
   return join2(homedir(), ".letta-mem", "server");
@@ -31358,7 +31367,7 @@ function launchAppServer(executable, listenUrl) {
         ...executable.argsPrefix,
         "--backend",
         "local",
-        "app-server",
+        "server",
         "--listen",
         listenUrl
       ],
@@ -31639,7 +31648,7 @@ import {
   renameSync as renameSync3,
   statSync as statSync3
 } from "node:fs";
-import { dirname as dirname2, join as join4 } from "node:path";
+import { dirname as dirname3, join as join4 } from "node:path";
 var MAX_LOG_BYTES = 1e6;
 function sanitize(value, secrets) {
   let sanitized = value;
@@ -31662,8 +31671,8 @@ function createLogger(config2) {
   const secrets = config2.authToken ? [config2.authToken] : [];
   return (level, event, detail = "") => {
     try {
-      mkdirSync3(dirname2(logPath), { recursive: true, mode: 448 });
-      chmodSync3(dirname2(logPath), 448);
+      mkdirSync3(dirname3(logPath), { recursive: true, mode: 448 });
+      chmodSync3(dirname3(logPath), 448);
       rotateIfNeeded(logPath);
       const suffix = detail ? ` ${sanitize(detail, secrets)}` : "";
       appendFileSync(
@@ -44352,7 +44361,7 @@ function resultText(result) {
 function createRecallMcpServer(handler = defaultRecallHandler) {
   const server2 = new McpServer({
     name: "letta-memory",
-    version: "2.10.2"
+    version: "2.10.3"
   });
   server2.registerTool("letta_recall", {
     title: "\u53EC\u56DE Letta \u8BB0\u5FC6",

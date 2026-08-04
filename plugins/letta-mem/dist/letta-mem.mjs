@@ -12806,7 +12806,7 @@ import {
   statSync as statSync2
 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { basename, extname, isAbsolute, join as join3, resolve as resolve2 } from "node:path";
+import { basename, dirname as dirname2, extname, isAbsolute, join as join3, resolve as resolve2 } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 var STARTUP_TIMEOUT_MS = 2e4;
 var READY_PROBE_TIMEOUT_MS = 1e3;
@@ -12852,33 +12852,38 @@ async function probeAppServer(serverUrl, timeoutMs) {
   }
 }
 function commandFromPath(path2, platform = process.platform) {
-  let executablePath = path2;
-  let extension = extname(executablePath).toLowerCase();
-  if (platform === "win32" && !extension) {
-    const commandShim = `${executablePath}.cmd`;
-    if (existsSync3(commandShim)) {
-      executablePath = commandShim;
-      extension = ".cmd";
-    }
-  }
-  if (platform === "win32" && [".cmd", ".bat"].includes(extension)) {
+  const extension = extname(path2).toLowerCase();
+  if (platform === "win32" && ["", ".cmd", ".bat", ".ps1"].includes(extension)) {
+    const npmPrefix = dirname2(path2);
+    const cliEntry = join3(
+      npmPrefix,
+      "node_modules",
+      "@letta-ai",
+      "letta-code",
+      "letta.js"
+    );
+    if (!existsSync3(cliEntry)) return null;
+    const bundledNode = join3(npmPrefix, "node.exe");
     return {
-      command: process.env.ComSpec || "cmd.exe",
-      argsPrefix: ["/d", "/s", "/c", executablePath],
-      displayName: executablePath
+      command: existsSync3(bundledNode) ? bundledNode : process.execPath,
+      argsPrefix: [cliEntry],
+      displayName: cliEntry
     };
   }
   if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
     return {
       command: process.execPath,
-      argsPrefix: [executablePath],
-      displayName: executablePath
+      argsPrefix: [path2],
+      displayName: path2
     };
   }
+  if (platform === "win32" && ![".exe", ".com"].includes(extension)) {
+    return null;
+  }
   return {
-    command: executablePath,
+    command: path2,
     argsPrefix: [],
-    displayName: executablePath
+    displayName: path2
   };
 }
 function commandCandidates(output) {
@@ -12887,8 +12892,8 @@ function commandCandidates(output) {
 function resolveLettaCommand() {
   const configured = process.env.LETTA_MEM_LETTA_COMMAND?.trim();
   if (configured) {
-    const path3 = isAbsolute(configured) ? configured : resolve2(configured);
-    return existsSync3(path3) ? commandFromPath(path3) : null;
+    const path2 = isAbsolute(configured) ? configured : resolve2(configured);
+    return existsSync3(path2) ? commandFromPath(path2) : null;
   }
   const locator = process.platform === "win32" ? "where.exe" : "which";
   const result = spawnSync(locator, ["letta"], {
@@ -12897,8 +12902,12 @@ function resolveLettaCommand() {
     windowsHide: true
   });
   if (result.status !== 0) return null;
-  const path2 = commandCandidates(result.stdout).find(existsSync3);
-  return path2 ? commandFromPath(path2) : null;
+  for (const path2 of commandCandidates(result.stdout)) {
+    if (!existsSync3(path2)) continue;
+    const command = commandFromPath(path2);
+    if (command) return command;
+  }
+  return null;
 }
 function serverRuntimeRoot() {
   return join3(homedir2(), ".letta-mem", "server");
@@ -12938,7 +12947,7 @@ function launchAppServer(executable, listenUrl) {
         ...executable.argsPrefix,
         "--backend",
         "local",
-        "app-server",
+        "server",
         "--listen",
         listenUrl
       ],
@@ -13072,7 +13081,7 @@ import {
   renameSync as renameSync3,
   statSync as statSync3
 } from "node:fs";
-import { dirname as dirname2, join as join4 } from "node:path";
+import { dirname as dirname3, join as join4 } from "node:path";
 var MAX_LOG_BYTES = 1e6;
 function sanitize(value, secrets) {
   let sanitized = value;
@@ -13095,8 +13104,8 @@ function createLogger(config) {
   const secrets = config.authToken ? [config.authToken] : [];
   return (level, event, detail = "") => {
     try {
-      mkdirSync3(dirname2(logPath), { recursive: true, mode: 448 });
-      chmodSync3(dirname2(logPath), 448);
+      mkdirSync3(dirname3(logPath), { recursive: true, mode: 448 });
+      chmodSync3(dirname3(logPath), 448);
       rotateIfNeeded(logPath);
       const suffix = detail ? ` ${sanitize(detail, secrets)}` : "";
       appendFileSync(

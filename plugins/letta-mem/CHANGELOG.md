@@ -1,5 +1,10 @@
 # 变更日志
 
+## 2.10.3
+
+- Windows 启动 App Server 时不再执行 npm 的 `.cmd` 或无扩展名 shim，而是解析全局包中的 `letta.js` 并由 `node.exe` 直接隐藏启动，避免 shim 子进程创建可见控制台窗口。
+- App Server 启动命令更新为 `letta server --listen`，消除 Letta Code 0.30.5 对 `letta app-server` 的弃用警告；macOS/Linux 仍直接执行用户安装的 `letta`。
+
 ## 2.10.2
 
 - 将仅用于 `backend: "remote"` 的 Agent Client 构建进插件 `dist`，移除 Hook/MCP 启动阶段的 runtime `npm ci` 自举、安装锁和 `LETTA_MEM_SDK_ENTRY` 注入。

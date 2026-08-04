@@ -9,7 +9,7 @@ import {
   statSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { acquireLock } from "./state.js";
 import type { LogFunction, RuntimeConfig } from "./types.js";
@@ -127,34 +127,42 @@ async function probeAppServer(
 export function commandFromPath(
   path: string,
   platform: NodeJS.Platform = process.platform,
-): LettaCommand {
-  let executablePath = path;
-  let extension = extname(executablePath).toLowerCase();
-  if (platform === "win32" && !extension) {
-    const commandShim = `${executablePath}.cmd`;
-    if (existsSync(commandShim)) {
-      executablePath = commandShim;
-      extension = ".cmd";
-    }
-  }
-  if (platform === "win32" && [".cmd", ".bat"].includes(extension)) {
+): LettaCommand | null {
+  const extension = extname(path).toLowerCase();
+  if (
+    platform === "win32"
+    && ["", ".cmd", ".bat", ".ps1"].includes(extension)
+  ) {
+    const npmPrefix = dirname(path);
+    const cliEntry = join(
+      npmPrefix,
+      "node_modules",
+      "@letta-ai",
+      "letta-code",
+      "letta.js",
+    );
+    if (!existsSync(cliEntry)) return null;
+    const bundledNode = join(npmPrefix, "node.exe");
     return {
-      command: process.env.ComSpec || "cmd.exe",
-      argsPrefix: ["/d", "/s", "/c", executablePath],
-      displayName: executablePath,
+      command: existsSync(bundledNode) ? bundledNode : process.execPath,
+      argsPrefix: [cliEntry],
+      displayName: cliEntry,
     };
   }
   if (extension === ".js" || extension === ".mjs" || extension === ".cjs") {
     return {
       command: process.execPath,
-      argsPrefix: [executablePath],
-      displayName: executablePath,
+      argsPrefix: [path],
+      displayName: path,
     };
   }
+  if (platform === "win32" && ![".exe", ".com"].includes(extension)) {
+    return null;
+  }
   return {
-    command: executablePath,
+    command: path,
     argsPrefix: [],
-    displayName: executablePath,
+    displayName: path,
   };
 }
 
@@ -179,8 +187,12 @@ function resolveLettaCommand(): LettaCommand | null {
     windowsHide: true,
   });
   if (result.status !== 0) return null;
-  const path = commandCandidates(result.stdout).find(existsSync);
-  return path ? commandFromPath(path) : null;
+  for (const path of commandCandidates(result.stdout)) {
+    if (!existsSync(path)) continue;
+    const command = commandFromPath(path);
+    if (command) return command;
+  }
+  return null;
 }
 
 function serverRuntimeRoot(): string {
@@ -232,7 +244,7 @@ function launchAppServer(
         ...executable.argsPrefix,
         "--backend",
         "local",
-        "app-server",
+        "server",
         "--listen",
         listenUrl,
       ],
