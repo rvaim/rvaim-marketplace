@@ -2,8 +2,9 @@
   "mcpServers": {
     "letta-memory": {
       "type": "stdio",
-      "command": "./bin/letta-mem-launcher",
+      "command": "node",
       "args": [
+        "./bin/bootstrap.cjs",
         "mcp"
       ],
       "cwd": "."

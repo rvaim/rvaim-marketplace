@@ -1,6 +1,6 @@
 {
   "name": "letta-mem",
-  "version": "2.10.11",
+  "version": "2.10.12",
   "description": "将编码会话与记忆作用域约束交给 Letta Agent 自主管理持久记忆",
   "type": "module",
   "private": true,

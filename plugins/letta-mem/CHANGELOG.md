@@ -1,5 +1,9 @@
 # 变更日志
 
+## 2.10.12
+
+- 恢复 MCP 使用直接 Node 长连接 stdio；Windows 静默启动器只用于同步 Hook 和后台任务，避免 MCP 握手超时。
+
 ## 2.10.11
 
 - Windows 通用 MCP 启动器使用 `KILL_ON_JOB_CLOSE` 绑定 Node 子进程；Codex 握手超时或结束会话时，launcher 被终止不会再留下孤儿 MCP Node，避免后续会话继续复用失效进程状态。

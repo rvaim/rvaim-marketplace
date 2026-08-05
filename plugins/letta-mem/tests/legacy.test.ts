@@ -188,8 +188,8 @@ describe("新版 Letta 边界", () => {
       mcpServers: Record<string, { command: string; args: string[] }>;
     };
     expect(mcp.mcpServers["letta-memory"]).toMatchObject({
-      command: "./bin/letta-mem-launcher",
-      args: ["mcp"],
+      command: "node",
+      args: ["./bin/bootstrap.cjs", "mcp"],
     });
 
     const executable = readFileSync(
