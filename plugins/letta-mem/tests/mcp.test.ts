@@ -4,7 +4,14 @@ import {
   getDefaultEnvironment,
   StdioClientTransport,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +65,72 @@ describe("letta-memory MCP", () => {
     expect(tools.tools.map((tool) => tool.name)).toContain("letta_recall");
     expect(existsSync(join(dataDir, "runtime"))).toBe(false);
   });
+
+  it.runIf(process.platform === "win32")(
+    "Windows MCP launcher 退出时会清理 Node 子进程",
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "letta-mem-mcp-job-"));
+      temporaryDirectories.push(directory);
+      const fixture = join(directory, "child.cjs");
+      const pidPath = join(directory, "child.pid");
+      writeFileSync(
+        fixture,
+        [
+          'const { writeFileSync } = require("node:fs");',
+          "writeFileSync(process.argv[2], String(process.pid));",
+          "setInterval(() => {}, 1000);",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const launcher = join(pluginRoot, "bin", "letta-mem-launcher.exe");
+      const child = spawn(
+        launcher,
+        ["--exec", process.execPath, fixture, pidPath],
+        {
+          cwd: pluginRoot,
+          stdio: "ignore",
+          windowsHide: true,
+        },
+      );
+      cleanups.push(async () => {
+        if (!child.killed) child.kill();
+      });
+
+      const startupDeadline = Date.now() + 5_000;
+      while (!existsSync(pidPath) && Date.now() < startupDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(existsSync(pidPath)).toBe(true);
+      const childPid = Number.parseInt(
+        readFileSync(pidPath, "utf8"),
+        10,
+      );
+      expect(Number.isInteger(childPid)).toBe(true);
+
+      child.kill();
+      await new Promise<void>((resolve) => {
+        if (child.exitCode !== null) {
+          resolve();
+          return;
+        }
+        child.once("close", () => resolve());
+      });
+
+      const exitDeadline = Date.now() + 5_000;
+      let childAlive = true;
+      while (childAlive && Date.now() < exitDeadline) {
+        try {
+          process.kill(childPid, 0);
+        } catch {
+          childAlive = false;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(childAlive).toBe(false);
+    },
+  );
 
   it("通过 MCP 协议公开并执行 letta_recall", async () => {
     const calls: Array<{ query: string; workspacePath: string }> = [];

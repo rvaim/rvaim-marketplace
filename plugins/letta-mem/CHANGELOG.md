@@ -1,5 +1,9 @@
 # 变更日志
 
+## 2.10.11
+
+- Windows 通用 MCP 启动器使用 `KILL_ON_JOB_CLOSE` 绑定 Node 子进程；Codex 握手超时或结束会话时，launcher 被终止不会再留下孤儿 MCP Node，避免后续会话继续复用失效进程状态。
+
 ## 2.10.10
 
 - Windows Hook 通过同一 PowerShell runner 内的 `.NET ProcessStartInfo` 调用 GUI 子系统启动器，移除同步 `Start-Process -Wait` 层；保留 stdin、stdout、stderr、退出码和后台 worker 语义，减少每次 Hook 的启动开销。

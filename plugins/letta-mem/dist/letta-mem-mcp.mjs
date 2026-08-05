@@ -44428,7 +44428,7 @@ function resultText(result) {
 function createRecallMcpServer(handler = defaultRecallHandler) {
   const server2 = new McpServer({
     name: "letta-memory",
-    version: "2.10.10"
+    version: "2.10.11"
   });
   server2.registerTool("letta_recall", {
     title: "\u53EC\u56DE Letta \u8BB0\u5FC6",

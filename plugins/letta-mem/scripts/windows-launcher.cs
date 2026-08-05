@@ -6,8 +6,12 @@ using System.Text;
 
 internal static class Program
 {
+    private const uint CreateSuspended = 0x00000004;
     private const uint CreateNoWindow = 0x08000000;
     private const uint CreateUnicodeEnvironment = 0x00000400;
+    private const uint JobObjectLimitSilentBreakawayOk = 0x00001000;
+    private const uint JobObjectLimitKillOnJobClose = 0x00002000;
+    private const int JobObjectExtendedLimitInformation = 9;
     private const uint DuplicateSameAccess = 0x00000002;
     private const uint GenericRead = 0x80000000;
     private const uint GenericWrite = 0x40000000;
@@ -56,6 +60,42 @@ internal static class Program
         public uint threadId;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong readOperationCount;
+        public ulong writeOperationCount;
+        public ulong otherOperationCount;
+        public ulong readTransferCount;
+        public ulong writeTransferCount;
+        public ulong otherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BasicLimitInformation
+    {
+        public long perProcessUserTimeLimit;
+        public long perJobUserTimeLimit;
+        public uint limitFlags;
+        public UIntPtr minimumWorkingSetSize;
+        public UIntPtr maximumWorkingSetSize;
+        public uint activeProcessLimit;
+        public UIntPtr affinity;
+        public uint priorityClass;
+        public uint schedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ExtendedLimitInformation
+    {
+        public BasicLimitInformation basicLimitInformation;
+        public IoCounters ioInfo;
+        public UIntPtr processMemoryLimit;
+        public UIntPtr jobMemoryLimit;
+        public UIntPtr peakProcessMemoryUsed;
+        public UIntPtr peakJobMemoryUsed;
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool CreateProcess(
         string applicationName,
@@ -99,10 +139,35 @@ internal static class Program
     private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint ResumeThread(IntPtr thread);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateJobObject(
+        IntPtr jobAttributes,
+        string name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetInformationJobObject(
+        IntPtr job,
+        int informationClass,
+        IntPtr information,
+        uint informationLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(
+        IntPtr job,
+        IntPtr process);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool TerminateProcess(
+        IntPtr process,
+        uint exitCode);
 
     [STAThread]
     private static int Main(string[] arguments)
@@ -132,6 +197,7 @@ internal static class Program
 
         var inheritedHandles = new List<IntPtr>();
         ProcessInformation process = new ProcessInformation();
+        IntPtr terminationJob = IntPtr.Zero;
         try
         {
             IntPtr input = PrepareStandardHandle(
@@ -162,18 +228,32 @@ internal static class Program
                 AppendArgument(commandLine, argument);
             }
 
+            terminationJob = CreateTerminationJob();
+            if (terminationJob == IntPtr.Zero) return 1;
+
             bool created = CreateProcess(
                 applicationName,
                 commandLine,
                 IntPtr.Zero,
                 IntPtr.Zero,
                 true,
-                CreateNoWindow | CreateUnicodeEnvironment,
+                CreateSuspended | CreateNoWindow | CreateUnicodeEnvironment,
                 IntPtr.Zero,
                 null,
                 ref startup,
                 out process);
             if (!created) return 1;
+
+            if (!AssignProcessToJobObject(terminationJob, process.process))
+            {
+                TerminateProcess(process.process, 1);
+                return 1;
+            }
+            if (ResumeThread(process.thread) == UInt32.MaxValue)
+            {
+                TerminateProcess(process.process, 1);
+                return 1;
+            }
 
             WaitForSingleObject(process.process, Infinite);
             uint exitCode;
@@ -185,10 +265,42 @@ internal static class Program
         {
             if (process.thread != IntPtr.Zero) CloseHandle(process.thread);
             if (process.process != IntPtr.Zero) CloseHandle(process.process);
+            if (terminationJob != IntPtr.Zero) CloseHandle(terminationJob);
             foreach (IntPtr handle in inheritedHandles)
             {
                 CloseHandle(handle);
             }
+        }
+    }
+
+    private static IntPtr CreateTerminationJob()
+    {
+        IntPtr job = CreateJobObject(IntPtr.Zero, null);
+        if (job == IntPtr.Zero) return IntPtr.Zero;
+
+        var information = new ExtendedLimitInformation();
+        information.basicLimitInformation.limitFlags =
+            JobObjectLimitKillOnJobClose
+            | JobObjectLimitSilentBreakawayOk;
+        int size = Marshal.SizeOf(typeof(ExtendedLimitInformation));
+        IntPtr pointer = Marshal.AllocHGlobal(size);
+        try
+        {
+            Marshal.StructureToPtr(information, pointer, false);
+            if (!SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                pointer,
+                (uint)size))
+            {
+                CloseHandle(job);
+                return IntPtr.Zero;
+            }
+            return job;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(pointer);
         }
     }
 
