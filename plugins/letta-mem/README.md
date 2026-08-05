@@ -347,7 +347,7 @@ npm install -g @letta-ai/letta-code
 - Claude Code、Codex 和并发 Hook 共用启动锁，只会有一个进程负责拉起服务。
 - App Server 作为隐藏的独立后台进程持续运行；Hook、MCP 或 Agent Session 结束时不会停止它。
 - Windows 的 MCP 第一层插件入口由内置 GUI 子系统启动器创建 Node，并使用 `CREATE_NO_WINDOW` 透传 stdin、stdout、stderr；bootstrap 在该 Node 内直接导入 MCP 入口，不再创建第二个 Node。macOS/Linux 使用同名 shell 入口继续直接执行 Node。
-- Windows 同步 Hook 的 `commandWindows` 直接选择 ConPTY GUI 启动器；Codex 已有的 PowerShell command runner 使用 `Start-Process -NoNewWindow -Wait -PassThru` 保留 stdin、stdout、stderr、等待和退出码语义。启动器使用 `CREATE_NO_WINDOW`、隐藏 PseudoConsole 且不设置 `STARTF_USESTDHANDLES`，通过唯一临时文件和 preload 桥接 I/O。
+- Windows 同步 Hook 的 `commandWindows` 调用插件内的 `invoke-hook.ps1`，由同一 PowerShell runner 使用 `.NET ProcessStartInfo` 调用 ConPTY GUI 启动器，移除额外的 `Start-Process -Wait` 层；启动器仍保留 stdin、stdout、stderr、等待和退出码语义。启动器使用 `CREATE_NO_WINDOW`、隐藏 PseudoConsole 且不设置 `STARTF_USESTDHANDLES`，通过唯一临时文件和 preload 桥接 I/O。
 - bootstrap 在启动器创建的同一个 Node 内导入 Hook runtime，不再执行 `node dist/letta-mem.mjs`；macOS/Linux 仍通过 Node 直接加载 bootstrap，并采用相同的单 Node runtime 路径。
 - Windows 直接扫描 `PATH` 定位全局 `letta`，绕过 `where.exe`、npm `.cmd` shim 和 shell，再通过 GUI 启动器的 `--exec` 模式创建真实 App Server 进程；macOS/Linux 保持原有 `which` 与直接启动方式。
 - Windows 的短时后台 Hook worker 复用 GUI 启动器和 stdin 管道；同步 Node 受 Job Object 约束会随 Hook 超时结束，detached worker 允许静默脱离并继续运行。

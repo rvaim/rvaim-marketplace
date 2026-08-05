@@ -132,7 +132,7 @@ describe("新版 Letta 边界", () => {
     expect(hooks).not.toContain("handleUpdateMemory");
   });
 
-  it("SessionStart 后台返回，其余同步 Hook 保留 ConPTY 与真实退出码", () => {
+  it("SessionStart 后台返回，其余 Windows Hook 复用同一 PowerShell runner", () => {
     const hooks = JSON.parse(readFileSync(
       join(pluginRoot, "hooks", "hooks.json"),
       "utf8",
@@ -145,10 +145,12 @@ describe("新版 Letta 边界", () => {
       .flatMap((group) => group.hooks);
     expect(sessionStartCommands).toHaveLength(1);
     expect(sessionStartCommands[0]?.commandWindows).toContain(
-      'Start-Process -FilePath "${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe"',
+      '& "${CLAUDE_PLUGIN_ROOT}/bin/invoke-hook.ps1"',
     );
     expect(sessionStartCommands[0]?.commandWindows).toContain("--background");
-    expect(sessionStartCommands[0]?.commandWindows).not.toContain("-Wait");
+    expect(sessionStartCommands[0]?.commandWindows).toContain(
+      "exit $LASTEXITCODE",
+    );
 
     const commands = Object.entries(hooks.hooks)
       .filter(([event]) => event !== "SessionStart")
@@ -160,12 +162,14 @@ describe("新版 Letta 边界", () => {
         'node "${CLAUDE_PLUGIN_ROOT}/bin/bootstrap.cjs"',
       );
       expect(command.commandWindows).toContain(
-        'Start-Process -FilePath "${CLAUDE_PLUGIN_ROOT}/bin/letta-mem-hook-launcher.exe"',
+        '& "${CLAUDE_PLUGIN_ROOT}/bin/invoke-hook.ps1"',
       );
-      expect(command.commandWindows).toContain("-NoNewWindow -Wait -PassThru");
-      expect(command.commandWindows).toContain("exit $p.ExitCode");
+      expect(command.commandWindows).toContain("exit $LASTEXITCODE");
+      expect(command.commandWindows).not.toContain("Start-Process");
       expect(command.commandWindows).not.toContain("node");
     }
+
+    expect(existsSync(join(pluginRoot, "bin", "invoke-hook.ps1"))).toBe(true);
 
     const preload = readFileSync(
       join(pluginRoot, "bin", "stdio-preload.cjs"),
@@ -292,13 +296,9 @@ describe("新版 Letta 边界", () => {
   );
 
   it.runIf(process.platform === "win32")(
-    "Codex PowerShell runner 等待 GUI 启动器并转发真实退出码",
+    "Codex PowerShell runner 复用同一进程并转发真实退出码",
     () => {
-      const launcher = join(
-        pluginRoot,
-        "bin",
-        "letta-mem-hook-launcher.exe",
-      );
+      const runner = join(pluginRoot, "bin", "invoke-hook.ps1");
       const fixture = join(
         pluginRoot,
         "tests",
@@ -306,9 +306,8 @@ describe("新版 Letta 边界", () => {
         "windows-launcher-io.cjs",
       );
       const command = [
-        `$p = Start-Process -FilePath ${JSON.stringify(launcher)}`,
-        `-ArgumentList @(${JSON.stringify(process.execPath)},${JSON.stringify(fixture)})`,
-        "-NoNewWindow -Wait -PassThru; exit $p.ExitCode",
+        `& ${JSON.stringify(runner)} ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)}`,
+        "; exit $LASTEXITCODE",
       ].join(" ");
       const result = spawnSync(
         "pwsh.exe",
