@@ -48,7 +48,7 @@ export function createRecallMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: "letta-memory",
-    version: "2.10.12",
+    version: "2.10.13",
   });
 
   server.registerTool("letta_recall", {

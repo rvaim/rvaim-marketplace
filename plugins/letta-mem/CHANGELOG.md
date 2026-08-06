@@ -1,5 +1,9 @@
 # 变更日志
 
+## 2.10.13
+
+- 修复 Windows Codex SessionStart 后台 Hook 等待宿主 stdin 未关闭而触发 2 秒超时的问题；同步 Hook 继续完整透传 stdin、stdout、stderr 和退出码。
+
 ## 2.10.12
 
 - 恢复 MCP 使用直接 Node 长连接 stdio；Windows 静默启动器只用于同步 Hook 和后台任务，避免 MCP 握手超时。

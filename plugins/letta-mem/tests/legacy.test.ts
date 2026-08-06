@@ -147,6 +147,9 @@ describe("新版 Letta 边界", () => {
     expect(sessionStartCommands[0]?.commandWindows).toContain(
       '& "${CLAUDE_PLUGIN_ROOT}/bin/invoke-hook.ps1"',
     );
+    expect(sessionStartCommands[0]?.commandWindows).toContain(
+      "-NoHostStdin",
+    );
     expect(sessionStartCommands[0]?.commandWindows).toContain("--background");
     expect(sessionStartCommands[0]?.commandWindows).toContain(
       "exit $LASTEXITCODE",
@@ -170,6 +173,10 @@ describe("新版 Letta 边界", () => {
     }
 
     expect(existsSync(join(pluginRoot, "bin", "invoke-hook.ps1"))).toBe(true);
+    expect(readFileSync(
+      join(pluginRoot, "bin", "invoke-hook.ps1"),
+      "utf8",
+    )).toContain("CODEX_THREAD_ID");
 
     const preload = readFileSync(
       join(pluginRoot, "bin", "stdio-preload.cjs"),
@@ -322,6 +329,90 @@ describe("新版 Letta 边界", () => {
       expect(result.status).toBe(7);
       expect(result.stdout).toBe("stdout:PowerShell 管道 <&>");
       expect(result.stderr).toBe("stderr:PowerShell 管道 <&>");
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "SessionStart 后台 runner 不等待宿主 stdin",
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), "letta-mem-hook-session-start-"));
+      const fixture = join(directory, "capture.cjs");
+      const resultPath = join(directory, "input.json");
+      const runner = join(pluginRoot, "bin", "invoke-hook.ps1");
+      writeFileSync(
+        fixture,
+        [
+          'const { writeFileSync } = require("node:fs");',
+          '(async () => {',
+          '  const chunks = [];',
+          '  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));',
+          '  writeFileSync(process.argv[2], Buffer.concat(chunks));',
+          '})();',
+        ].join("\n"),
+        "utf8",
+      );
+
+      const command = [
+        `& ${JSON.stringify(runner)} -NoHostStdin --background ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} ${JSON.stringify(resultPath)} prepare-session-worker`,
+        "; exit $LASTEXITCODE",
+      ].join(" ");
+      const startedAt = Date.now();
+      const child = spawn(
+        "pwsh.exe",
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+        {
+          cwd: pluginRoot,
+          env: {
+            ...process.env,
+            CODEX_THREAD_ID: "session-start-stdin-probe",
+            LETTA_MEM_NODE_PATH: process.execPath,
+            TEMP: directory,
+            TMP: directory,
+          },
+          stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
+        },
+      );
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+      child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+      child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+
+      try {
+        const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+          (resolvePromise, rejectPromise) => {
+            const timeout = setTimeout(() => {
+              child.kill();
+              rejectPromise(new Error("SessionStart runner did not return within 2 seconds"));
+            }, 1_800);
+            child.once("error", (error) => {
+              clearTimeout(timeout);
+              rejectPromise(error);
+            });
+            child.once("close", (code, signal) => {
+              clearTimeout(timeout);
+              resolvePromise({ code, signal });
+            });
+          },
+        );
+        expect(result.signal).toBeNull();
+        expect(result.code).toBe(0);
+        expect(Date.now() - startedAt).toBeLessThan(1_800);
+        const deadline = Date.now() + 5_000;
+        while (!existsSync(resultPath) && Date.now() < deadline) {
+          await delay(50);
+        }
+        expect(JSON.parse(readFileSync(resultPath, "utf8"))).toMatchObject({
+          session_id: "session-start-stdin-probe",
+          hook_event_name: "SessionStart",
+          source: "startup",
+        });
+        expect(stdout).toHaveLength(0);
+        expect(Buffer.concat(stderr).toString("utf8")).toBe("");
+      } finally {
+        child.stdin.destroy();
+        rmSync(directory, { recursive: true, force: true });
+      }
     },
   );
 

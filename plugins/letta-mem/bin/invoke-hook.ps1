@@ -1,4 +1,5 @@
 param(
+  [switch] $NoHostStdin,
   [Parameter(Mandatory = $true, Position = 0, ValueFromRemainingArguments = $true)]
   [string[]] $LauncherArguments
 )
@@ -10,6 +11,38 @@ $inputBuffer = $null
 $stdoutTask = $null
 $stderrTask = $null
 
+function Get-SyntheticSessionInput {
+  param(
+    [string[]] $Arguments
+  )
+
+  if ($Arguments -notcontains "prepare-session-worker") {
+    return [System.Text.Encoding]::UTF8.GetBytes("{}")
+  }
+
+  $sessionId = $env:CODEX_THREAD_ID
+  if ([string]::IsNullOrWhiteSpace($sessionId)) {
+    return $null
+  }
+
+  $payload = [ordered]@{
+    session_id = $sessionId
+    cwd = (Get-Location).Path
+    hook_event_name = "SessionStart"
+    source = if ([string]::IsNullOrWhiteSpace($env:CODEX_HOOK_SOURCE)) {
+      "startup"
+    } else {
+      $env:CODEX_HOOK_SOURCE
+    }
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:CODEX_TRANSCRIPT_PATH)) {
+    $payload.transcript_path = $env:CODEX_TRANSCRIPT_PATH
+  }
+
+  $json = $payload | ConvertTo-Json -Compress
+  return [System.Text.Encoding]::UTF8.GetBytes($json)
+}
+
 try {
   $launcher = Join-Path $PSScriptRoot "letta-mem-hook-launcher.exe"
   if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
@@ -17,7 +50,16 @@ try {
   }
 
   $inputBuffer = [System.IO.MemoryStream]::new()
-  [Console]::OpenStandardInput().CopyTo($inputBuffer)
+  if ($NoHostStdin) {
+    $syntheticInput = Get-SyntheticSessionInput -Arguments $LauncherArguments
+    if ($null -eq $syntheticInput) {
+      [Console]::OpenStandardInput().CopyTo($inputBuffer)
+    } else {
+      $inputBuffer.Write($syntheticInput, 0, $syntheticInput.Length)
+    }
+  } else {
+    [Console]::OpenStandardInput().CopyTo($inputBuffer)
+  }
 
   $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
   $startInfo.FileName = $launcher
